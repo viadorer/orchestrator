@@ -86,7 +86,7 @@ async function loadProjectContext(projectId: string): Promise<{
   const [projectRes, kbRes, recentRes] = await Promise.all([
     supabase.from('projects').select('*').eq('id', projectId).single(),
     supabase.from('knowledge_base').select('category, title, content').eq('project_id', projectId).eq('is_active', true),
-    supabase.from('content_queue').select('text_content').eq('project_id', projectId).in('status', ['approved', 'sent']).order('created_at', { ascending: false }).limit(5),
+    supabase.from('content_queue').select('text_content').eq('project_id', projectId).in('status', ['approved', 'sent', 'scheduled', 'published', 'review']).order('created_at', { ascending: false }).limit(50),
   ]);
 
   if (!projectRes.data) return null;

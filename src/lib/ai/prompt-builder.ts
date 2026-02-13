@@ -220,13 +220,29 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
     parts.push(`\n---\nAKTUÁLNÍ KONTEXT:\n${ctx.newsContext}`);
   }
 
-  // Dedup
+  // Dedup – ALL existing posts
   if (ctx.recentPosts && ctx.recentPosts.length > 0) {
-    parts.push(`\n---\nNEDÁVNÉ POSTY (NEOPAKUJ):`);
+    parts.push(`\n---\nEXISTUJÍCÍ POSTY (tyto texty už EXISTUJÍ – NESMÍŠ je opakovat ani parafrázovat):`);
     ctx.recentPosts.forEach((post, i) => {
-      parts.push(`${i + 1}. ${post.substring(0, 150)}...`);
+      parts.push(`${i + 1}. "${post.substring(0, 200)}${post.length > 200 ? '...' : ''}"`);
     });
+    parts.push('\nKAŽDÝ nový post MUSÍ být o JINÉM tématu, s JINÝM hookem, JINOU strukturou.');
+    parts.push('Pokud všechny KB fakta už byly použity, najdi NOVÝ ÚHEL na stejné téma.');
   }
+
+  // Creativity rules
+  parts.push(`\n---\nKREATIVITA – POVINNÁ PRAVIDLA:
+1. HOOK: Každý post MUSÍ začínat jinak. Střídej typy hooků:
+   - Číslo/statistika ("1,37." / "20 736 Kč.")
+   - Provokativní otázka ("Co když váš důchod nebude stačit?")
+   - Kontrastní tvrzení ("Všichni mluví o úsporách. Nikdo o příjmech.")
+   - Příběh/scénář ("Představte si, že je vám 65...")
+   - Citát/výrok ("Průměrný Čech spoří 2 400 Kč měsíčně.")
+   - Metafora ("Důchod je maraton, ne sprint.")
+2. STRUKTURA: Střídej formáty – ne vždy číslo→kontext→řešení→CTA.
+3. ÚHEL: Použij KB fakta, která NEBYLA v posledních postech.
+4. ORIGINALITA: Neopakuj fráze z předchozích postů.
+5. HODNOTA: Každý post musí přinést NOVOU informaci nebo NOVÝ pohled.`);
 
   // Quality Self-Rating
   const qualityCheck = await getPromptTemplate('quality_check');

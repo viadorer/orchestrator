@@ -666,34 +666,45 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         postStatus = 'review';
       }
 
-      // Build insert object (only include optional columns if they have values)
-      const queueInsert: Record<string, unknown> = {
+      // Save to content_queue – use only core columns first, add optional ones if available
+      const coreInsert: Record<string, unknown> = {
         project_id: task.project_id,
         text_content: result.text as string,
-        image_prompt: visualData.image_prompt || (result.image_prompt as string) || null,
-        alt_text: (result.alt_text as string) || null,
+        image_prompt: (result.image_prompt as string) || null,
         content_type: (task.params?.contentType as string) || 'educational',
         platforms: [platform],
         ai_scores: scores || {},
         status: postStatus,
         source: task.params?.human_topic ? 'human_priority' : 'ai_generated',
+      };
+
+      // Try full insert with all optional columns
+      const fullInsert: Record<string, unknown> = {
+        ...coreInsert,
+        alt_text: (result.alt_text as string) || null,
         editor_review: result.editor_review || null,
         visual_type: matchedImageUrl ? 'matched_photo' : visualData.visual_type,
-        chart_url: visualData.chart_url,
-        card_url: visualData.card_url,
+        chart_url: visualData.chart_url || null,
+        card_url: visualData.card_url || null,
       };
-      // Only add media columns if they have values (columns may not exist if migration 009 wasn't run)
-      if (matchedImageUrl) queueInsert.image_url = matchedImageUrl;
-      if (matchedMediaId) queueInsert.matched_media_id = matchedMediaId;
+      if (matchedImageUrl) fullInsert.image_url = matchedImageUrl;
+      if (matchedMediaId) fullInsert.matched_media_id = matchedMediaId;
 
-      const { error: queueError } = await supabase.from('content_queue').insert(queueInsert);
+      const { error: queueError } = await supabase.from('content_queue').insert(fullInsert);
+
+      // If full insert fails, retry with core columns only
       if (queueError) {
-        console.error('content_queue insert error:', queueError.message);
-        // Retry without optional columns
-        if (queueError.message.includes('column') && (queueError.message.includes('image_url') || queueError.message.includes('matched_media_id'))) {
-          delete queueInsert.image_url;
-          delete queueInsert.matched_media_id;
-          await supabase.from('content_queue').insert(queueInsert);
+        console.error('content_queue full insert failed:', queueError.message);
+        const { error: coreError } = await supabase.from('content_queue').insert(coreInsert);
+        if (coreError) {
+          console.error('content_queue core insert also failed:', coreError.message);
+          // Log the failure
+          await supabase.from('agent_log').insert({
+            project_id: task.project_id,
+            task_id: taskId,
+            action: 'content_queue_insert_error',
+            details: { full_error: queueError.message, core_error: coreError.message },
+          });
         }
       }
 

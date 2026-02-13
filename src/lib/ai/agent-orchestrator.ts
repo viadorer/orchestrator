@@ -666,11 +666,11 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         postStatus = 'review';
       }
 
-      await supabase.from('content_queue').insert({
+      // Build insert object (only include optional columns if they have values)
+      const queueInsert: Record<string, unknown> = {
         project_id: task.project_id,
         text_content: result.text as string,
         image_prompt: visualData.image_prompt || (result.image_prompt as string) || null,
-        image_url: finalImageUrl,
         alt_text: (result.alt_text as string) || null,
         content_type: (task.params?.contentType as string) || 'educational',
         platforms: [platform],
@@ -681,8 +681,21 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         visual_type: matchedImageUrl ? 'matched_photo' : visualData.visual_type,
         chart_url: visualData.chart_url,
         card_url: visualData.card_url,
-        matched_media_id: matchedMediaId,
-      });
+      };
+      // Only add media columns if they have values (columns may not exist if migration 009 wasn't run)
+      if (matchedImageUrl) queueInsert.image_url = matchedImageUrl;
+      if (matchedMediaId) queueInsert.matched_media_id = matchedMediaId;
+
+      const { error: queueError } = await supabase.from('content_queue').insert(queueInsert);
+      if (queueError) {
+        console.error('content_queue insert error:', queueError.message);
+        // Retry without optional columns
+        if (queueError.message.includes('column') && (queueError.message.includes('image_url') || queueError.message.includes('matched_media_id'))) {
+          delete queueInsert.image_url;
+          delete queueInsert.matched_media_id;
+          await supabase.from('content_queue').insert(queueInsert);
+        }
+      }
 
       // Log media match result
       if (matchedImageUrl) {

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, Search, ExternalLink, Pencil, BookOpen, Trash2, X, Save,
-  ArrowLeft, Share2, Palette, BarChart3, ShieldAlert, Type, Sliders, FileText, Image, Rss,
+  ArrowLeft, Share2, Palette, BarChart3, ShieldAlert, Type, Sliders, FileText, Image, Rss, MessageCircle,
 } from 'lucide-react';
 import { ProjectPrompts } from './ProjectPrompts';
 import { MediaLibrary } from './MediaLibrary';
@@ -63,7 +63,7 @@ const TONES = ['professional', 'casual', 'friendly', 'authoritative', 'playful',
 const ENERGIES = ['low', 'medium', 'high'] as const;
 const STYLES = ['informative', 'entertaining', 'inspirational', 'educational', 'conversational'] as const;
 
-type DetailTab = 'basic' | 'platforms' | 'orchestrator' | 'media' | 'news' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts';
+type DetailTab = 'basic' | 'platforms' | 'orchestrator' | 'media' | 'news' | 'chatbot' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts';
 
 export function ProjectsView() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -216,6 +216,7 @@ const TABS: Array<{ id: DetailTab; label: string; icon: React.ElementType }> = [
   { id: 'orchestrator', label: 'Orchestrátor', icon: Sliders },
   { id: 'media', label: 'Média', icon: Image },
   { id: 'news', label: 'Novinky', icon: Rss },
+  { id: 'chatbot', label: 'Chatbot', icon: MessageCircle },
   { id: 'tone', label: 'Tón & Styl', icon: Palette },
   { id: 'mix', label: 'Content Mix', icon: BarChart3 },
   { id: 'constraints', label: 'Constraints', icon: ShieldAlert },
@@ -285,6 +286,7 @@ function ProjectDetail({
         {tab === 'orchestrator' && <TabOrchestrator project={project} onSave={saveField} />}
         {tab === 'media' && <MediaLibrary projectId={project.id} projectName={project.name} />}
         {tab === 'news' && <NewsPanel projectId={project.id} projectName={project.name} />}
+        {tab === 'chatbot' && <TabChatbot project={project} onSave={saveField} />}
         {tab === 'tone' && <TabTone project={project} onSave={saveField} />}
         {tab === 'mix' && <TabMix project={project} onSave={saveField} />}
         {tab === 'constraints' && <TabConstraints project={project} onSave={saveField} />}
@@ -954,7 +956,7 @@ function SaveBtn({ onClick, disabled }: { onClick: () => void; disabled?: boolea
 function Field({ label, value, onChange, placeholder, multiline }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean;
 }) {
-  const cls = "w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500";
+  const cls = "w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500";
   return (
     <div>
       <label className="block text-sm font-medium text-slate-300 mb-1.5">{label}</label>
@@ -963,6 +965,125 @@ function Field({ label, value, onChange, placeholder, multiline }: {
       ) : (
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={cls} />
       )}
+    </div>
+  );
+}
+
+/* ---- Tab: Chatbot ---- */
+function TabChatbot({ project, onSave }: { project: Project; onSave: (fields: Partial<Project>) => void }) {
+  const origins = ((project as unknown as Record<string, unknown>).chat_allowed_origins as string[]) || [];
+  const [originsText, setOriginsText] = useState(origins.join('\n'));
+  const [copied, setCopied] = useState('');
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const embedCode = `<script src="${baseUrl}/widget/hugo-chat.js" data-project-id="${project.id}" data-position="right" data-color="#7c3aed"></script>`;
+  const chatUrl = `${baseUrl}/chat/${project.id}`;
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(''), 2000);
+  };
+
+  const saveOrigins = () => {
+    const list = originsText.split('\n').map(s => s.trim()).filter(Boolean);
+    onSave({ chat_allowed_origins: list } as unknown as Partial<Project>);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-medium text-white mb-1">Hugo Chatbot Widget</h3>
+        <p className="text-xs text-slate-500 mb-4">
+          Vložte chatbota na web projektu. Hugo odpovídá podle KB, komunikačních pravidel a tónu tohoto projektu.
+        </p>
+      </div>
+
+      {/* Embed code */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-2">Embed kód (vložte na web)</label>
+        <div className="relative">
+          <pre className="bg-slate-800 border border-slate-700 rounded-lg p-3 text-xs text-emerald-400 overflow-x-auto">
+            {embedCode}
+          </pre>
+          <button
+            onClick={() => copyToClipboard(embedCode, 'embed')}
+            className="absolute top-2 right-2 px-2 py-1 rounded bg-slate-700 text-xs text-slate-300 hover:text-white transition-colors"
+          >
+            {copied === 'embed' ? '✓ Zkopírováno' : 'Kopírovat'}
+          </button>
+        </div>
+      </div>
+
+      {/* Direct link */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-2">Přímý odkaz na chat</label>
+        <div className="flex items-center gap-2">
+          <input
+            readOnly
+            value={chatUrl}
+            className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-300"
+          />
+          <button
+            onClick={() => copyToClipboard(chatUrl, 'url')}
+            className="px-3 py-2 rounded-lg bg-slate-700 text-xs text-slate-300 hover:text-white transition-colors"
+          >
+            {copied === 'url' ? '✓' : 'Kopírovat'}
+          </button>
+          <a
+            href={chatUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-2 rounded-lg bg-violet-600 text-xs text-white hover:bg-violet-500 transition-colors"
+          >
+            Otevřít
+          </a>
+        </div>
+      </div>
+
+      {/* Allowed origins */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-2">
+          Povolené domény (jedna na řádek)
+        </label>
+        <p className="text-xs text-slate-500 mb-2">
+          Pokud je prázdné, chatbot funguje odkudkoliv (dev režim). Pro produkci zadejte domény kde bude widget.
+        </p>
+        <textarea
+          value={originsText}
+          onChange={(e) => setOriginsText(e.target.value)}
+          placeholder={"https://investczech.cz\nhttps://www.investczech.cz"}
+          rows={3}
+          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+        />
+        <button
+          onClick={saveOrigins}
+          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-500 transition-colors"
+        >
+          <Save className="w-3.5 h-3.5" /> Uložit domény
+        </button>
+      </div>
+
+      {/* Status */}
+      <div className="p-4 rounded-xl bg-slate-800 border border-slate-700">
+        <h4 className="text-sm font-medium text-white mb-2">Stav chatbotu</h4>
+        <div className="space-y-1.5 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="text-slate-300">API endpoint aktivní</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${origins.length > 0 ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className="text-slate-300">
+              {origins.length > 0 ? `Omezeno na ${origins.length} domén` : 'Bez omezení domén (dev režim)'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="text-slate-300">Projekt: {project.name}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

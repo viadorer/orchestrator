@@ -12,6 +12,7 @@ import { PublishView } from '@/components/publish/PublishView';
 import { CalendarView } from '@/components/calendar/CalendarView';
 import { SettingsView } from '@/components/settings/SettingsView';
 import { AgentView } from '@/components/agent/AgentView';
+import { ChatView } from '@/components/chat/ChatView';
 import { Loader2 } from 'lucide-react';
 
 export default function Home() {
@@ -43,6 +44,7 @@ export default function Home() {
         {view === 'review' && <ReviewView />}
         {view === 'publish' && <PublishView />}
         {view === 'calendar' && <CalendarView />}
+        {view === 'chat' && <ChatView />}
         {view === 'settings' && <SettingsView />}
       </main>
     </div>

@@ -13,10 +13,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Bot,
+  MessageCircle,
 } from 'lucide-react';
 import { useState } from 'react';
 
-export type AdminView = 'dashboard' | 'projects' | 'agent' | 'generate' | 'review' | 'publish' | 'calendar' | 'settings';
+export type AdminView = 'dashboard' | 'projects' | 'agent' | 'generate' | 'review' | 'publish' | 'calendar' | 'chat' | 'settings';
 
 interface SidebarProps {
   currentView: AdminView;
@@ -31,6 +32,7 @@ const NAV_ITEMS: Array<{ view: AdminView; label: string; icon: React.ElementType
   { view: 'review', label: 'Review', icon: ClipboardCheck },
   { view: 'publish', label: 'Publikovat', icon: Send },
   { view: 'calendar', label: 'Kalendář', icon: Calendar },
+  { view: 'chat', label: 'Chat', icon: MessageCircle },
   { view: 'settings', label: 'Nastavení', icon: Settings },
 ];
 

@@ -22,13 +22,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
   }
 
-  // Collect all files from form data
-  const files: File[] = [];
-  for (const [key, value] of formData.entries()) {
-    if (key === 'files' && value instanceof File) {
-      files.push(value);
-    }
-  }
+  // Collect all files from form data (getAll handles multiple files with same key)
+  const files = formData.getAll('files').filter((v): v is File => v instanceof File);
 
   if (files.length === 0) {
     return NextResponse.json({ error: 'No files provided' }, { status: 400 });

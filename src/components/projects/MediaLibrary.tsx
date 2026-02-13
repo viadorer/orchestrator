@@ -60,18 +60,18 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
     setUploading(true);
     setUploadProgress({ done: 0, total: fileArray.length });
 
-    // Upload in batches of 5 to avoid overwhelming the server
-    const batchSize = 5;
-    for (let i = 0; i < fileArray.length; i += batchSize) {
-      const batch = fileArray.slice(i, i + batchSize);
+    // Upload one file at a time for maximum reliability
+    for (let i = 0; i < fileArray.length; i++) {
       const formData = new FormData();
       formData.append('project_id', projectId);
-      for (const file of batch) {
-        formData.append('files', file);
-      }
+      formData.append('files', fileArray[i]);
 
-      await fetch('/api/media/upload', { method: 'POST', body: formData });
-      setUploadProgress({ done: Math.min(i + batchSize, fileArray.length), total: fileArray.length });
+      try {
+        await fetch('/api/media/upload', { method: 'POST', body: formData });
+      } catch (err) {
+        console.error(`Upload failed for ${fileArray[i].name}:`, err);
+      }
+      setUploadProgress({ done: i + 1, total: fileArray.length });
     }
 
     setUploading(false);

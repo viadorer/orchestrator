@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
-import { publishPost } from '@/lib/getlate';
+import { publishPost, buildPlatformsArray } from '@/lib/getlate';
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
@@ -13,10 +13,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'ids array is required' }, { status: 400 });
   }
 
-  // Load posts with project info
+  // Load posts with project info (late_accounts = per-platform accountIds)
   const { data: posts, error } = await supabase
     .from('content_queue')
-    .select('*, projects(late_social_set_id)')
+    .select('*, projects(name, late_accounts, late_social_set_id)')
     .in('id', ids)
     .eq('status', 'approved');
 
@@ -24,22 +24,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error?.message || 'Posts not found' }, { status: 500 });
   }
 
-  const results: Array<{ id: string; status: string; error?: string }> = [];
+  const results: Array<{ id: string; status: string; late_post_id?: string; error?: string }> = [];
 
   for (const post of posts) {
-    const socialSetId = (post.projects as { late_social_set_id: string })?.late_social_set_id;
-    if (!socialSetId) {
-      results.push({ id: post.id, status: 'failed', error: 'No social_set_id configured' });
+    const project = post.projects as { name: string; late_accounts: Record<string, string> | null; late_social_set_id: string | null };
+    const lateAccounts = project?.late_accounts || {};
+
+    // Build platforms array: [{platform: "facebook", accountId: "698f7c19..."}]
+    const platformEntries = buildPlatformsArray(lateAccounts, post.platforms || []);
+
+    if (platformEntries.length === 0) {
+      results.push({
+        id: post.id,
+        status: 'failed',
+        error: `No getLate account IDs configured for platforms: ${(post.platforms || []).join(', ')}. Set late_accounts in project settings.`,
+      });
       continue;
     }
 
     try {
       const lateResult = await publishPost({
-        socialSetId,
-        text: post.text_content,
-        platforms: post.platforms,
-        imageUrl: post.image_url || undefined,
+        content: post.text_content,
+        platforms: platformEntries,
         scheduledFor: scheduledFor || post.scheduled_for || undefined,
+        timezone: 'Europe/Prague',
       });
 
       // Update status in DB
@@ -49,7 +57,7 @@ export async function POST(request: Request) {
           status: scheduledFor ? 'scheduled' : 'sent',
           sent_at: scheduledFor ? null : new Date().toISOString(),
           scheduled_for: scheduledFor || null,
-          late_post_id: lateResult.id,
+          late_post_id: lateResult._id,
         })
         .eq('id', post.id);
 
@@ -62,7 +70,7 @@ export async function POST(request: Request) {
           pattern_id: post.pattern_id,
         });
 
-      results.push({ id: post.id, status: 'sent' });
+      results.push({ id: post.id, status: 'sent', late_post_id: lateResult._id });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       await supabase

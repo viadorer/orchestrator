@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, Search, ExternalLink, Pencil, BookOpen, Trash2, X, Save,
-  ArrowLeft, Share2, Palette, BarChart3, ShieldAlert, Type, Sliders, FileText, Image,
+  ArrowLeft, Share2, Palette, BarChart3, ShieldAlert, Type, Sliders, FileText, Image, Rss,
 } from 'lucide-react';
 import { ProjectPrompts } from './ProjectPrompts';
 import { MediaLibrary } from './MediaLibrary';
+import { NewsPanel } from './NewsPanel';
 
 interface Project {
   id: string;
@@ -62,7 +63,7 @@ const TONES = ['professional', 'casual', 'friendly', 'authoritative', 'playful',
 const ENERGIES = ['low', 'medium', 'high'] as const;
 const STYLES = ['informative', 'entertaining', 'inspirational', 'educational', 'conversational'] as const;
 
-type DetailTab = 'basic' | 'platforms' | 'orchestrator' | 'media' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts';
+type DetailTab = 'basic' | 'platforms' | 'orchestrator' | 'media' | 'news' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts';
 
 export function ProjectsView() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -214,6 +215,7 @@ const TABS: Array<{ id: DetailTab; label: string; icon: React.ElementType }> = [
   { id: 'platforms', label: 'Platformy & getLate', icon: Share2 },
   { id: 'orchestrator', label: 'Orchestrátor', icon: Sliders },
   { id: 'media', label: 'Média', icon: Image },
+  { id: 'news', label: 'Novinky', icon: Rss },
   { id: 'tone', label: 'Tón & Styl', icon: Palette },
   { id: 'mix', label: 'Content Mix', icon: BarChart3 },
   { id: 'constraints', label: 'Constraints', icon: ShieldAlert },
@@ -282,6 +284,7 @@ function ProjectDetail({
         {tab === 'platforms' && <TabPlatforms project={project} onSave={saveField} />}
         {tab === 'orchestrator' && <TabOrchestrator project={project} onSave={saveField} />}
         {tab === 'media' && <MediaLibrary projectId={project.id} projectName={project.name} />}
+        {tab === 'news' && <NewsPanel projectId={project.id} projectName={project.name} />}
         {tab === 'tone' && <TabTone project={project} onSave={saveField} />}
         {tab === 'mix' && <TabMix project={project} onSave={saveField} />}
         {tab === 'constraints' && <TabConstraints project={project} onSave={saveField} />}

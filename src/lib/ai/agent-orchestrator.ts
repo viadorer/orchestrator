@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, getPromptTemplate, getProjectPrompts, type PromptContext } from './prompt-builder';
 import { generateVisualAssets } from '@/lib/visual/visual-agent';
 import { findMatchingMedia, markMediaUsed } from '@/lib/ai/vision-engine';
+import { getRelevantNews } from '@/lib/rss/fetcher';
 
 // ============================================
 // Constants
@@ -277,6 +278,29 @@ async function buildAgentPrompt(
           parts.push('\nKAŽDÝ nový post MUSÍ být o JINÉM tématu, s JINÝM hookem, JINOU strukturou.');
           parts.push('Pokud všechny KB fakta už byly použity, najdi NOVÝ ÚHEL na stejné téma.');
         }
+      }
+
+      // ---- Contextual Pulse: inject relevant news ----
+      try {
+        const recentNews = await getRelevantNews(project.id as string, {
+          limit: 5,
+          hoursBack: 72,
+          minRelevance: 0.3,
+          onlyUnused: true,
+        });
+        if (recentNews.length > 0) {
+          parts.push('\n---\nAKTUÁLNÍ NOVINKY (Contextual Pulse – můžeš na ně reagovat):');
+          parts.push('Pokud je novinka relevantní k tématu postu, ZAKOMPONUJ ji přirozeně.');
+          parts.push('Cituj zdroj (např. "Jak uvádí ČSÚ..." nebo "Podle dat Eurostatu...").');
+          parts.push('Nereaguj na každou novinku – jen na ty, které přirozeně zapadají.');
+          for (const news of recentNews) {
+            parts.push(`\n[${news.source_name}] ${news.title} (${new Date(news.published_at).toLocaleDateString('cs-CZ')})`);
+            if (news.summary) parts.push(`  Shrnutí: ${news.summary}`);
+            if (news.link) parts.push(`  Zdroj: ${news.link}`);
+          }
+        }
+      } catch {
+        // News fetch failed, continue without
       }
 
       // ---- Creative instructions ----

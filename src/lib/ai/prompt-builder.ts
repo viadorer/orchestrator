@@ -52,7 +52,7 @@ export async function getPromptTemplate(slug: string): Promise<string | null> {
 // Load per-project prompt templates
 // ============================================
 
-async function getProjectPrompts(projectId: string, category?: string): Promise<Array<{ slug: string; category: string; content: string }>> {
+export async function getProjectPrompts(projectId: string, category?: string): Promise<Array<{ slug: string; category: string; content: string }>> {
   if (!supabase) return [];
   let query = supabase
     .from('project_prompt_templates')

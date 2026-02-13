@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, BarChart3, Image } from 'lucide-react';
 
 interface QueueItem {
   id: string;
@@ -21,6 +21,10 @@ interface QueueItem {
   source: string;
   created_at: string;
   projects?: { name: string; slug: string };
+  visual_type?: string;
+  chart_url?: string | null;
+  card_url?: string | null;
+  editor_review?: Record<string, unknown> | null;
 }
 
 type SortBy = 'overall_asc' | 'overall_desc' | 'date_desc' | 'date_asc';
@@ -221,6 +225,49 @@ export function ReviewView() {
                     {expanded === item.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     {expanded === item.id ? 'Méně' : 'Více'}
                   </button>
+                )}
+
+                {/* Visual preview */}
+                {item.visual_type && item.visual_type !== 'none' && (
+                  <div className="mt-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      {item.visual_type === 'chart' ? (
+                        <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
+                      ) : (
+                        <Image className="w-3.5 h-3.5 text-violet-400" />
+                      )}
+                      <span className="text-xs text-slate-500 uppercase">{item.visual_type}</span>
+                    </div>
+                    {item.chart_url && (
+                      <img
+                        src={item.chart_url}
+                        alt="Chart preview"
+                        className="rounded-lg border border-slate-700 max-w-[400px] w-full"
+                        loading="lazy"
+                      />
+                    )}
+                    {item.card_url && (
+                      <img
+                        src={item.card_url}
+                        alt="Card preview"
+                        className="rounded-lg border border-slate-700 max-w-[400px] w-full"
+                        loading="lazy"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Editor review details */}
+                {expanded === item.id && item.editor_review && (
+                  <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                    <div className="text-xs font-medium text-amber-400 mb-1.5">Hugo-Editor Review</div>
+                    {(item.editor_review as { changes?: string[] })?.changes?.map((change: string, i: number) => (
+                      <div key={i} className="text-xs text-slate-400">• {change}</div>
+                    ))}
+                    {(item.editor_review as { guardrail_violations?: string[] })?.guardrail_violations?.map((v: string, i: number) => (
+                      <div key={i} className="text-xs text-red-400">⚠ {v}</div>
+                    ))}
+                  </div>
                 )}
               </div>
 

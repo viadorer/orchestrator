@@ -19,6 +19,7 @@ import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, getPromptTemplate, getProjectPrompts, type PromptContext } from './prompt-builder';
+import { generateVisualAssets } from '@/lib/visual/visual-agent';
 
 // ============================================
 // Constants
@@ -497,17 +498,39 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
     // ---- Post-processing: save to content_queue ----
     if (task.task_type === 'generate_content' && result.text) {
       const scores = result.scores as Record<string, number> | undefined;
+      const platform = (task.params?.platform as string) || (ctx.project.platforms as string[])?.[0] || 'linkedin';
+
+      // Generate visual assets (chart/card/photo)
+      let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null } = {
+        visual_type: 'none', chart_url: null, card_url: null, image_prompt: (result.image_prompt as string) || null,
+      };
+      try {
+        const visualIdentity = (ctx.project.visual_identity as Record<string, string>) || {};
+        visualData = await generateVisualAssets({
+          text: result.text as string,
+          projectName: ctx.project.name as string,
+          platform,
+          visualIdentity,
+          kbEntries: ctx.kbEntries,
+        });
+      } catch {
+        // Visual generation failed, continue without
+      }
+
       await supabase.from('content_queue').insert({
         project_id: task.project_id,
         text_content: result.text as string,
-        image_prompt: (result.image_prompt as string) || null,
+        image_prompt: visualData.image_prompt || (result.image_prompt as string) || null,
         alt_text: (result.alt_text as string) || null,
         content_type: (task.params?.contentType as string) || 'educational',
-        platforms: [(task.params?.platform as string) || (ctx.project.platforms as string[])?.[0] || 'linkedin'],
+        platforms: [platform],
         ai_scores: scores || {},
         status: (scores?.overall || 0) >= MIN_QUALITY_SCORE ? 'review' : 'rejected',
         source: task.params?.human_topic ? 'human_priority' : 'ai_generated',
         editor_review: result.editor_review || null,
+        visual_type: visualData.visual_type,
+        chart_url: visualData.chart_url,
+        card_url: visualData.card_url,
       });
     }
 

@@ -9,6 +9,7 @@ import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, type PromptContext } from './prompt-builder';
+import { generateVisualAssets, type VisualAssets } from '@/lib/visual/visual-agent';
 
 export interface GeneratedContent {
   text: string;
@@ -21,6 +22,7 @@ export interface GeneratedContent {
     value_score: number;
     overall: number;
   };
+  visual?: VisualAssets;
 }
 
 export interface GenerateRequest {
@@ -161,14 +163,14 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
   });
 
   // Parse JSON response
+  let content: GeneratedContent;
   try {
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in response');
-    const parsed = JSON.parse(jsonMatch[0]) as GeneratedContent;
-    return parsed;
+    content = JSON.parse(jsonMatch[0]) as GeneratedContent;
   } catch {
     // Fallback: treat entire response as text
-    return {
+    content = {
       text: rawResponse,
       scores: {
         creativity: 5,
@@ -179,4 +181,22 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
       },
     };
   }
+
+  // Generate visual assets (chart/card/photo)
+  try {
+    const visualIdentity = (project.visual_identity as Record<string, string>) || {};
+    const visual = await generateVisualAssets({
+      text: content.text,
+      projectName: project.name as string,
+      platform: req.platform,
+      visualIdentity,
+      kbEntries: ctx.kbEntries,
+    });
+    content.visual = visual;
+  } catch {
+    // Visual generation failed, continue without
+    content.visual = { visual_type: 'none', chart_url: null, card_url: null, image_prompt: content.image_prompt || null };
+  }
+
+  return content;
 }

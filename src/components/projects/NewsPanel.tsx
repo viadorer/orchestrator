@@ -53,11 +53,16 @@ export function NewsPanel({ projectId, projectName }: NewsPanelProps) {
 
   const addSource = async () => {
     if (!newSource.name || !newSource.url) return;
-    await fetch('/api/rss', {
+    const res = await fetch('/api/rss', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project_id: projectId, ...newSource }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Neznámá chyba' }));
+      alert(`Chyba při ukládání: ${err.error || 'Zkontrolujte, zda je spuštěna migrace 010 (tabulka rss_sources).'}`);
+      return;
+    }
     setNewSource({ name: '', url: '', category: 'general' });
     setShowAdd(false);
     loadData();

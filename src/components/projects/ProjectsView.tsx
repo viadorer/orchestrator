@@ -131,7 +131,7 @@ export function ProjectsView() {
 
   // ---- List View ----
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 w-full">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Projekty</h1>
@@ -250,7 +250,7 @@ function ProjectDetail({
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 w-full">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <button onClick={onBack} className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">

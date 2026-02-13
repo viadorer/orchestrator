@@ -82,7 +82,7 @@ export function PublishView() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 w-full">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Publikovat</h1>
         <p className="text-slate-400 mt-1">Odeslat schválené příspěvky přes getLate.dev</p>

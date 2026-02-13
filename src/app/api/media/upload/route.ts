@@ -39,10 +39,12 @@ export async function POST(request: Request) {
   for (const file of files) {
     try {
       // Read file as buffer
-      const buffer = Buffer.from(await file.arrayBuffer());
+      const arrayBuf = await file.arrayBuffer();
+      const buffer = new Uint8Array(arrayBuf);
       const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 8);
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storagePath = `${projectId}/${timestamp}_${safeName}`;
+      const storagePath = `${projectId}/${timestamp}_${random}_${safeName}`;
 
       // Determine file type
       let fileType = 'image';

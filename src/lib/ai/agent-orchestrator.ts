@@ -754,42 +754,144 @@ export async function saveFeedback(
 }
 
 // ============================================
-// Auto-Scheduling: Hugo plans tasks for idle projects
+// Orchestrator Config Types
 // ============================================
 
-export async function autoScheduleProjects(): Promise<{ scheduled: number; projects_checked: number }> {
-  if (!supabase) return { scheduled: 0, projects_checked: 0 };
+interface OrchestratorConfig {
+  enabled: boolean;
+  posting_frequency: 'daily' | '3x_week' | 'weekly' | '2x_daily' | 'custom';
+  posting_times: string[];       // ["09:00", "15:00"]
+  max_posts_per_day: number;
+  content_strategy: string;      // "4-1-1"
+  auto_publish: boolean;
+  auto_publish_threshold: number; // min score for auto-publish
+  timezone: string;              // "Europe/Prague"
+  media_strategy: 'auto' | 'manual' | 'none';
+  platforms_priority: string[];  // ordered platforms
+  pause_weekends: boolean;
+}
 
-  // Get all active projects
+const DEFAULT_CONFIG: OrchestratorConfig = {
+  enabled: true,
+  posting_frequency: 'daily',
+  posting_times: ['09:00', '15:00'],
+  max_posts_per_day: 2,
+  content_strategy: '4-1-1',
+  auto_publish: false,
+  auto_publish_threshold: 8.5,
+  timezone: 'Europe/Prague',
+  media_strategy: 'auto',
+  platforms_priority: [],
+  pause_weekends: false,
+};
+
+function getConfig(project: Record<string, unknown>): OrchestratorConfig {
+  const raw = project.orchestrator_config as Partial<OrchestratorConfig> | null;
+  return { ...DEFAULT_CONFIG, ...raw };
+}
+
+/**
+ * Get current hour in project's timezone.
+ */
+function getProjectLocalHour(timezone: string): number {
+  try {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: timezone });
+    return parseInt(formatter.format(now), 10);
+  } catch {
+    return new Date().getUTCHours() + 1; // fallback CET
+  }
+}
+
+function getProjectLocalDay(timezone: string): number {
+  try {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: timezone });
+    const day = formatter.format(now);
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(day);
+  } catch {
+    return new Date().getDay();
+  }
+}
+
+/**
+ * Check if current time is within a posting window.
+ * posting_times: ["09:00", "15:00"] → returns true if current hour matches any.
+ */
+function isInPostingWindow(config: OrchestratorConfig): boolean {
+  const localHour = getProjectLocalHour(config.timezone);
+  return config.posting_times.some(time => {
+    const hour = parseInt(time.split(':')[0], 10);
+    return localHour === hour;
+  });
+}
+
+/**
+ * Calculate required hours between posts based on frequency.
+ */
+function getPostingIntervalHours(frequency: string): number {
+  switch (frequency) {
+    case '2x_daily': return 8;
+    case 'daily': return 20;
+    case '3x_week': return 48;
+    case 'weekly': return 144;
+    default: return 20;
+  }
+}
+
+// ============================================
+// Auto-Scheduling: Per-project orchestrator
+// ============================================
+
+export async function autoScheduleProjects(): Promise<{ scheduled: number; projects_checked: number; skipped_reasons: Record<string, number> }> {
+  if (!supabase) return { scheduled: 0, projects_checked: 0, skipped_reasons: {} };
+
+  // Get all active projects with their config
   const { data: projects } = await supabase
     .from('projects')
-    .select('id, name, platforms, is_active')
+    .select('id, name, platforms, is_active, orchestrator_config')
     .eq('is_active', true);
 
-  if (!projects) return { scheduled: 0, projects_checked: 0 };
+  if (!projects) return { scheduled: 0, projects_checked: 0, skipped_reasons: {} };
 
   let scheduled = 0;
+  const skipped: Record<string, number> = {};
+  const skip = (reason: string) => { skipped[reason] = (skipped[reason] || 0) + 1; };
 
   for (const project of projects) {
-    // Check if project has pending/running tasks already
+    const config = getConfig(project);
+
+    // 1. Orchestrator disabled?
+    if (!config.enabled) { skip('disabled'); continue; }
+
+    // 2. Weekend pause?
+    const localDay = getProjectLocalDay(config.timezone);
+    if (config.pause_weekends && (localDay === 0 || localDay === 6)) {
+      skip('weekend_pause'); continue;
+    }
+
+    // 3. In posting window? (only generate during configured hours)
+    if (!isInPostingWindow(config)) { skip('outside_posting_window'); continue; }
+
+    // 4. Already has pending/running tasks?
     const { count: pendingCount } = await supabase
       .from('agent_tasks')
       .select('id', { count: 'exact' })
       .eq('project_id', project.id)
       .in('status', ['pending', 'running']);
 
-    if ((pendingCount || 0) > 0) continue; // Already has work
+    if ((pendingCount || 0) > 0) { skip('has_pending_tasks'); continue; }
 
-    // Check if project has KB entries (no point generating without KB)
+    // 5. Has KB entries?
     const { count: kbCount } = await supabase
       .from('knowledge_base')
       .select('id', { count: 'exact' })
       .eq('project_id', project.id)
       .eq('is_active', true);
 
-    if ((kbCount || 0) === 0) continue; // No KB, skip
+    if ((kbCount || 0) === 0) { skip('no_kb'); continue; }
 
-    // Check last post date
+    // 6. Check posting interval (respect frequency)
     const { data: lastPost } = await supabase
       .from('content_queue')
       .select('created_at')
@@ -802,37 +904,62 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
       ? (Date.now() - new Date(lastPostDate).getTime()) / (1000 * 60 * 60)
       : 999;
 
-    // If no post in last 24h, schedule content generation
-    if (hoursSinceLastPost > 24) {
-      const platforms = (project.platforms as string[]) || ['linkedin'];
-      for (const platform of platforms.slice(0, 2)) { // Max 2 platforms per cycle
-        await createTask(project.id, 'generate_content', {
-          platform,
-          auto_scheduled: true,
-        }, { priority: 3 }); // Low priority (human topics = 10)
-        scheduled++;
-      }
+    const requiredInterval = getPostingIntervalHours(config.posting_frequency);
+    if (hoursSinceLastPost < requiredInterval) { skip('too_recent'); continue; }
+
+    // 7. Check daily post limit
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { count: todayCount } = await supabase
+      .from('content_queue')
+      .select('id', { count: 'exact' })
+      .eq('project_id', project.id)
+      .gte('created_at', todayStart.toISOString());
+
+    if ((todayCount || 0) >= config.max_posts_per_day) { skip('daily_limit_reached'); continue; }
+
+    // 8. Schedule content generation!
+    const platforms = config.platforms_priority.length > 0
+      ? config.platforms_priority
+      : (project.platforms as string[]) || ['facebook'];
+
+    const postsToGenerate = Math.min(
+      config.max_posts_per_day - (todayCount || 0),
+      platforms.length,
+      2, // max 2 per cron cycle
+    );
+
+    for (let i = 0; i < postsToGenerate; i++) {
+      const platform = platforms[i % platforms.length];
+      await createTask(project.id, 'generate_content', {
+        platform,
+        auto_scheduled: true,
+        media_strategy: config.media_strategy,
+        auto_publish: config.auto_publish,
+        auto_publish_threshold: config.auto_publish_threshold,
+      }, { priority: 3 });
+      scheduled++;
     }
 
-    // Weekly: schedule content mix analysis (every Monday)
-    const today = new Date();
-    if (today.getDay() === 1 && hoursSinceLastPost < 168) { // Monday + had posts this week
+    // Weekly: content mix analysis (Monday)
+    if (localDay === 1 && hoursSinceLastPost < 168) {
       await createTask(project.id, 'analyze_content_mix', {}, { priority: 2 });
       scheduled++;
     }
   }
 
-  // Log auto-scheduling run
+  // Log
   await supabase.from('agent_log').insert({
     action: 'auto_schedule',
     details: {
       projects_checked: projects.length,
       tasks_scheduled: scheduled,
+      skipped_reasons: skipped,
       timestamp: new Date().toISOString(),
     },
   });
 
-  return { scheduled, projects_checked: projects.length };
+  return { scheduled, projects_checked: projects.length, skipped_reasons: skipped };
 }
 
 // ============================================

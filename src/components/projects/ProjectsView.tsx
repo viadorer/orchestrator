@@ -15,6 +15,7 @@ interface Project {
   late_social_set_id: string | null;
   late_profile_id: string | null;
   late_accounts: Record<string, string> | null;
+  orchestrator_config: Record<string, unknown> | null;
   platforms: string[];
   mood_settings: { tone: string; energy: string; style: string };
   content_mix: Record<string, number>;
@@ -60,7 +61,7 @@ const TONES = ['professional', 'casual', 'friendly', 'authoritative', 'playful',
 const ENERGIES = ['low', 'medium', 'high'] as const;
 const STYLES = ['informative', 'entertaining', 'inspirational', 'educational', 'conversational'] as const;
 
-type DetailTab = 'basic' | 'platforms' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts';
+type DetailTab = 'basic' | 'platforms' | 'orchestrator' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts';
 
 export function ProjectsView() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -210,6 +211,7 @@ export function ProjectsView() {
 const TABS: Array<{ id: DetailTab; label: string; icon: React.ElementType }> = [
   { id: 'basic', label: 'Základní', icon: Type },
   { id: 'platforms', label: 'Platformy & getLate', icon: Share2 },
+  { id: 'orchestrator', label: 'Orchestrátor', icon: Sliders },
   { id: 'tone', label: 'Tón & Styl', icon: Palette },
   { id: 'mix', label: 'Content Mix', icon: BarChart3 },
   { id: 'constraints', label: 'Constraints', icon: ShieldAlert },
@@ -276,6 +278,7 @@ function ProjectDetail({
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
         {tab === 'basic' && <TabBasic project={project} onSave={saveField} />}
         {tab === 'platforms' && <TabPlatforms project={project} onSave={saveField} />}
+        {tab === 'orchestrator' && <TabOrchestrator project={project} onSave={saveField} />}
         {tab === 'tone' && <TabTone project={project} onSave={saveField} />}
         {tab === 'mix' && <TabMix project={project} onSave={saveField} />}
         {tab === 'constraints' && <TabConstraints project={project} onSave={saveField} />}
@@ -398,6 +401,180 @@ function TabPlatforms({ project, onSave }: { project: Project; onSave: (f: Parti
       </div>
 
       <SaveBtn onClick={() => onSave({ platforms, late_profile_id: profileId || null, late_accounts: accounts } as Partial<Project>)} />
+    </div>
+  );
+}
+
+/* ---- Tab: Orchestrator ---- */
+const FREQUENCIES = [
+  { value: '2x_daily', label: '2× denně (dravá)' },
+  { value: 'daily', label: '1× denně' },
+  { value: '3x_week', label: '3× týdně' },
+  { value: 'weekly', label: '1× týdně (udržovací)' },
+] as const;
+
+const MEDIA_STRATEGIES = [
+  { value: 'auto', label: 'Auto – Hugo vybírá fotky z knihovny' },
+  { value: 'manual', label: 'Manuální – jen admin přiřazuje' },
+  { value: 'none', label: 'Žádné – jen text' },
+] as const;
+
+function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Partial<Project>) => void }) {
+  const defaults = {
+    enabled: true, posting_frequency: 'daily', posting_times: ['09:00', '15:00'],
+    max_posts_per_day: 2, content_strategy: '4-1-1', auto_publish: false,
+    auto_publish_threshold: 8.5, timezone: 'Europe/Prague', media_strategy: 'auto',
+    platforms_priority: [] as string[], pause_weekends: false,
+  };
+  const cfg = { ...defaults, ...(project.orchestrator_config || {}) } as typeof defaults;
+
+  const [enabled, setEnabled] = useState(cfg.enabled);
+  const [frequency, setFrequency] = useState(cfg.posting_frequency);
+  const [times, setTimes] = useState(cfg.posting_times.join(', '));
+  const [maxPerDay, setMaxPerDay] = useState(cfg.max_posts_per_day);
+  const [autoPublish, setAutoPublish] = useState(cfg.auto_publish);
+  const [threshold, setThreshold] = useState(cfg.auto_publish_threshold);
+  const [timezone, setTimezone] = useState(cfg.timezone);
+  const [mediaStrategy, setMediaStrategy] = useState(cfg.media_strategy);
+  const [pauseWeekends, setPauseWeekends] = useState(cfg.pause_weekends);
+
+  const buildConfig = () => ({
+    orchestrator_config: {
+      enabled, posting_frequency: frequency,
+      posting_times: times.split(',').map(t => t.trim()).filter(Boolean),
+      max_posts_per_day: maxPerDay, content_strategy: cfg.content_strategy,
+      auto_publish: autoPublish, auto_publish_threshold: threshold,
+      timezone, media_strategy: mediaStrategy,
+      platforms_priority: cfg.platforms_priority, pause_weekends: pauseWeekends,
+    },
+  });
+
+  return (
+    <div className="space-y-6 max-w-lg">
+      {/* Master switch */}
+      <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800 border border-slate-700">
+        <div>
+          <div className="text-sm font-medium text-white">Hugo Orchestrátor</div>
+          <div className="text-xs text-slate-400">Autonomní generování a plánování obsahu</div>
+        </div>
+        <button
+          onClick={() => setEnabled(!enabled)}
+          className={`relative w-12 h-6 rounded-full transition-colors ${enabled ? 'bg-emerald-500' : 'bg-slate-600'}`}
+        >
+          <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        </button>
+      </div>
+
+      {enabled && (
+        <>
+          {/* Frequency */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Frekvence publikace</label>
+            <div className="grid grid-cols-2 gap-2">
+              {FREQUENCIES.map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setFrequency(f.value)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    frequency === f.value ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Posting times */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Časy publikace</label>
+            <input
+              value={times}
+              onChange={e => setTimes(e.target.value)}
+              placeholder="09:00, 15:00"
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
+            />
+            <p className="text-xs text-slate-500 mt-1">Hodiny oddělené čárkou. Hugo generuje jen v těchto oknech.</p>
+          </div>
+
+          {/* Max per day + timezone */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Max postů/den</label>
+              <input
+                type="number" min={1} max={10} value={maxPerDay}
+                onChange={e => setMaxPerDay(parseInt(e.target.value, 10) || 1)}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Časové pásmo</label>
+              <input
+                value={timezone}
+                onChange={e => setTimezone(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Media strategy */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Strategie médií</label>
+            <div className="space-y-2">
+              {MEDIA_STRATEGIES.map(m => (
+                <button
+                  key={m.value}
+                  onClick={() => setMediaStrategy(m.value)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    mediaStrategy === m.value ? 'bg-violet-600/20 text-violet-300 border border-violet-500/30' : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Auto-publish */}
+          <div className="p-4 rounded-xl bg-slate-800 border border-slate-700 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-white">Auto-publish</div>
+                <div className="text-xs text-slate-400">Publikovat bez review pokud skóre &ge; threshold</div>
+              </div>
+              <button
+                onClick={() => setAutoPublish(!autoPublish)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${autoPublish ? 'bg-amber-500' : 'bg-slate-600'}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${autoPublish ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+            {autoPublish && (
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Min. skóre pro auto-publish</label>
+                <input
+                  type="number" min={5} max={10} step={0.5} value={threshold}
+                  onChange={e => setThreshold(parseFloat(e.target.value) || 8)}
+                  className="w-24 px-3 py-1.5 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Pause weekends */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-300">Pauza o víkendech</span>
+            <button
+              onClick={() => setPauseWeekends(!pauseWeekends)}
+              className={`relative w-12 h-6 rounded-full transition-colors ${pauseWeekends ? 'bg-violet-500' : 'bg-slate-600'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${pauseWeekends ? 'translate-x-6' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+        </>
+      )}
+
+      <SaveBtn onClick={() => onSave(buildConfig() as Partial<Project>)} />
     </div>
   );
 }

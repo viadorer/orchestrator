@@ -10,11 +10,14 @@ import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, type PromptContext } from './prompt-builder';
 import { generateVisualAssets, type VisualAssets } from '@/lib/visual/visual-agent';
+import { findMatchingMedia, markMediaUsed } from '@/lib/ai/vision-engine';
 
 export interface GeneratedContent {
   text: string;
   image_prompt?: string;
   alt_text?: string;
+  matched_image_url?: string | null;
+  matched_media_id?: string | null;
   scores: {
     creativity: number;
     tone_match: number;
@@ -202,6 +205,22 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
   } catch {
     // Visual generation failed, continue without
     content.visual = { visual_type: 'none', chart_url: null, card_url: null, image_prompt: content.image_prompt || null };
+  }
+
+  // Media matching: find best photo from Media Library (pgvector)
+  try {
+    const matches = await findMatchingMedia(req.projectId, content.text, {
+      limit: 5,
+      fileType: 'image',
+      excludeRecentlyUsed: true,
+    });
+    if (matches.length > 0) {
+      content.matched_image_url = matches[0].public_url;
+      content.matched_media_id = matches[0].id;
+      await markMediaUsed(matches[0].id);
+    }
+  } catch {
+    // Media matching failed (no media_assets table or no processed photos)
   }
 
   return content;

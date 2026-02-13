@@ -26,6 +26,7 @@ interface QueueItem {
   chart_url?: string | null;
   card_url?: string | null;
   editor_review?: Record<string, unknown> | null;
+  image_url?: string | null;
 }
 
 type SortBy = 'overall_asc' | 'overall_desc' | 'date_desc' | 'date_asc';
@@ -212,6 +213,9 @@ export function ReviewView() {
                   {item.platforms.map(p => (
                     <span key={p} className="px-1.5 py-0.5 rounded bg-slate-800 text-xs text-slate-400">{p}</span>
                   ))}
+                  {item.image_url && (
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-xs text-emerald-400">📷 foto</span>
+                  )}
                 </div>
 
                 <p className={`text-sm text-slate-200 ${expanded === item.id ? '' : 'line-clamp-3'}`}>
@@ -235,7 +239,7 @@ export function ReviewView() {
                       text={item.text_content}
                       platforms={item.platforms}
                       projectName={item.projects?.name}
-                      imageUrl={null}
+                      imageUrl={item.image_url}
                       chartUrl={item.chart_url}
                       cardUrl={item.card_url}
                     />

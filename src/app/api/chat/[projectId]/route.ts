@@ -14,23 +14,28 @@ import { NextResponse } from 'next/server';
  * Embeddable on any website via widget script.
  */
 
-// Allow CORS for widget embedding
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+function getCorsHeaders(origin?: string | null): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
 
-export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: corsHeaders });
+export async function OPTIONS(request: Request) {
+  const origin = request.headers.get('origin');
+  return new Response(null, { status: 204, headers: getCorsHeaders(origin) });
 }
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
+  const origin = request.headers.get('origin');
+  const cors = getCorsHeaders(origin);
+
   if (!supabase) {
-    return NextResponse.json({ error: 'Not configured' }, { status: 500, headers: corsHeaders });
+    return NextResponse.json({ error: 'Not configured' }, { status: 500, headers: cors });
   }
 
   const { projectId } = await params;
@@ -38,7 +43,7 @@ export async function POST(
   const { message, history } = body;
 
   if (!message) {
-    return NextResponse.json({ error: 'message is required' }, { status: 400, headers: corsHeaders });
+    return NextResponse.json({ error: 'message is required' }, { status: 400, headers: cors });
   }
 
   try {
@@ -49,8 +54,22 @@ export async function POST(
       .eq('id', projectId)
       .single();
 
+    // Origin check: if chat_allowed_origins is set, validate
+    const allowedOrigins = (project?.chat_allowed_origins as string[]) || [];
+    if (allowedOrigins.length > 0 && origin) {
+      const isAllowed = allowedOrigins.some(o =>
+        origin === o || origin.endsWith('.' + o.replace(/^https?:\/\//, ''))
+      );
+      if (!isAllowed) {
+        return NextResponse.json(
+          { error: 'Origin not allowed for this project' },
+          { status: 403, headers: cors }
+        );
+      }
+    }
+
     if (!project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404, headers: corsHeaders });
+      return NextResponse.json({ error: 'Project not found' }, { status: 404, headers: cors });
     }
 
     // Load KB
@@ -158,9 +177,9 @@ NIKDY si nevymýšlej fakta. NIKDY nedávej konkrétní investiční rady.`);
       // Log failed, continue
     }
 
-    return NextResponse.json({ reply }, { headers: corsHeaders });
+    return NextResponse.json({ reply }, { headers: cors });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: msg }, { status: 500, headers: corsHeaders });
+    return NextResponse.json({ error: msg }, { status: 500, headers: cors });
   }
 }

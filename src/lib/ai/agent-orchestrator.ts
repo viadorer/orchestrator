@@ -224,10 +224,95 @@ async function buildAgentPrompt(
     case 'generate_content': {
       const platform = (params.platform as string) || (project.platforms as string[])?.[0] || 'linkedin';
       const contentType = params.contentType as string;
-      parts.push(`\nGENERUJ příspěvek pro platformu: ${platform}`);
+
+      // ---- Load per-project prompts (examples, identity, guardrails, etc.) ----
+      const projectPrompts = await getProjectPrompts(project.id as string);
+      if (projectPrompts.length > 0) {
+        const byCategory = new Map<string, string[]>();
+        for (const pp of projectPrompts) {
+          if (!byCategory.has(pp.category)) byCategory.set(pp.category, []);
+          byCategory.get(pp.category)!.push(pp.content);
+        }
+
+        // Inject per-project prompts in order
+        const promptOrder = [
+          'identity', 'communication', 'guardrail', 'business_rules',
+          'content_strategy', 'topic_boundaries', 'cta_rules',
+          'quality_criteria', 'personalization',
+        ];
+        for (const cat of promptOrder) {
+          const entries = byCategory.get(cat);
+          if (entries) {
+            parts.push(`\n---\n[${cat.toUpperCase()}]:`);
+            for (const entry of entries) parts.push(entry);
+          }
+        }
+
+        // Examples: CRITICAL for quality – these are the reference standard
+        const examples = byCategory.get('examples');
+        if (examples) {
+          parts.push('\n---\nPŘÍKLADY DOBRÝCH A ŠPATNÝCH POSTŮ (toto je tvůj standard kvality):');
+          parts.push('Studuj tyto příklady. Dobré posty = tvůj cíl. Špatné posty = čeho se vyvarovat.');
+          parts.push('NEOPISUJ tyto příklady doslova. Jsou to VZORY stylu a kvality, ne šablony k opakování.');
+          for (const ex of examples) parts.push(ex);
+        }
+      }
+
+      // ---- Load ALL published posts for dedup ----
+      if (supabase) {
+        const { data: publishedPosts } = await supabase
+          .from('content_queue')
+          .select('text_content')
+          .eq('project_id', project.id)
+          .in('status', ['approved', 'sent', 'scheduled', 'published'])
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (publishedPosts && publishedPosts.length > 0) {
+          parts.push('\n---\nPUBLIKOVANÉ POSTY (tyto texty už EXISTUJÍ – NESMÍŠ je opakovat ani parafrázovat):');
+          for (let i = 0; i < publishedPosts.length; i++) {
+            const text = (publishedPosts[i].text_content as string) || '';
+            parts.push(`${i + 1}. "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"`);
+          }
+          parts.push('\nKAŽDÝ nový post MUSÍ být o JINÉM tématu, s JINÝM hookem, JINOU strukturou.');
+          parts.push('Pokud všechny KB fakta už byly použity, najdi NOVÝ ÚHEL na stejné téma.');
+        }
+      }
+
+      // ---- Creative instructions ----
+      parts.push(`\n---\nGENERUJ příspěvek pro platformu: ${platform}`);
       if (contentType) parts.push(`Typ obsahu: ${contentType}`);
-      parts.push(`\nKVALITA: Post MUSÍ mít overall skóre >= ${MIN_QUALITY_SCORE}/10. Pokud ne, bude automaticky přegenerován.`);
-      parts.push('Vrať JSON: {"text": "...", "image_prompt": "...", "alt_text": "...", "scores": {"creativity": N, "tone_match": N, "hallucination_risk": N, "value_score": N, "overall": N}}');
+
+      parts.push(`\nKREATIVITA – POVINNÁ PRAVIDLA:
+1. HOOK: Každý post MUSÍ začínat jinak. Střídej typy hooků:
+   - Číslo/statistika ("1,37." / "20 736 Kč.")
+   - Provokativní otázka ("Co když váš důchod nebude stačit?")
+   - Kontrastní tvrzení ("Všichni mluví o úsporách. Nikdo o příjmech.")
+   - Příběh/scénář ("Představte si, že je vám 65...")
+   - Citát/výrok ("Průměrný Čech spoří 2 400 Kč měsíčně.")
+   - Metafora ("Důchod je maraton, ne sprint.")
+2. STRUKTURA: Střídej formáty – ne vždy číslo→kontext→řešení→CTA.
+3. ÚHEL: Použij KB fakta, která NEBYLA v posledních postech.
+4. ORIGINALITA: Neopakuj fráze z předchozích postů. Žádné "Matematika nečeká", "Žádná magie" pokud už byly použity.
+5. HODNOTA: Každý post musí přinést NOVOU informaci nebo NOVÝ pohled.`);
+
+      parts.push(`\nKVALITA: Post MUSÍ mít overall skóre >= ${MIN_QUALITY_SCORE}/10.
+- creativity < 7 = AUTOMATICKY ZAMÍTNUTO a přegenerováno
+- Buď k sobě přísný. Pokud post připomíná něco, co už bylo publikováno, sniž creativity.`);
+
+      parts.push(`\nVrať POUZE JSON:
+{
+  "text": "Text příspěvku",
+  "image_prompt": "Popis obrázku pro generování",
+  "alt_text": "Alt text",
+  "scores": {
+    "creativity": 1-10,
+    "tone_match": 1-10,
+    "hallucination_risk": 1-10,
+    "value_score": 1-10,
+    "overall": 1-10
+  }
+}`);
       break;
     }
     case 'analyze_content_mix': {

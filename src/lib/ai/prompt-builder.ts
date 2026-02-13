@@ -2,7 +2,11 @@
  * Modular Prompt Builder (Lego systém)
  * 
  * Sestavuje prompt z komponent:
- * {{System_Role}} + {{Project_KB}} + {{Tone_of_Voice}} + {{Pattern}} + {{Context}}
+ * 1. Globální šablony (prompt_templates) – platí pro všechny projekty
+ * 2. Per-project šablony (project_prompt_templates) – detailní instrukce per projekt
+ * 3. Dynamický kontext (KB, pattern, news, dedup)
+ * 
+ * Variable substitution: {{PROJECT_NAME}}, {{TONE}}, {{PLATFORM}}, atd.
  */
 
 import { supabase } from '@/lib/supabase/client';
@@ -17,6 +21,7 @@ export interface PromptContext {
   moodSettings: { tone: string; energy: string; style: string };
   styleRules: Record<string, unknown>;
   constraints: { forbidden_topics: string[]; mandatory_terms: string[]; max_hashtags: number };
+  contentMix?: Record<string, number>;
   semanticAnchors: string[];
   // Knowledge base entries
   kbEntries: Array<{ category: string; title: string; content: string }>;
@@ -27,6 +32,10 @@ export interface PromptContext {
   // Used KB entries to avoid repetition
   usedKbIds?: string[];
 }
+
+// ============================================
+// Load global prompt template by slug
+// ============================================
 
 export async function getPromptTemplate(slug: string): Promise<string | null> {
   if (!supabase) return null;
@@ -39,77 +48,194 @@ export async function getPromptTemplate(slug: string): Promise<string | null> {
   return data?.content ?? null;
 }
 
+// ============================================
+// Load per-project prompt templates
+// ============================================
+
+async function getProjectPrompts(projectId: string, category?: string): Promise<Array<{ slug: string; category: string; content: string }>> {
+  if (!supabase) return [];
+  let query = supabase
+    .from('project_prompt_templates')
+    .select('slug, category, content')
+    .eq('project_id', projectId)
+    .eq('is_active', true)
+    .order('sort_order');
+
+  if (category) query = query.eq('category', category);
+
+  const { data } = await query;
+  return data || [];
+}
+
+// ============================================
+// Variable substitution in prompt templates
+// ============================================
+
+function substituteVariables(template: string, ctx: PromptContext): string {
+  const mix = ctx.contentMix || { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 };
+  const styleRules = ctx.styleRules as Record<string, unknown>;
+
+  const vars: Record<string, string> = {
+    '{{PROJECT_NAME}}': ctx.projectName,
+    '{{PLATFORM}}': ctx.platform,
+    '{{CONTENT_TYPE}}': ctx.contentType,
+    '{{TONE}}': ctx.moodSettings.tone,
+    '{{ENERGY}}': ctx.moodSettings.energy,
+    '{{STYLE}}': ctx.moodSettings.style,
+    '{{SEMANTIC_ANCHORS}}': ctx.semanticAnchors.join(', ') || 'Nejsou definovány',
+    '{{FORBIDDEN_TOPICS}}': ctx.constraints.forbidden_topics.length > 0
+      ? ctx.constraints.forbidden_topics.map(t => `- ${t}`).join('\n')
+      : '- Žádná specifická omezení',
+    '{{MANDATORY_TERMS}}': ctx.constraints.mandatory_terms.length > 0
+      ? ctx.constraints.mandatory_terms.map(t => `- ${t}`).join('\n')
+      : '- Žádné povinné termíny',
+    '{{MAX_HASHTAGS}}': String(ctx.constraints.max_hashtags || 5),
+    '{{MAX_LENGTH}}': String(styleRules?.max_length || 2200),
+    '{{MAX_BULLETS}}': String(styleRules?.max_bullets || 3),
+    '{{CONTENT_MIX_EDUCATIONAL}}': String(Math.round((mix.educational || 0) * 100)),
+    '{{CONTENT_MIX_SOFT}}': String(Math.round((mix.soft_sell || 0) * 100)),
+    '{{CONTENT_MIX_HARD}}': String(Math.round((mix.hard_sell || 0) * 100)),
+  };
+
+  let result = template;
+  for (const [key, value] of Object.entries(vars)) {
+    result = result.replaceAll(key, value);
+  }
+
+  // Conditional blocks: {{#FLAG}}content{{/FLAG}}
+  const startQ = styleRules?.start_with_question;
+  const noHash = styleRules?.no_hashtags_in_text;
+
+  result = result.replace(/\{\{#START_WITH_QUESTION\}\}([\s\S]*?)\{\{\/START_WITH_QUESTION\}\}/g,
+    startQ ? '$1' : '');
+  result = result.replace(/\{\{#NO_HASHTAGS_IN_TEXT\}\}([\s\S]*?)\{\{\/NO_HASHTAGS_IN_TEXT\}\}/g,
+    noHash ? '$1' : '');
+
+  return result;
+}
+
+// ============================================
+// Build complete content prompt
+// ============================================
+
 export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
   const parts: string[] = [];
 
-  // 1. System Role
-  const systemRole = await getPromptTemplate('system_role');
-  parts.push(systemRole || 'Jsi Hugo – AI content orchestrátor. Tvým úkolem je vytvářet autentický obsah pro sociální sítě.');
+  // 1. Load per-project prompts (the detailed instructions)
+  const projectPrompts = await getProjectPrompts(ctx.projectId);
 
-  // 2. Project Context
-  parts.push(`\n---\nPROJEKT: ${ctx.projectName}`);
-  parts.push(`PLATFORMA: ${ctx.platform}`);
-  parts.push(`TYP OBSAHU: ${ctx.contentType}`);
+  if (projectPrompts.length > 0) {
+    // ---- PROJECT HAS CUSTOM PROMPTS ----
+    // Use per-project prompts as the primary instruction set
 
-  // 3. Tone of Voice (Mood Settings)
-  parts.push(`\nTÓN KOMUNIKACE:`);
-  parts.push(`- Tón: ${ctx.moodSettings.tone}`);
-  parts.push(`- Energie: ${ctx.moodSettings.energy}`);
-  parts.push(`- Styl: ${ctx.moodSettings.style}`);
+    // Group by category for ordered assembly
+    const byCategory = new Map<string, string[]>();
+    for (const pp of projectPrompts) {
+      const content = substituteVariables(pp.content, ctx);
+      if (!byCategory.has(pp.category)) byCategory.set(pp.category, []);
+      byCategory.get(pp.category)!.push(content);
+    }
 
-  // 4. Style Sheet
-  parts.push(`\nPRAVIDLA FORMÁTU:`);
-  for (const [key, value] of Object.entries(ctx.styleRules)) {
-    parts.push(`- ${key}: ${value}`);
+    // Assembly order (most important first)
+    const categoryOrder = [
+      'identity', 'communication', 'guardrail', 'business_rules',
+      'content_strategy', 'topic_boundaries', 'cta_rules',
+      'quality_criteria', 'personalization', 'examples',
+      'seasonal', 'competitor', 'legal',
+    ];
+
+    // Add project prompts in order
+    for (const cat of categoryOrder) {
+      const entries = byCategory.get(cat);
+      if (entries) {
+        for (const entry of entries) {
+          parts.push(entry);
+        }
+      }
+    }
+
+    // Platform-specific rules (only for current platform)
+    const platformPrompts = byCategory.get('platform_rules') || [];
+    for (const pp of projectPrompts.filter(p => p.category === 'platform_rules')) {
+      if (pp.slug.includes(ctx.platform) || pp.slug === 'platform_rules') {
+        parts.push(substituteVariables(pp.content, ctx));
+      }
+    }
+    // If no platform-specific prompt matched, include all platform_rules
+    if (platformPrompts.length === 0) {
+      // no-op, already handled
+    }
+
+  } else {
+    // ---- NO CUSTOM PROMPTS – FALLBACK TO GLOBAL ----
+    const systemRole = await getPromptTemplate('system_role');
+    parts.push(systemRole || 'Jsi Hugo – AI content orchestrátor. Tvým úkolem je vytvářet autentický obsah pro sociální sítě.');
+
+    parts.push(`\n---\nPROJEKT: ${ctx.projectName}`);
+    parts.push(`PLATFORMA: ${ctx.platform}`);
+    parts.push(`TYP OBSAHU: ${ctx.contentType}`);
+
+    parts.push(`\nTÓN KOMUNIKACE:`);
+    parts.push(`- Tón: ${ctx.moodSettings.tone}`);
+    parts.push(`- Energie: ${ctx.moodSettings.energy}`);
+    parts.push(`- Styl: ${ctx.moodSettings.style}`);
+
+    parts.push(`\nPRAVIDLA FORMÁTU:`);
+    for (const [key, value] of Object.entries(ctx.styleRules)) {
+      parts.push(`- ${key}: ${value}`);
+    }
+
+    if (ctx.constraints.forbidden_topics.length > 0) {
+      parts.push(`\nZAKÁZANÁ TÉMATA: ${ctx.constraints.forbidden_topics.join(', ')}`);
+    }
+    if (ctx.constraints.mandatory_terms.length > 0) {
+      parts.push(`POVINNÉ TERMÍNY: ${ctx.constraints.mandatory_terms.join(', ')}`);
+    }
+    if (ctx.semanticAnchors.length > 0) {
+      parts.push(`\nKLÍČOVÁ SLOVA: ${ctx.semanticAnchors.join(', ')}`);
+    }
   }
 
-  // 5. Constraints (Safe/Ban List)
-  if (ctx.constraints.forbidden_topics.length > 0) {
-    parts.push(`\nZAKÁZANÁ TÉMATA (NIKDY o nich nepiš): ${ctx.constraints.forbidden_topics.join(', ')}`);
-  }
-  if (ctx.constraints.mandatory_terms.length > 0) {
-    parts.push(`POVINNÉ TERMÍNY (použij alespoň jeden): ${ctx.constraints.mandatory_terms.join(', ')}`);
-  }
+  // ---- ALWAYS APPENDED (regardless of custom prompts) ----
 
-  // 6. Semantic Anchors
-  if (ctx.semanticAnchors.length > 0) {
-    parts.push(`\nKLÍČOVÁ SLOVA PROJEKTU: ${ctx.semanticAnchors.join(', ')}`);
-  }
-
-  // 7. Knowledge Base
+  // Knowledge Base
   if (ctx.kbEntries.length > 0) {
-    parts.push('\n---\nZNALOSTNÍ BÁZE (používej POUZE tato fakta, nevymýšlej si):');
+    parts.push('\n---\nKNOWLEDGE BASE (používej POUZE tato fakta, NEVYMÝŠLEJ SI):');
     for (const entry of ctx.kbEntries) {
       parts.push(`[${entry.category}] ${entry.title}: ${entry.content}`);
     }
   }
 
-  // 8. Content Pattern
+  // Content Pattern
   if (ctx.patternTemplate) {
     parts.push(`\n---\nVZOR PŘÍSPĚVKU (dodržuj tuto strukturu):\n${ctx.patternTemplate}`);
   }
 
-  // 9. News Context (Contextual Pulse)
+  // Task context
+  parts.push(`\n---\nÚKOL: Vytvoř příspěvek pro ${ctx.platform}.`);
+  parts.push(`Typ: ${ctx.contentType}`);
+
+  // News Context
   if (ctx.newsContext) {
-    parts.push(`\n---\nAKTUÁLNÍ KONTEXT (použij pokud je relevantní):\n${ctx.newsContext}`);
+    parts.push(`\n---\nAKTUÁLNÍ KONTEXT:\n${ctx.newsContext}`);
   }
 
-  // 10. Dedup - recent posts
+  // Dedup
   if (ctx.recentPosts && ctx.recentPosts.length > 0) {
-    parts.push(`\n---\nNEDÁVNÉ POSTY (NEOPAKUJ podobný obsah):`);
+    parts.push(`\n---\nNEDÁVNÉ POSTY (NEOPAKUJ):`);
     ctx.recentPosts.forEach((post, i) => {
       parts.push(`${i + 1}. ${post.substring(0, 150)}...`);
     });
   }
 
-  // 11. Quality Self-Rating instruction
+  // Quality Self-Rating
   const qualityCheck = await getPromptTemplate('quality_check');
   if (qualityCheck) {
     parts.push(`\n---\n${qualityCheck}`);
   }
 
-  // 12. Output format
-  parts.push(`\n---\nVÝSTUP: Vrať JSON objekt s těmito poli:
+  // Output format
+  parts.push(`\n---\nVÝSTUP: Vrať POUZE JSON objekt (žádný další text):
 {
   "text": "Text příspěvku",
   "image_prompt": "Popis obrázku pro generování (volitelné)",

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
-import { publishPost, buildPlatformsArray } from '@/lib/getlate';
+import { publishPost, buildPlatformsArray, type LateMediaItem } from '@/lib/getlate';
 import { validatePostMultiPlatform } from '@/lib/platforms';
 import { NextResponse } from 'next/server';
 
@@ -59,9 +59,22 @@ export async function POST(request: Request) {
     }
 
     try {
+      // Build media items from visual assets
+      const mediaItems: LateMediaItem[] = [];
+      if (post.chart_url) {
+        mediaItems.push({ type: 'image', url: post.chart_url });
+      }
+      if (post.card_url && post.card_url.startsWith('http')) {
+        mediaItems.push({ type: 'image', url: post.card_url });
+      }
+      if (post.image_url) {
+        mediaItems.push({ type: 'image', url: post.image_url });
+      }
+
       const lateResult = await publishPost({
         content: post.text_content,
         platforms: platformEntries,
+        mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
         scheduledFor: scheduledFor || post.scheduled_for || undefined,
         timezone: 'Europe/Prague',
       });

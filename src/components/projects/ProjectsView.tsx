@@ -13,6 +13,7 @@ interface Project {
   slug: string;
   description: string | null;
   late_social_set_id: string | null;
+  late_profile_id: string | null;
   late_accounts: Record<string, string> | null;
   platforms: string[];
   mood_settings: { tone: string; energy: string; style: string };
@@ -295,6 +296,7 @@ function TabBasic({ project, onSave }: { project: Project; onSave: (f: Partial<P
 /* ---- Tab: Platforms & getLate ---- */
 function TabPlatforms({ project, onSave }: { project: Project; onSave: (f: Partial<Project>) => void }) {
   const [platforms, setPlatforms] = useState<string[]>(project.platforms);
+  const [profileId, setProfileId] = useState(project.late_profile_id || '');
   const [accounts, setAccounts] = useState<Record<string, string>>(project.late_accounts || {});
 
   const updateAccount = (platform: string, value: string) => {
@@ -373,7 +375,19 @@ function TabPlatforms({ project, onSave }: { project: Project; onSave: (f: Parti
         )}
       </div>
 
-      <SaveBtn onClick={() => onSave({ platforms, late_accounts: accounts } as Partial<Project>)} />
+      {/* getLate Profile ID */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1.5">getLate Profile ID</label>
+        <input
+          value={profileId}
+          onChange={(e) => setProfileId(e.target.value)}
+          placeholder="698f5a828970eb7fddc3c2e7"
+          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
+        />
+        <p className="text-xs text-slate-500 mt-1">Najdete v getLate → Connections → profile id. Každý projekt = 1 profil.</p>
+      </div>
+
+      <SaveBtn onClick={() => onSave({ platforms, late_profile_id: profileId || null, late_accounts: accounts } as Partial<Project>)} />
     </div>
   );
 }

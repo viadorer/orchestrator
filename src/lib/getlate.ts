@@ -23,13 +23,21 @@ const GETLATE_API_KEY = process.env.GETLATE_API_KEY;
 export interface LatePlatformEntry {
   platform: string;
   accountId: string;
+  platformSpecificData?: Record<string, unknown>;
+}
+
+export interface LateMediaItem {
+  type: 'image' | 'video' | 'document';
+  url: string;
 }
 
 export interface LatePostPayload {
   content: string;
   platforms: LatePlatformEntry[];
+  mediaItems?: LateMediaItem[];
   scheduledFor?: string; // ISO 8601
   timezone?: string;
+  publishNow?: boolean;
 }
 
 export interface LatePostResponse {
@@ -91,9 +99,16 @@ export async function publishPost(payload: LatePostPayload): Promise<LatePostRes
     platforms: payload.platforms,
   };
 
+  // Media items (image/video/document URLs)
+  if (payload.mediaItems && payload.mediaItems.length > 0) {
+    body.mediaItems = payload.mediaItems;
+  }
+
   if (payload.scheduledFor) {
     body.scheduledFor = payload.scheduledFor;
     body.timezone = payload.timezone || 'Europe/Prague';
+  } else if (payload.publishNow) {
+    body.publishNow = true;
   }
 
   const result = await lateRequest<{ post: LatePostResponse }>('/posts', {

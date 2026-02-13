@@ -82,6 +82,9 @@ export function AgentView() {
   const [creatingTask, setCreatingTask] = useState<string | null>(null);
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all');
+
+  const filteredTasks = taskFilter === 'all' ? tasks : tasks.filter(t => t.status === taskFilter);
 
   // Load projects
   useEffect(() => {
@@ -268,12 +271,30 @@ export function AgentView() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-medium text-white">Úkoly ({tasks.length})</h2>
-              <button
-                onClick={loadProjectData}
-                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1 text-xs">
+                  {(['all', 'pending', 'completed', 'failed'] as const).map(s => {
+                    const count = s === 'all' ? tasks.length : tasks.filter(t => t.status === s).length;
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => setTaskFilter(s)}
+                        className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                          taskFilter === s ? 'bg-violet-600/20 text-violet-300' : 'text-slate-500 hover:text-slate-300'
+                        }`}
+                      >
+                        {s === 'all' ? 'Vše' : s === 'pending' ? 'Čekající' : s === 'completed' ? 'Hotové' : 'Chyby'} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={loadProjectData}
+                  className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {tasks.length === 0 ? (
@@ -283,20 +304,33 @@ export function AgentView() {
               </div>
             ) : (
               <div className="space-y-2">
-                {tasks.slice(0, 20).map(task => (
+                {filteredTasks.slice(0, 30).map(task => (
                   <div
                     key={task.id}
-                    className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden"
+                    className={`bg-slate-900 border rounded-lg overflow-hidden ${
+                      task.status === 'completed' ? 'border-emerald-800/50' :
+                      task.status === 'failed' ? 'border-red-800/50' :
+                      task.status === 'running' ? 'border-violet-800/50' :
+                      'border-slate-800'
+                    }`}
                   >
-                    <div className="flex items-center gap-3 p-3">
+                    <button
+                      className="w-full flex items-center gap-3 p-3 text-left hover:bg-slate-800/30 transition-colors"
+                      onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)}
+                    >
                       {statusIcon(task.status)}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-white">
                             {TASK_TYPES.find(t => t.value === task.task_type)?.label || task.task_type}
                           </span>
+                          {task.status === 'completed' && (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-[10px] text-emerald-400 font-medium">
+                              Hotovo
+                            </span>
+                          )}
                           {task.is_recurring && (
-                            <span className="px-1.5 py-0.5 rounded bg-violet-600/20 text-xs text-violet-400">
+                            <span className="px-1.5 py-0.5 rounded bg-violet-600/20 text-[10px] text-violet-400">
                               {task.recurrence_rule}
                             </span>
                           )}
@@ -307,7 +341,7 @@ export function AgentView() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                         {task.status === 'pending' && (
                           <button
                             onClick={() => handleExecute(task.id)}
@@ -322,30 +356,24 @@ export function AgentView() {
                             Spustit
                           </button>
                         )}
-                        {task.result && (
-                          <button
-                            onClick={() => setExpandedTask(expandedTask === task.id ? null : task.id)}
-                            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 transition-colors"
-                          >
+                        {(task.result || task.error_message) && (
+                          <div className="p-1.5 text-slate-400">
                             {expandedTask === task.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
+                          </div>
                         )}
                       </div>
-                    </div>
+                    </button>
 
-                    {/* Expanded result */}
+                    {/* Expanded: readable result */}
                     {expandedTask === task.id && task.result && (
-                      <div className="border-t border-slate-800 p-3 bg-slate-800/50">
-                        <pre className="text-xs text-slate-300 whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
-                          {JSON.stringify(task.result, null, 2)}
-                        </pre>
-                      </div>
+                      <TaskResult task={task} />
                     )}
 
                     {/* Error */}
-                    {task.status === 'failed' && task.error_message && (
+                    {expandedTask === task.id && task.status === 'failed' && task.error_message && (
                       <div className="border-t border-red-500/20 p-3 bg-red-500/5">
-                        <p className="text-xs text-red-400">{task.error_message}</p>
+                        <p className="text-xs text-red-400 font-medium mb-1">Chyba:</p>
+                        <p className="text-xs text-red-300">{task.error_message}</p>
                       </div>
                     )}
                   </div>
@@ -361,15 +389,25 @@ export function AgentView() {
               <p className="text-xs text-slate-500">Zatím žádné záznamy.</p>
             ) : (
               <div className="space-y-1">
-                {logs.slice(0, 15).map(log => (
+                {logs.slice(0, 20).map(log => (
                   <div key={log.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900/50 text-xs">
                     <span className="text-slate-500 w-36 flex-shrink-0">
                       {new Date(log.created_at).toLocaleString('cs-CZ')}
                     </span>
-                    <span className="text-violet-400 font-mono">{log.action}</span>
-                    {log.tokens_used && (
-                      <span className="text-slate-600 ml-auto">{log.tokens_used} tokens</span>
+                    <span className={`font-mono ${
+                      log.action.includes('error') || log.action.includes('fail') ? 'text-red-400' :
+                      log.action.includes('editor') ? 'text-amber-400' :
+                      log.action.includes('media') ? 'text-emerald-400' :
+                      'text-violet-400'
+                    }`}>{log.action}</span>
+                    {log.details && typeof log.details === 'object' && 'result_summary' in log.details && (
+                      <span className="text-slate-600 truncate max-w-[200px]">
+                        {(log.details as Record<string, unknown>).result_summary as string}
+                      </span>
                     )}
+                    {log.tokens_used ? (
+                      <span className="text-slate-600 ml-auto whitespace-nowrap">{log.tokens_used.toLocaleString()} tok</span>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -377,6 +415,143 @@ export function AgentView() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---- Task Result: readable output per task type ---- */
+function TaskResult({ task }: { task: AgentTask }) {
+  if (!task.result) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const r = task.result as Record<string, any>;
+
+  return (
+    <div className="border-t border-slate-800 p-4 bg-slate-800/30 space-y-3">
+      {/* Generated post text */}
+      {r.text && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Vygenerovaný text</div>
+          <div className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed bg-slate-900 rounded-lg p-3 border border-slate-700">
+            {r.text as string}
+          </div>
+        </div>
+      )}
+
+      {/* Scores */}
+      {r.scores && typeof r.scores === 'object' && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">AI Skóre</div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(r.scores as Record<string, number>).map(([key, val]) => (
+              <div key={key} className={`px-2 py-1 rounded text-xs font-mono ${
+                val >= 8 ? 'bg-emerald-500/20 text-emerald-300' :
+                val >= 6 ? 'bg-amber-500/20 text-amber-300' :
+                'bg-red-500/20 text-red-300'
+              }`}>
+                {key}: {typeof val === 'number' ? val.toFixed(1) : val}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Editor review */}
+      {r.editor_review && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Hugo-Editor Review</div>
+          <div className="text-xs text-slate-300 bg-slate-900 rounded-lg p-3 border border-slate-700 whitespace-pre-wrap">
+            {typeof r.editor_review === 'string' ? r.editor_review : JSON.stringify(r.editor_review, null, 2)}
+          </div>
+        </div>
+      )}
+
+      {/* Topics list */}
+      {r.topics && Array.isArray(r.topics) && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Navržená témata</div>
+          <div className="space-y-1">
+            {(r.topics as Array<Record<string, unknown>>).map((topic, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs bg-slate-900 rounded-lg p-2 border border-slate-700">
+                <span className="text-violet-400 font-mono w-5 flex-shrink-0">{i + 1}.</span>
+                <span className="text-slate-200">{String(topic.title || topic.topic || JSON.stringify(topic))}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Items (generic array output) */}
+      {r.items && Array.isArray(r.items) && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Výsledky</div>
+          <div className="space-y-1">
+            {(r.items as Array<Record<string, unknown>>).map((item, i) => (
+              <div key={i} className="text-xs bg-slate-900 rounded-lg p-2 border border-slate-700 text-slate-200">
+                {typeof item === 'string' ? item : String(item.title || item.name || item.text || JSON.stringify(item))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Week plan */}
+      {r.plan && Array.isArray(r.plan) && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Plán na týden</div>
+          <div className="space-y-1">
+            {(r.plan as Array<Record<string, unknown>>).map((day, i) => (
+              <div key={i} className="flex items-start gap-2 text-xs bg-slate-900 rounded-lg p-2 border border-slate-700">
+                <span className="text-violet-400 font-medium w-8 flex-shrink-0">{String(day.day || `Den ${i + 1}`)}</span>
+                <span className="text-slate-200">{String(day.topic || day.title || day.content || JSON.stringify(day))}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Content mix analysis */}
+      {r.analysis && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Analýza</div>
+          <div className="text-xs text-slate-300 bg-slate-900 rounded-lg p-3 border border-slate-700 whitespace-pre-wrap">
+            {typeof r.analysis === 'string' ? r.analysis : JSON.stringify(r.analysis, null, 2)}
+          </div>
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {r.recommendations && Array.isArray(r.recommendations) && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Doporučení</div>
+          <div className="space-y-1">
+            {(r.recommendations as string[]).map((rec, i) => (
+              <div key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
+                <span className="text-violet-400 mt-0.5">•</span> {rec}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Raw response fallback */}
+      {r.raw_response && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Odpověď AI</div>
+          <div className="text-xs text-slate-300 bg-slate-900 rounded-lg p-3 border border-slate-700 whitespace-pre-wrap max-h-60 overflow-y-auto">
+            {r.raw_response as string}
+          </div>
+        </div>
+      )}
+
+      {/* Fallback: show JSON for any unhandled fields */}
+      {!r.text && !r.topics && !r.items && !r.plan && !r.analysis && !r.raw_response && !r.recommendations && (
+        <div>
+          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Výsledek</div>
+          <pre className="text-xs text-slate-300 bg-slate-900 rounded-lg p-3 border border-slate-700 whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
+            {JSON.stringify(r, null, 2)}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

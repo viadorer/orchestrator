@@ -32,6 +32,8 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
+  const [dragOver, setDragOver] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
   const [selected, setSelected] = useState<MediaAsset | null>(null);
   const [filter, setFilter] = useState<'all' | 'image' | 'video' | 'unprocessed'>('all');
@@ -50,33 +52,53 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
 
   useEffect(() => { loadAssets(); }, [loadAssets]);
 
-  const handleUploadUrls = async () => {
-    const input = prompt('Vložte URL obrázků (jeden na řádek):');
-    if (!input) return;
-
-    const urls = input.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
-    if (urls.length === 0) return;
+  // ---- Drag & Drop + File Input Upload ----
+  const uploadFiles = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
 
     setUploading(true);
-    let added = 0;
-    for (const url of urls) {
-      const fileName = url.split('/').pop() || 'image.jpg';
-      const res = await fetch('/api/media', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: projectId,
-          storage_path: `project-media/${projectId}/${fileName}`,
-          public_url: url,
-          file_name: fileName,
-          file_type: 'image',
-        }),
-      });
-      if (res.ok) added++;
+    setUploadProgress({ done: 0, total: fileArray.length });
+
+    // Upload in batches of 5 to avoid overwhelming the server
+    const batchSize = 5;
+    for (let i = 0; i < fileArray.length; i += batchSize) {
+      const batch = fileArray.slice(i, i + batchSize);
+      const formData = new FormData();
+      formData.append('project_id', projectId);
+      for (const file of batch) {
+        formData.append('files', file);
+      }
+
+      await fetch('/api/media/upload', { method: 'POST', body: formData });
+      setUploadProgress({ done: Math.min(i + batchSize, fileArray.length), total: fileArray.length });
     }
+
     setUploading(false);
-    if (added > 0) loadAssets();
-    alert(`Přidáno ${added} z ${urls.length} médií. Spusťte AI tagging pro analýzu.`);
+    setUploadProgress({ done: 0, total: 0 });
+    loadAssets();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length > 0) {
+      uploadFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => setDragOver(false);
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      uploadFiles(e.target.files);
+      e.target.value = '';
+    }
   };
 
   const processAsset = async (id: string) => {
@@ -118,6 +140,13 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
     return <Image className="w-3 h-3" />;
   };
 
+  const formatSize = (bytes: number | null) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -137,44 +166,83 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
               {processing === 'batch' ? 'Zpracovávám...' : `AI Tag (${stats.unprocessed})`}
             </button>
           )}
-          <button
-            onClick={handleUploadUrls}
-            disabled={uploading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-500 disabled:opacity-50"
-          >
+          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-500 cursor-pointer">
             <Upload className="w-3.5 h-3.5" />
-            {uploading ? 'Nahrávám...' : 'Přidat URL'}
-          </button>
+            Nahrát soubory
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*,.pdf"
+              onChange={handleFileInput}
+              className="hidden"
+            />
+          </label>
         </div>
       </div>
 
-      {/* Stats bar */}
-      <div className="flex gap-3 text-xs">
-        {(['all', 'image', 'video', 'unprocessed'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
-              filter === f ? 'bg-violet-600/20 text-violet-300' : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {f === 'all' && `Vše (${stats.total})`}
-            {f === 'image' && `Fotky (${stats.images})`}
-            {f === 'video' && `Videa (${stats.videos})`}
-            {f === 'unprocessed' && `Neotagované (${stats.unprocessed})`}
-          </button>
-        ))}
+      {/* Drag & Drop zone */}
+      <div
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        className={`relative rounded-xl border-2 border-dashed transition-all ${
+          dragOver
+            ? 'border-violet-500 bg-violet-500/10'
+            : uploading
+              ? 'border-emerald-500/50 bg-emerald-500/5'
+              : 'border-slate-700 hover:border-slate-600'
+        } ${assets.length === 0 && !uploading ? 'py-16' : 'py-4'}`}
+      >
+        {uploading ? (
+          <div className="text-center px-4">
+            <div className="w-48 h-1.5 bg-slate-800 rounded-full mx-auto mb-2 overflow-hidden">
+              <div
+                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                style={{ width: `${uploadProgress.total > 0 ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }}
+              />
+            </div>
+            <p className="text-xs text-emerald-400">
+              Nahrávám {uploadProgress.done}/{uploadProgress.total} souborů...
+            </p>
+          </div>
+        ) : dragOver ? (
+          <div className="text-center">
+            <Upload className="w-8 h-8 text-violet-400 mx-auto mb-2" />
+            <p className="text-sm text-violet-300 font-medium">Pusťte soubory sem</p>
+          </div>
+        ) : assets.length === 0 ? (
+          <div className="text-center">
+            <Image className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+            <p className="text-slate-400 text-sm font-medium">Přetáhněte fotky a videa sem</p>
+            <p className="text-slate-600 text-xs mt-1">nebo klikněte na "Nahrát soubory" · JPG, PNG, MP4, PDF</p>
+          </div>
+        ) : null}
       </div>
+
+      {/* Stats bar */}
+      {assets.length > 0 && (
+        <div className="flex gap-3 text-xs">
+          {(['all', 'image', 'video', 'unprocessed'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                filter === f ? 'bg-violet-600/20 text-violet-300' : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {f === 'all' && `Vše (${stats.total})`}
+              {f === 'image' && `Fotky (${stats.images})`}
+              {f === 'video' && `Videa (${stats.videos})`}
+              {f === 'unprocessed' && `Neotagované (${stats.unprocessed})`}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Grid */}
       {loading ? (
         <div className="text-center py-12 text-slate-500 text-sm">Načítám...</div>
-      ) : assets.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-slate-700 rounded-xl">
-          <Image className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-          <p className="text-slate-500 text-sm">Žádná média. Přidejte URL obrázků.</p>
-        </div>
-      ) : (
+      ) : assets.length > 0 && (
         <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
           {assets.map(asset => (
             <button

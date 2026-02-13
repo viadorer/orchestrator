@@ -13,6 +13,7 @@ interface Project {
   slug: string;
   description: string | null;
   late_social_set_id: string | null;
+  late_accounts: Record<string, string> | null;
   platforms: string[];
   mood_settings: { tone: string; energy: string; style: string };
   content_mix: Record<string, number>;
@@ -39,6 +40,10 @@ const PLATFORMS = ['linkedin', 'instagram', 'facebook', 'x', 'tiktok'] as const;
 const PLATFORM_COLORS: Record<string, string> = {
   linkedin: 'bg-blue-600', instagram: 'bg-pink-600', facebook: 'bg-blue-500',
   x: 'bg-slate-600', tiktok: 'bg-rose-600',
+};
+const PLATFORM_LABELS: Record<string, string> = {
+  linkedin: 'LinkedIn', instagram: 'Instagram', facebook: 'Facebook',
+  x: 'X (Twitter)', tiktok: 'TikTok',
 };
 const TONES = ['professional', 'casual', 'friendly', 'authoritative', 'playful', 'empathetic'] as const;
 const ENERGIES = ['low', 'medium', 'high'] as const;
@@ -290,10 +295,25 @@ function TabBasic({ project, onSave }: { project: Project; onSave: (f: Partial<P
 /* ---- Tab: Platforms & getLate ---- */
 function TabPlatforms({ project, onSave }: { project: Project; onSave: (f: Partial<Project>) => void }) {
   const [platforms, setPlatforms] = useState<string[]>(project.platforms);
-  const [lateId, setLateId] = useState(project.late_social_set_id || '');
+  const [accounts, setAccounts] = useState<Record<string, string>>(project.late_accounts || {});
+
+  const updateAccount = (platform: string, value: string) => {
+    setAccounts(prev => {
+      const next = { ...prev };
+      if (value) {
+        next[platform] = value;
+      } else {
+        delete next[platform];
+      }
+      return next;
+    });
+  };
+
+  const connectedCount = Object.values(accounts).filter(Boolean).length;
 
   return (
     <div className="space-y-6 max-w-lg">
+      {/* Platform selection */}
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-3">Sociální sítě</label>
         <div className="grid grid-cols-5 gap-2">
@@ -316,18 +336,44 @@ function TabPlatforms({ project, onSave }: { project: Project; onSave: (f: Parti
         </div>
       </div>
 
+      {/* Per-platform getLate Account IDs */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">getLate.dev Social Set ID</label>
-        <input
-          value={lateId}
-          onChange={(e) => setLateId(e.target.value)}
-          placeholder="Najdete v getLate.dev → Settings → Social Sets"
-          className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-        />
-        <p className="text-xs text-slate-500 mt-1.5">Propojí tento projekt s getLate.dev pro automatické publikování.</p>
+        <div className="flex items-center justify-between mb-3">
+          <label className="block text-sm font-medium text-slate-300">getLate.dev Account IDs</label>
+          <span className="text-xs text-slate-500">{connectedCount}/{platforms.length} propojeno</span>
+        </div>
+        <p className="text-xs text-slate-500 mb-4">
+          Každá síť má v getLate.dev vlastní Account ID. Najdete ho v getLate → Accounts, nebo přes API: GET /api/getlate/accounts
+        </p>
+        <div className="space-y-3">
+          {platforms.map((p) => (
+            <div key={p} className="flex items-center gap-3">
+              <div className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 ${
+                accounts[p] ? PLATFORM_COLORS[p] : 'bg-slate-800'
+              }`}>
+                <Share2 className="w-4 h-4 text-white" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-slate-400 mb-1">{PLATFORM_LABELS[p] || p}</label>
+                <input
+                  value={accounts[p] || ''}
+                  onChange={(e) => updateAccount(p, e.target.value)}
+                  placeholder={`Account ID pro ${PLATFORM_LABELS[p] || p}`}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+              {accounts[p] && (
+                <div className="flex-shrink-0 w-2 h-2 rounded-full bg-emerald-500 mt-5" title="Propojeno" />
+              )}
+            </div>
+          ))}
+        </div>
+        {platforms.length === 0 && (
+          <p className="text-sm text-slate-500 text-center py-4">Nejdřív vyberte platformy nahoře.</p>
+        )}
       </div>
 
-      <SaveBtn onClick={() => onSave({ platforms, late_social_set_id: lateId || null } as Partial<Project>)} />
+      <SaveBtn onClick={() => onSave({ platforms, late_accounts: accounts } as Partial<Project>)} />
     </div>
   );
 }

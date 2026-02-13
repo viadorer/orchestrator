@@ -11,6 +11,7 @@ import { ReviewView } from '@/components/review/ReviewView';
 import { PublishView } from '@/components/publish/PublishView';
 import { CalendarView } from '@/components/calendar/CalendarView';
 import { SettingsView } from '@/components/settings/SettingsView';
+import { AgentView } from '@/components/agent/AgentView';
 import { Loader2 } from 'lucide-react';
 
 export default function Home() {
@@ -37,6 +38,7 @@ export default function Home() {
       <main className="flex-1 overflow-y-auto">
         {view === 'dashboard' && <DashboardView />}
         {view === 'projects' && <ProjectsView />}
+        {view === 'agent' && <AgentView />}
         {view === 'generate' && <GenerateView />}
         {view === 'review' && <ReviewView />}
         {view === 'publish' && <PublishView />}

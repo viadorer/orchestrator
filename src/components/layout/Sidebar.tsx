@@ -12,10 +12,11 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Bot,
 } from 'lucide-react';
 import { useState } from 'react';
 
-export type AdminView = 'dashboard' | 'projects' | 'generate' | 'review' | 'publish' | 'calendar' | 'settings';
+export type AdminView = 'dashboard' | 'projects' | 'agent' | 'generate' | 'review' | 'publish' | 'calendar' | 'settings';
 
 interface SidebarProps {
   currentView: AdminView;
@@ -25,6 +26,7 @@ interface SidebarProps {
 const NAV_ITEMS: Array<{ view: AdminView; label: string; icon: React.ElementType }> = [
   { view: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { view: 'projects', label: 'Projekty', icon: FolderKanban },
+  { view: 'agent', label: 'Agent Hugo', icon: Bot },
   { view: 'generate', label: 'Generovat', icon: Sparkles },
   { view: 'review', label: 'Review', icon: ClipboardCheck },
   { view: 'publish', label: 'Publikovat', icon: Send },

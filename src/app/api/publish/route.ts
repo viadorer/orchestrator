@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { publishPost, buildPlatformsArray } from '@/lib/getlate';
+import { validatePostMultiPlatform } from '@/lib/platforms';
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
@@ -38,6 +39,21 @@ export async function POST(request: Request) {
         id: post.id,
         status: 'failed',
         error: `No getLate account IDs configured for platforms: ${(post.platforms || []).join(', ')}. Set late_accounts in project settings.`,
+      });
+      continue;
+    }
+
+    // Validate content against platform limits before sending
+    const validations = validatePostMultiPlatform(post.text_content || '', post.platforms || []);
+    const failedPlatforms = Object.entries(validations)
+      .filter(([, v]) => !v.valid)
+      .map(([p, v]) => `${p}: ${v.errors.join('; ')}`);
+
+    if (failedPlatforms.length > 0) {
+      results.push({
+        id: post.id,
+        status: 'failed',
+        error: `Validace selhala: ${failedPlatforms.join(' | ')}`,
       });
       continue;
     }

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, BarChart3, Image } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter } from 'lucide-react';
+import { PostPreview } from './PostPreview';
 
 interface QueueItem {
   id: string;
@@ -227,33 +228,17 @@ export function ReviewView() {
                   </button>
                 )}
 
-                {/* Visual preview */}
-                {item.visual_type && item.visual_type !== 'none' && (
-                  <div className="mt-3">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      {item.visual_type === 'chart' ? (
-                        <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
-                      ) : (
-                        <Image className="w-3.5 h-3.5 text-violet-400" />
-                      )}
-                      <span className="text-xs text-slate-500 uppercase">{item.visual_type}</span>
-                    </div>
-                    {item.chart_url && (
-                      <img
-                        src={item.chart_url}
-                        alt="Chart preview"
-                        className="rounded-lg border border-slate-700 max-w-[400px] w-full"
-                        loading="lazy"
-                      />
-                    )}
-                    {item.card_url && (
-                      <img
-                        src={item.card_url}
-                        alt="Card preview"
-                        className="rounded-lg border border-slate-700 max-w-[400px] w-full"
-                        loading="lazy"
-                      />
-                    )}
+                {/* Platform preview mockup (expanded) */}
+                {expanded === item.id && (
+                  <div className="mt-4">
+                    <PostPreview
+                      text={item.text_content}
+                      platforms={item.platforms}
+                      projectName={item.projects?.name}
+                      imageUrl={null}
+                      chartUrl={item.chart_url}
+                      cardUrl={item.card_url}
+                    />
                   </div>
                 )}
 

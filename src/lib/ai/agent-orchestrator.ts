@@ -20,6 +20,7 @@ import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, getPromptTemplate, getProjectPrompts, type PromptContext } from './prompt-builder';
 import { generateVisualAssets } from '@/lib/visual/visual-agent';
+import { findMatchingMedia, markMediaUsed } from '@/lib/ai/vision-engine';
 
 // ============================================
 // Constants
@@ -499,6 +500,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
     if (task.task_type === 'generate_content' && result.text) {
       const scores = result.scores as Record<string, number> | undefined;
       const platform = (task.params?.platform as string) || (ctx.project.platforms as string[])?.[0] || 'linkedin';
+      const mediaStrategy = (task.params?.media_strategy as string) || 'auto';
 
       // Generate visual assets (chart/card/photo)
       let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null } = {
@@ -517,21 +519,75 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         // Visual generation failed, continue without
       }
 
+      // ---- Media Library matching (pgvector) ----
+      let matchedImageUrl: string | null = null;
+      let matchedMediaId: string | null = null;
+      if (mediaStrategy === 'auto') {
+        try {
+          const matches = await findMatchingMedia(task.project_id, result.text as string, {
+            limit: 5,
+            fileType: 'image',
+            excludeRecentlyUsed: true,
+          });
+          if (matches.length > 0) {
+            // Best match = highest similarity + least used
+            const best = matches[0];
+            matchedImageUrl = best.public_url;
+            matchedMediaId = best.id;
+            await markMediaUsed(best.id);
+          }
+        } catch {
+          // Media matching failed, continue without
+        }
+      }
+
+      // Determine final image: matched photo > chart > card
+      const finalImageUrl = matchedImageUrl || null;
+
+      // Determine post status: auto-publish or review
+      const autoPublish = task.params?.auto_publish === true;
+      const autoThreshold = (task.params?.auto_publish_threshold as number) || 8.5;
+      const overallScore = scores?.overall || 0;
+      let postStatus: string;
+      if (overallScore < MIN_QUALITY_SCORE) {
+        postStatus = 'rejected';
+      } else if (autoPublish && overallScore >= autoThreshold) {
+        postStatus = 'approved'; // Will be picked up by publish cron
+      } else {
+        postStatus = 'review';
+      }
+
       await supabase.from('content_queue').insert({
         project_id: task.project_id,
         text_content: result.text as string,
         image_prompt: visualData.image_prompt || (result.image_prompt as string) || null,
+        image_url: finalImageUrl,
         alt_text: (result.alt_text as string) || null,
         content_type: (task.params?.contentType as string) || 'educational',
         platforms: [platform],
         ai_scores: scores || {},
-        status: (scores?.overall || 0) >= MIN_QUALITY_SCORE ? 'review' : 'rejected',
+        status: postStatus,
         source: task.params?.human_topic ? 'human_priority' : 'ai_generated',
         editor_review: result.editor_review || null,
-        visual_type: visualData.visual_type,
+        visual_type: matchedImageUrl ? 'matched_photo' : visualData.visual_type,
         chart_url: visualData.chart_url,
         card_url: visualData.card_url,
+        matched_media_id: matchedMediaId,
       });
+
+      // Log media match result
+      if (matchedImageUrl) {
+        await supabase.from('agent_log').insert({
+          project_id: task.project_id,
+          task_id: taskId,
+          action: 'media_matched',
+          details: {
+            media_id: matchedMediaId,
+            image_url: matchedImageUrl,
+            post_text_preview: (result.text as string).substring(0, 100),
+          },
+        });
+      }
     }
 
     // ---- Log ----

@@ -92,7 +92,9 @@ CREATE TRIGGER media_assets_updated_at
   BEFORE UPDATE ON media_assets
   FOR EACH ROW EXECUTE FUNCTION update_media_updated_at();
 
--- 5. RPC: Sémantické vyhledávání fotek pro post
+-- 5. content_queue media columns → moved to 009_content_queue_media.sql
+
+-- 6. RPC: Sémantické vyhledávání fotek pro post
 CREATE OR REPLACE FUNCTION match_media_assets(
   query_embedding vector(768),
   match_project_id UUID,

@@ -22,20 +22,22 @@ export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, 
   if (!limits) return null;
 
   const mediaUrl = imageUrl || chartUrl || cardUrl;
+  const handle = projectName?.toLowerCase().replace(/\s+/g, '') || 'projekt';
+  const initial = (projectName || 'P')[0];
 
   return (
     <div className="space-y-4">
       {/* Platform tabs */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <Eye className="w-4 h-4 text-slate-500" />
-        <span className="text-xs text-slate-500 mr-2">Náhled:</span>
+        <span className="text-xs text-slate-500 mr-1">Náhled:</span>
         {platforms.map(p => {
           const v = validatePost(text, p);
           return (
             <button
               key={p}
               onClick={() => setActivePlatform(p)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                 activePlatform === p
                   ? 'bg-violet-600 text-white'
                   : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -53,26 +55,20 @@ export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, 
       </div>
 
       {/* Preview mockup */}
-      <div className="rounded-xl overflow-hidden border border-slate-700">
-        {activePlatform === 'facebook' && (
-          <FacebookPreview text={text} validation={validation} projectName={projectName} mediaUrl={mediaUrl} />
-        )}
-        {activePlatform === 'linkedin' && (
-          <LinkedInPreview text={text} validation={validation} projectName={projectName} mediaUrl={mediaUrl} />
-        )}
-        {activePlatform === 'instagram' && (
-          <InstagramPreview text={text} validation={validation} projectName={projectName} mediaUrl={mediaUrl} />
-        )}
-        {activePlatform === 'x' && (
-          <XPreview text={text} validation={validation} projectName={projectName} mediaUrl={mediaUrl} />
-        )}
-        {activePlatform === 'tiktok' && (
-          <TikTokPreview text={text} validation={validation} projectName={projectName} />
-        )}
+      <div className="rounded-xl overflow-hidden border border-slate-700 max-w-md">
+        <PlatformMockup
+          platform={activePlatform}
+          text={text}
+          validation={validation}
+          projectName={projectName || 'Projekt'}
+          handle={handle}
+          initial={initial}
+          mediaUrl={mediaUrl}
+        />
       </div>
 
       {/* Validation results */}
-      <ValidationBadges validation={validation} platformName={limits.name} />
+      <ValidationBadges validation={validation} platform={activePlatform} />
     </div>
   );
 }
@@ -81,27 +77,26 @@ export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, 
 // Validation Badges
 // ============================================
 
-function ValidationBadges({ validation, platformName }: { validation: ValidationResult; platformName: string }) {
+function ValidationBadges({ validation, platform }: { validation: ValidationResult; platform: string }) {
   const { stats, errors, warnings } = validation;
+  const limits = PLATFORM_LIMITS[platform];
 
   return (
     <div className="space-y-2">
-      {/* Stats bar */}
-      <div className="flex items-center gap-4 text-xs">
+      <div className="flex items-center gap-4 text-xs flex-wrap">
         <span className={`font-medium ${stats.isOverLimit ? 'text-red-400' : 'text-slate-400'}`}>
-          {stats.charCount} znaků
+          {stats.charCount}/{limits?.maxChars || '?'}
         </span>
         <span className="text-slate-600">|</span>
         <span className="text-slate-400">{stats.hashtagCount} hashtagů</span>
         <span className="text-slate-600">|</span>
         {stats.isTruncated ? (
-          <span className="text-amber-400">Ořízne se po {PLATFORM_LIMITS[Object.keys(PLATFORM_LIMITS).find(k => PLATFORM_LIMITS[k].name === platformName) || '']?.visibleChars || '?'} znacích</span>
+          <span className="text-amber-400">Ořízne se po {limits?.visibleChars} zn.</span>
         ) : (
           <span className="text-emerald-400">Celý text viditelný</span>
         )}
       </div>
 
-      {/* Errors */}
       {errors.map((err, i) => (
         <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
           <XCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
@@ -109,7 +104,6 @@ function ValidationBadges({ validation, platformName }: { validation: Validation
         </div>
       ))}
 
-      {/* Warnings */}
       {warnings.map((warn, i) => (
         <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
           <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
@@ -121,10 +115,12 @@ function ValidationBadges({ validation, platformName }: { validation: Validation
 }
 
 // ============================================
-// Platform Mockups
+// Truncated Text
 // ============================================
 
-function TruncatedText({ text, visibleChars, truncationText }: { text: string; visibleChars: number; truncationText: string }) {
+function TruncatedText({ text, visibleChars, truncationText, linkColor }: {
+  text: string; visibleChars: number; truncationText: string; linkColor?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const isTruncated = text.length > visibleChars;
 
@@ -133,9 +129,7 @@ function TruncatedText({ text, visibleChars, truncationText }: { text: string; v
       <span style={{ whiteSpace: 'pre-wrap' }}>
         {text}
         {isTruncated && (
-          <button onClick={() => setExpanded(false)} className="text-slate-400 ml-1 text-xs">
-            méně
-          </button>
+          <button onClick={() => setExpanded(false)} className="opacity-50 ml-1 text-xs">méně</button>
         )}
       </span>
     );
@@ -144,232 +138,422 @@ function TruncatedText({ text, visibleChars, truncationText }: { text: string; v
   return (
     <span style={{ whiteSpace: 'pre-wrap' }}>
       {text.substring(0, visibleChars)}
-      <button onClick={() => setExpanded(true)} className="text-blue-500 hover:underline">
+      <button onClick={() => setExpanded(true)} className="hover:underline" style={{ color: linkColor || '#3b82f6' }}>
         {truncationText}
       </button>
     </span>
   );
 }
 
-// ---- Facebook ----
-function FacebookPreview({ text, validation, projectName, mediaUrl }: { text: string; validation: ValidationResult; projectName?: string; mediaUrl?: string | null }) {
+// ============================================
+// Platform Mockup Router
+// ============================================
+
+interface MockupProps {
+  platform: string;
+  text: string;
+  validation: ValidationResult;
+  projectName: string;
+  handle: string;
+  initial: string;
+  mediaUrl?: string | null;
+}
+
+function PlatformMockup(props: MockupProps) {
+  switch (props.platform) {
+    case 'facebook': return <FacebookMockup {...props} />;
+    case 'instagram': return <InstagramMockup {...props} />;
+    case 'linkedin': return <LinkedInMockup {...props} />;
+    case 'x': return <XMockup {...props} />;
+    case 'tiktok': return <TikTokMockup {...props} />;
+    case 'youtube': return <YouTubeMockup {...props} />;
+    case 'threads': return <ThreadsMockup {...props} />;
+    case 'bluesky': return <BlueskyMockup {...props} />;
+    case 'pinterest': return <PinterestMockup {...props} />;
+    case 'reddit': return <RedditMockup {...props} />;
+    case 'google-business': return <GoogleBusinessMockup {...props} />;
+    case 'telegram': return <TelegramMockup {...props} />;
+    case 'snapchat': return <SnapchatMockup {...props} />;
+    default: return <GenericMockup {...props} />;
+  }
+}
+
+// ============================================
+// Shared Components
+// ============================================
+
+function Avatar({ initial, bg, size = 10 }: { initial: string; bg: string; size?: number }) {
   return (
-    <div style={{ backgroundColor: '#ffffff', fontFamily: PLATFORM_LIMITS.facebook.previewFont }}>
-      {/* Header */}
-      <div className="flex items-center gap-3 p-3 pb-2">
-        <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-sm">
-          {(projectName || 'P')[0]}
-        </div>
-        <div>
-          <div className="text-sm font-semibold text-gray-900">{projectName || 'Projekt'}</div>
-          <div className="text-xs text-gray-500">Právě · 🌐</div>
-        </div>
-      </div>
-
-      {/* Text */}
-      <div className="px-3 pb-3 text-sm text-gray-900 leading-relaxed">
-        <TruncatedText text={text} visibleChars={477} truncationText="... Zobrazit více" />
-      </div>
-
-      {/* Media */}
-      {mediaUrl && (
-        <div className="border-t border-gray-200">
-          <img src={mediaUrl} alt="" className="w-full" loading="lazy" />
-        </div>
-      )}
-
-      {/* Engagement bar */}
-      <div className="flex items-center justify-between px-3 py-2 border-t border-gray-200 text-xs text-gray-500">
-        <span>👍 To se mi líbí</span>
-        <span>💬 Komentář</span>
-        <span>↗️ Sdílet</span>
-      </div>
-
-      {/* Validation overlay */}
-      {!validation.valid && (
-        <div className="px-3 py-2 bg-red-50 border-t border-red-200 text-xs text-red-600">
-          ⚠️ Post nesplňuje limity pro Facebook
-        </div>
-      )}
+    <div className={`w-${size} h-${size} rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0`} style={{ backgroundColor: bg, width: size * 4, height: size * 4 }}>
+      {initial}
     </div>
   );
 }
 
-// ---- LinkedIn ----
-function LinkedInPreview({ text, validation, projectName, mediaUrl }: { text: string; validation: ValidationResult; projectName?: string; mediaUrl?: string | null }) {
+function MediaBlock({ url, aspect }: { url: string; aspect?: string }) {
+  return <img src={url} alt="" className={`w-full ${aspect || ''}`} loading="lazy" />;
+}
+
+function ErrorBar({ validation, name }: { validation: ValidationResult; name: string }) {
+  if (validation.valid) return null;
   return (
-    <div style={{ backgroundColor: '#ffffff', fontFamily: PLATFORM_LIMITS.linkedin.previewFont }}>
-      {/* Header */}
-      <div className="flex items-center gap-3 p-3 pb-2">
-        <div className="w-12 h-12 rounded-full bg-blue-700 flex items-center justify-center text-white font-bold text-sm">
-          {(projectName || 'P')[0]}
-        </div>
-        <div>
-          <div className="text-sm font-semibold text-gray-900">{projectName || 'Projekt'}</div>
-          <div className="text-xs text-gray-500">Správce stránky · Právě teď</div>
-          <div className="text-xs text-gray-400">🌐</div>
-        </div>
-      </div>
-
-      {/* Text */}
-      <div className="px-3 pb-3 text-sm text-gray-800 leading-relaxed">
-        <TruncatedText text={text} visibleChars={210} truncationText="...zobrazit více" />
-      </div>
-
-      {/* Media */}
-      {mediaUrl && (
-        <div className="border-t border-gray-200">
-          <img src={mediaUrl} alt="" className="w-full" loading="lazy" />
-        </div>
-      )}
-
-      {/* Engagement */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-200 text-xs text-gray-500 font-medium">
-        <span>👍 To se mi líbí</span>
-        <span>💬 Komentovat</span>
-        <span>🔄 Sdílet</span>
-        <span>📤 Odeslat</span>
-      </div>
-
-      {!validation.valid && (
-        <div className="px-3 py-2 bg-red-50 border-t border-red-200 text-xs text-red-600">
-          ⚠️ Post nesplňuje limity pro LinkedIn
-        </div>
-      )}
+    <div className="px-3 py-1.5 text-xs font-medium" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#fca5a5' }}>
+      Post nesplňuje limity pro {name}
     </div>
   );
 }
 
-// ---- Instagram ----
-function InstagramPreview({ text, validation, projectName, mediaUrl }: { text: string; validation: ValidationResult; projectName?: string; mediaUrl?: string | null }) {
+// ============================================
+// Facebook
+// ============================================
+function FacebookMockup({ text, validation, projectName, initial, mediaUrl }: MockupProps) {
   return (
-    <div style={{ backgroundColor: '#000000', fontFamily: PLATFORM_LIMITS.instagram.previewFont }}>
-      {/* Header */}
-      <div className="flex items-center gap-3 p-3">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center text-white font-bold text-xs ring-2 ring-pink-500 ring-offset-2 ring-offset-black">
-          {(projectName || 'P')[0]}
-        </div>
-        <span className="text-sm font-semibold text-white">{projectName?.toLowerCase().replace(/\s+/g, '') || 'projekt'}</span>
+    <div style={{ backgroundColor: '#fff', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#1c1e21' }}>
+      <div className="flex items-center gap-2.5 px-3 pt-3 pb-1.5">
+        <Avatar initial={initial} bg="#1877F2" />
+        <div><div className="text-[13px] font-semibold">{projectName}</div><div className="text-[11px]" style={{ color: '#65676b' }}>Právě teď · 🌐</div></div>
       </div>
-
-      {/* Image area */}
-      {mediaUrl ? (
-        <img src={mediaUrl} alt="" className="w-full aspect-square object-cover" loading="lazy" />
-      ) : (
-        <div className="w-full aspect-square bg-gray-900 flex items-center justify-center">
-          <span className="text-gray-600 text-sm">Obrázek povinný pro Instagram</span>
-        </div>
-      )}
-
-      {/* Engagement icons */}
-      <div className="flex items-center gap-4 px-3 py-2.5 text-white">
-        <span>♡</span>
-        <span>💬</span>
-        <span>📤</span>
-        <span className="ml-auto">🔖</span>
+      <div className="px-3 pb-2 text-[14px] leading-[1.35]">
+        <TruncatedText text={text} visibleChars={477} truncationText="... Zobrazit více" linkColor="#385898" />
       </div>
-
-      {/* Caption */}
-      <div className="px-3 pb-3 text-sm text-white leading-relaxed">
-        <span className="font-semibold mr-1.5">{projectName?.toLowerCase().replace(/\s+/g, '') || 'projekt'}</span>
-        <TruncatedText text={text} visibleChars={125} truncationText="...více" />
+      {mediaUrl && <div style={{ borderTop: '1px solid #e4e6eb' }}><MediaBlock url={mediaUrl} /></div>}
+      <div className="flex justify-around py-1.5 text-[12px] font-medium" style={{ borderTop: '1px solid #e4e6eb', color: '#65676b' }}>
+        <span>👍 To se mi líbí</span><span>💬 Komentář</span><span>↗ Sdílet</span>
       </div>
-
-      {!validation.valid && (
-        <div className="px-3 py-2 bg-red-900/50 border-t border-red-800 text-xs text-red-300">
-          ⚠️ Post nesplňuje limity pro Instagram
-        </div>
-      )}
+      <ErrorBar validation={validation} name="Facebook" />
     </div>
   );
 }
 
-// ---- X (Twitter) ----
-function XPreview({ text, validation, projectName, mediaUrl }: { text: string; validation: ValidationResult; projectName?: string; mediaUrl?: string | null }) {
-  const charCount = text.length;
-  const isOverLimit = charCount > 280;
-
+// ============================================
+// Instagram
+// ============================================
+function InstagramMockup({ text, validation, projectName, handle, initial, mediaUrl }: MockupProps) {
   return (
-    <div style={{ backgroundColor: '#000000', fontFamily: PLATFORM_LIMITS.x.previewFont }}>
-      <div className="flex gap-3 p-3">
-        {/* Avatar */}
-        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-          {(projectName || 'P')[0]}
+    <div style={{ backgroundColor: '#000', fontFamily: '-apple-system, sans-serif', color: '#fff' }}>
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style={{ background: 'linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)' }}>{initial}</div>
+        <span className="text-[13px] font-semibold">{handle}</span>
+      </div>
+      {mediaUrl ? <MediaBlock url={mediaUrl} aspect="aspect-square object-cover" /> : (
+        <div className="w-full aspect-square flex items-center justify-center" style={{ backgroundColor: '#1a1a1a' }}>
+          <span className="text-[13px]" style={{ color: '#555' }}>Obrázek povinný pro Instagram</span>
         </div>
+      )}
+      <div className="flex items-center gap-4 px-3 py-2 text-[20px]">
+        <span>♡</span><span>💬</span><span>📤</span><span className="ml-auto">🔖</span>
+      </div>
+      <div className="px-3 pb-3 text-[13px] leading-[1.4]">
+        <span className="font-semibold mr-1">{handle}</span>
+        <TruncatedText text={text} visibleChars={125} truncationText="...více" linkColor="#a8a8a8" />
+      </div>
+      <ErrorBar validation={validation} name="Instagram" />
+    </div>
+  );
+}
 
+// ============================================
+// LinkedIn
+// ============================================
+function LinkedInMockup({ text, validation, projectName, initial, mediaUrl }: MockupProps) {
+  return (
+    <div style={{ backgroundColor: '#fff', fontFamily: '-apple-system, system-ui, sans-serif', color: '#000000e6' }}>
+      <div className="flex items-center gap-2.5 px-3 pt-3 pb-1.5">
+        <Avatar initial={initial} bg="#0A66C2" size={12} />
+        <div><div className="text-[13px] font-semibold">{projectName}</div><div className="text-[11px]" style={{ color: '#00000099' }}>Správce stránky · Právě teď · 🌐</div></div>
+      </div>
+      <div className="px-3 pb-2 text-[13px] leading-[1.4]">
+        <TruncatedText text={text} visibleChars={210} truncationText="...zobrazit více" linkColor="#0a66c2" />
+      </div>
+      {mediaUrl && <div style={{ borderTop: '1px solid #e0e0e0' }}><MediaBlock url={mediaUrl} /></div>}
+      <div className="flex justify-around py-2 text-[11px] font-medium" style={{ borderTop: '1px solid #e0e0e0', color: '#00000099' }}>
+        <span>👍 Líbí se mi</span><span>💬 Komentovat</span><span>🔄 Sdílet</span><span>📤 Odeslat</span>
+      </div>
+      <ErrorBar validation={validation} name="LinkedIn" />
+    </div>
+  );
+}
+
+// ============================================
+// X (Twitter)
+// ============================================
+function XMockup({ text, validation, projectName, handle, initial, mediaUrl }: MockupProps) {
+  const len = text.length;
+  const over = len > 280;
+  return (
+    <div style={{ backgroundColor: '#000', fontFamily: '-apple-system, sans-serif', color: '#e7e9ea' }}>
+      <div className="flex gap-2.5 p-3">
+        <Avatar initial={initial} bg="#333" />
         <div className="flex-1 min-w-0">
-          {/* Name */}
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className="text-sm font-bold text-white">{projectName || 'Projekt'}</span>
-            <span className="text-sm text-gray-500">@{projectName?.toLowerCase().replace(/\s+/g, '') || 'projekt'}</span>
-            <span className="text-sm text-gray-500">· 1m</span>
+          <div className="flex items-center gap-1 mb-0.5 text-[13px]">
+            <span className="font-bold">{projectName}</span>
+            <span style={{ color: '#71767b' }}>@{handle} · 1m</span>
           </div>
-
-          {/* Text */}
-          <div className="text-sm text-white leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>
-            {isOverLimit ? (
-              <>
-                <span>{text.substring(0, 280)}</span>
-                <span className="text-red-400 bg-red-400/10">{text.substring(280)}</span>
-              </>
-            ) : (
-              text
-            )}
+          <div className="text-[14px] leading-[1.35]" style={{ whiteSpace: 'pre-wrap' }}>
+            {over ? (<><span>{text.substring(0, 280)}</span><span style={{ color: '#f87171', backgroundColor: 'rgba(248,113,113,0.1)' }}>{text.substring(280)}</span></>) : text}
           </div>
-
-          {/* Media */}
-          {mediaUrl && (
-            <div className="mt-2 rounded-xl overflow-hidden border border-gray-800">
-              <img src={mediaUrl} alt="" className="w-full" loading="lazy" />
-            </div>
-          )}
-
-          {/* Engagement */}
-          <div className="flex items-center justify-between mt-2 text-xs text-gray-500 max-w-xs">
-            <span>💬</span>
-            <span>🔄</span>
-            <span>♡</span>
-            <span>📊</span>
-            <span>📤</span>
+          {mediaUrl && <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid #2f3336' }}><MediaBlock url={mediaUrl} /></div>}
+          <div className="flex justify-between mt-2 text-[12px] max-w-[280px]" style={{ color: '#71767b' }}>
+            <span>💬</span><span>🔄</span><span>♡</span><span>📊</span><span>📤</span>
           </div>
         </div>
       </div>
-
-      {/* Character counter */}
-      <div className={`px-3 pb-2 text-right text-xs ${isOverLimit ? 'text-red-400' : charCount > 260 ? 'text-amber-400' : 'text-gray-600'}`}>
-        {charCount}/280
-      </div>
-
-      {!validation.valid && (
-        <div className="px-3 py-2 bg-red-900/50 border-t border-red-800 text-xs text-red-300">
-          ⚠️ Post překračuje limit 280 znaků pro X
-        </div>
-      )}
+      <div className={`px-3 pb-1.5 text-right text-[11px] ${over ? 'text-red-400' : len > 260 ? 'text-amber-400' : ''}`} style={{ color: over ? '#f87171' : len > 260 ? '#fbbf24' : '#333' }}>{len}/280</div>
+      <ErrorBar validation={validation} name="X" />
     </div>
   );
 }
 
-// ---- TikTok ----
-function TikTokPreview({ text, validation, projectName }: { text: string; validation: ValidationResult; projectName?: string }) {
+// ============================================
+// TikTok
+// ============================================
+function TikTokMockup({ text, validation, projectName, handle, initial }: MockupProps) {
   return (
-    <div style={{ backgroundColor: '#000000', fontFamily: PLATFORM_LIMITS.tiktok.previewFont }}>
+    <div style={{ backgroundColor: '#000', fontFamily: '-apple-system, sans-serif', color: '#fff' }}>
       <div className="p-3">
         <div className="flex items-center gap-2 mb-2">
-          <div className="w-8 h-8 rounded-full bg-rose-600 flex items-center justify-center text-white font-bold text-xs">
-            {(projectName || 'P')[0]}
-          </div>
-          <span className="text-sm font-semibold text-white">{projectName || 'Projekt'}</span>
+          <Avatar initial={initial} bg="#FE2C55" size={8} />
+          <span className="text-[13px] font-semibold">{handle}</span>
         </div>
-        <div className="text-sm text-white leading-relaxed">
-          <TruncatedText text={text} visibleChars={150} truncationText="...více" />
+        <div className="text-[13px] leading-[1.4]">
+          <TruncatedText text={text} visibleChars={150} truncationText="...více" linkColor="#aaa" />
+        </div>
+        <div className="mt-2 text-[11px]" style={{ color: '#888' }}>🎵 originální zvuk – {projectName}</div>
+      </div>
+      <ErrorBar validation={validation} name="TikTok" />
+    </div>
+  );
+}
+
+// ============================================
+// YouTube
+// ============================================
+function YouTubeMockup({ text, validation, projectName, initial }: MockupProps) {
+  return (
+    <div style={{ backgroundColor: '#0f0f0f', fontFamily: 'Roboto, Arial, sans-serif', color: '#fff' }}>
+      <div className="w-full aspect-video flex items-center justify-center" style={{ backgroundColor: '#1a1a1a' }}>
+        <span className="text-[40px]">▶</span>
+      </div>
+      <div className="p-3">
+        <div className="text-[14px] font-medium leading-[1.3] mb-1.5">{text.substring(0, 100)}{text.length > 100 ? '...' : ''}</div>
+        <div className="flex items-center gap-2 mb-2">
+          <Avatar initial={initial} bg="#FF0000" size={6} />
+          <span className="text-[12px]" style={{ color: '#aaa' }}>{projectName}</span>
+        </div>
+        <div className="text-[12px] leading-[1.4]" style={{ color: '#aaa' }}>
+          <TruncatedText text={text} visibleChars={200} truncationText="...ZOBRAZIT VÍCE" linkColor="#3ea6ff" />
         </div>
       </div>
+      <ErrorBar validation={validation} name="YouTube" />
+    </div>
+  );
+}
 
-      {!validation.valid && (
-        <div className="px-3 py-2 bg-red-900/50 border-t border-red-800 text-xs text-red-300">
-          ⚠️ Post nesplňuje limity pro TikTok
+// ============================================
+// Threads
+// ============================================
+function ThreadsMockup({ text, validation, projectName, handle, initial, mediaUrl }: MockupProps) {
+  return (
+    <div style={{ backgroundColor: '#101010', fontFamily: '-apple-system, sans-serif', color: '#f5f5f5' }}>
+      <div className="flex gap-2.5 p-3">
+        <Avatar initial={initial} bg="#333" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 mb-0.5 text-[13px]">
+            <span className="font-semibold">{handle}</span>
+            <span style={{ color: '#777' }}>· 1m</span>
+          </div>
+          <div className="text-[14px] leading-[1.4]" style={{ whiteSpace: 'pre-wrap' }}>{text}</div>
+          {mediaUrl && <div className="mt-2 rounded-lg overflow-hidden"><MediaBlock url={mediaUrl} /></div>}
+          <div className="flex gap-5 mt-2 text-[18px]" style={{ color: '#777' }}>
+            <span>♡</span><span>💬</span><span>🔄</span><span>📤</span>
+          </div>
+        </div>
+      </div>
+      <div className="text-right px-3 pb-1.5 text-[11px]" style={{ color: '#555' }}>{text.length}/500</div>
+      <ErrorBar validation={validation} name="Threads" />
+    </div>
+  );
+}
+
+// ============================================
+// Bluesky
+// ============================================
+function BlueskyMockup({ text, validation, projectName, handle, initial, mediaUrl }: MockupProps) {
+  const len = text.length;
+  const over = len > 300;
+  return (
+    <div style={{ backgroundColor: '#fff', fontFamily: '-apple-system, sans-serif', color: '#000' }}>
+      <div className="flex gap-2.5 p-3">
+        <Avatar initial={initial} bg="#0085FF" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 mb-0.5 text-[13px]">
+            <span className="font-bold">{projectName}</span>
+            <span style={{ color: '#888' }}>@{handle}.bsky.social</span>
+          </div>
+          <div className="text-[14px] leading-[1.4]" style={{ whiteSpace: 'pre-wrap' }}>
+            {over ? (<><span>{text.substring(0, 300)}</span><span style={{ color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)' }}>{text.substring(300)}</span></>) : text}
+          </div>
+          {mediaUrl && <div className="mt-2 rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb' }}><MediaBlock url={mediaUrl} /></div>}
+          <div className="flex gap-6 mt-2 text-[12px]" style={{ color: '#888' }}>
+            <span>💬</span><span>🔄</span><span>♡</span><span>📤</span>
+          </div>
+        </div>
+      </div>
+      <div className={`px-3 pb-1.5 text-right text-[11px]`} style={{ color: over ? '#ef4444' : '#ccc' }}>{len}/300</div>
+      <ErrorBar validation={validation} name="Bluesky" />
+    </div>
+  );
+}
+
+// ============================================
+// Pinterest
+// ============================================
+function PinterestMockup({ text, validation, projectName, initial, mediaUrl }: MockupProps) {
+  return (
+    <div style={{ backgroundColor: '#fff', fontFamily: '-apple-system, sans-serif', color: '#111' }}>
+      {mediaUrl ? (
+        <div className="rounded-t-2xl overflow-hidden"><MediaBlock url={mediaUrl} /></div>
+      ) : (
+        <div className="w-full aspect-[2/3] flex items-center justify-center rounded-t-2xl" style={{ backgroundColor: '#f5f5f5' }}>
+          <span className="text-[13px]" style={{ color: '#999' }}>Obrázek povinný pro Pinterest</span>
         </div>
       )}
+      <div className="p-3">
+        <div className="text-[14px] font-semibold mb-1">{text.substring(0, 100)}{text.length > 100 ? '...' : ''}</div>
+        <div className="text-[12px] leading-[1.4]" style={{ color: '#555' }}>
+          <TruncatedText text={text} visibleChars={100} truncationText="...Více" linkColor="#E60023" />
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <Avatar initial={initial} bg="#E60023" size={6} />
+          <span className="text-[12px] font-medium">{projectName}</span>
+        </div>
+      </div>
+      <ErrorBar validation={validation} name="Pinterest" />
+    </div>
+  );
+}
+
+// ============================================
+// Reddit
+// ============================================
+function RedditMockup({ text, validation, projectName, handle, initial, mediaUrl }: MockupProps) {
+  return (
+    <div style={{ backgroundColor: '#1a1a1b', fontFamily: '-apple-system, Noto Sans, sans-serif', color: '#d7dadc' }}>
+      <div className="p-3">
+        <div className="flex items-center gap-2 mb-2 text-[11px]" style={{ color: '#818384' }}>
+          <Avatar initial={initial} bg="#FF4500" size={5} />
+          <span className="font-bold" style={{ color: '#d7dadc' }}>r/{handle}</span>
+          <span>· Právě teď</span>
+        </div>
+        <div className="text-[15px] font-medium mb-1.5">{text.substring(0, 80)}</div>
+        <div className="text-[13px] leading-[1.5]" style={{ color: '#b0b3b8' }}>
+          <TruncatedText text={text} visibleChars={300} truncationText="...read more" linkColor="#4fbcff" />
+        </div>
+        {mediaUrl && <div className="mt-2 rounded-lg overflow-hidden"><MediaBlock url={mediaUrl} /></div>}
+        <div className="flex gap-4 mt-3 text-[11px] font-bold" style={{ color: '#818384' }}>
+          <span>⬆ Vote</span><span>💬 Comments</span><span>📤 Share</span>
+        </div>
+      </div>
+      <ErrorBar validation={validation} name="Reddit" />
+    </div>
+  );
+}
+
+// ============================================
+// Google Business
+// ============================================
+function GoogleBusinessMockup({ text, validation, projectName, initial, mediaUrl }: MockupProps) {
+  return (
+    <div style={{ backgroundColor: '#fff', fontFamily: 'Google Sans, Roboto, Arial, sans-serif', color: '#202124' }}>
+      <div className="p-3">
+        <div className="flex items-center gap-2.5 mb-3">
+          <Avatar initial={initial} bg="#4285F4" />
+          <div>
+            <div className="text-[14px] font-medium">{projectName}</div>
+            <div className="text-[11px]" style={{ color: '#70757a' }}>Právě teď · Aktualizace</div>
+          </div>
+        </div>
+        <div className="text-[13px] leading-[1.5]">
+          <TruncatedText text={text} visibleChars={200} truncationText="...Více" linkColor="#1a73e8" />
+        </div>
+        {mediaUrl && <div className="mt-2 rounded-lg overflow-hidden"><MediaBlock url={mediaUrl} /></div>}
+      </div>
+      <div className="flex gap-3 px-3 pb-3">
+        <button className="px-4 py-1.5 rounded-full text-[12px] font-medium" style={{ backgroundColor: '#1a73e8', color: '#fff' }}>Zjistit více</button>
+        <button className="px-4 py-1.5 rounded-full text-[12px] font-medium" style={{ border: '1px solid #dadce0', color: '#1a73e8' }}>Zavolat</button>
+      </div>
+      <ErrorBar validation={validation} name="Google Business" />
+    </div>
+  );
+}
+
+// ============================================
+// Telegram
+// ============================================
+function TelegramMockup({ text, validation, projectName, initial, mediaUrl }: MockupProps) {
+  return (
+    <div style={{ backgroundColor: '#17212b', fontFamily: '-apple-system, sans-serif', color: '#fff' }}>
+      <div className="flex items-center gap-2.5 px-3 py-2" style={{ backgroundColor: '#1e2c3a' }}>
+        <Avatar initial={initial} bg="#5288c1" size={8} />
+        <div>
+          <div className="text-[13px] font-semibold">{projectName}</div>
+          <div className="text-[11px]" style={{ color: '#6d8da7' }}>kanál · 1 234 odběratelů</div>
+        </div>
+      </div>
+      {mediaUrl && <MediaBlock url={mediaUrl} />}
+      <div className="px-3 py-2.5">
+        <div className="text-[14px] leading-[1.5]" style={{ whiteSpace: 'pre-wrap' }}>{text}</div>
+        <div className="text-right mt-1 text-[10px]" style={{ color: '#6d8da7' }}>✓✓ 20:00</div>
+      </div>
+      <ErrorBar validation={validation} name="Telegram" />
+    </div>
+  );
+}
+
+// ============================================
+// Snapchat
+// ============================================
+function SnapchatMockup({ text, validation, projectName, initial }: MockupProps) {
+  return (
+    <div style={{ backgroundColor: '#000', fontFamily: '-apple-system, sans-serif', color: '#fff' }}>
+      <div className="w-full aspect-[9/16] relative flex flex-col justify-end" style={{ backgroundColor: '#1a1a1a', maxHeight: '300px' }}>
+        <div className="p-3" style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.8))' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: '#FFFC00', color: '#000' }}>{initial}</div>
+            <span className="text-[12px] font-semibold">{projectName}</span>
+          </div>
+          <div className="text-[13px] leading-[1.3]">{text.length > 250 ? text.substring(0, 250) : text}</div>
+        </div>
+      </div>
+      <div className="flex justify-around py-2 text-[11px]" style={{ color: '#aaa' }}>
+        <span>📤 Odeslat</span><span>💬 Chat</span><span>📸 Snap</span>
+      </div>
+      <ErrorBar validation={validation} name="Snapchat" />
+    </div>
+  );
+}
+
+// ============================================
+// Generic fallback
+// ============================================
+function GenericMockup({ text, validation, projectName, initial, mediaUrl, platform }: MockupProps) {
+  const limits = PLATFORM_LIMITS[platform];
+  return (
+    <div style={{ backgroundColor: limits?.previewBg || '#1a1a1a', fontFamily: limits?.previewFont || 'sans-serif', color: limits?.previewBg === '#ffffff' ? '#000' : '#fff' }}>
+      <div className="p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Avatar initial={initial} bg={limits?.previewAccent || '#666'} size={8} />
+          <div>
+            <div className="text-[13px] font-semibold">{projectName}</div>
+            <div className="text-[11px] opacity-50">{limits?.name || platform} · Právě teď</div>
+          </div>
+        </div>
+        <div className="text-[13px] leading-[1.4]">
+          <TruncatedText text={text} visibleChars={limits?.visibleChars || 300} truncationText={limits?.truncationText || '...více'} linkColor={limits?.previewAccent} />
+        </div>
+        {mediaUrl && <div className="mt-2 rounded-lg overflow-hidden"><MediaBlock url={mediaUrl} /></div>}
+      </div>
+      <ErrorBar validation={validation} name={limits?.name || platform} />
     </div>
   );
 }

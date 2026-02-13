@@ -37,14 +37,24 @@ const CATEGORY_LABELS: Record<string, string> = {
   product: 'Produkt', audience: 'Cílová skupina', usp: 'USP',
   faq: 'FAQ', case_study: 'Případovka', general: 'Obecné',
 };
-const PLATFORMS = ['linkedin', 'instagram', 'facebook', 'x', 'tiktok'] as const;
+const PLATFORMS = [
+  'facebook', 'instagram', 'linkedin', 'x', 'tiktok',
+  'youtube', 'threads', 'bluesky', 'pinterest', 'reddit',
+  'google-business', 'telegram', 'snapchat',
+] as const;
 const PLATFORM_COLORS: Record<string, string> = {
-  linkedin: 'bg-blue-600', instagram: 'bg-pink-600', facebook: 'bg-blue-500',
-  x: 'bg-slate-600', tiktok: 'bg-rose-600',
+  facebook: 'bg-blue-500', instagram: 'bg-pink-600', linkedin: 'bg-blue-600',
+  x: 'bg-slate-600', tiktok: 'bg-rose-600', youtube: 'bg-red-600',
+  threads: 'bg-neutral-700', bluesky: 'bg-sky-500', pinterest: 'bg-red-700',
+  reddit: 'bg-orange-600', 'google-business': 'bg-blue-400', telegram: 'bg-sky-600',
+  snapchat: 'bg-yellow-400',
 };
 const PLATFORM_LABELS: Record<string, string> = {
-  linkedin: 'LinkedIn', instagram: 'Instagram', facebook: 'Facebook',
-  x: 'X (Twitter)', tiktok: 'TikTok',
+  facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn',
+  x: 'X (Twitter)', tiktok: 'TikTok', youtube: 'YouTube',
+  threads: 'Threads', bluesky: 'Bluesky', pinterest: 'Pinterest',
+  reddit: 'Reddit', 'google-business': 'Google Business', telegram: 'Telegram',
+  snapchat: 'Snapchat',
 };
 const TONES = ['professional', 'casual', 'friendly', 'authoritative', 'playful', 'empathetic'] as const;
 const ENERGIES = ['low', 'medium', 'high'] as const;

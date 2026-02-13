@@ -41,9 +41,9 @@ CREATE INDEX IF NOT EXISTS idx_project_news_processed ON project_news(project_id
 CREATE INDEX IF NOT EXISTS idx_project_news_published ON project_news(published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_rss_sources_project ON rss_sources(project_id, is_active);
 
--- 4. Sémantický index pro novinky
+-- 4. Sémantický index pro novinky (hnsw funguje i na prázdné tabulce)
 CREATE INDEX IF NOT EXISTS idx_project_news_embedding ON project_news
-  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50);
+  USING hnsw (embedding vector_cosine_ops);
 
 -- 5. RPC: Najdi relevantní novinky pro post
 CREATE OR REPLACE FUNCTION match_news_for_post(

@@ -1,7 +1,18 @@
 import { supabase } from '@/lib/supabase/client';
-import { generateContent } from '@/lib/ai/content-engine';
+import { createTask, executeTask } from '@/lib/ai/agent-orchestrator';
 import { NextResponse } from 'next/server';
 
+/**
+ * Generate Content API
+ * 
+ * Uses the SAME pipeline as Agent Hugo (executeTask):
+ * - Per-project prompts (identity, examples, guardrails)
+ * - Published posts dedup (won't repeat existing posts)
+ * - Creativity rules (hook variety, structure variety)
+ * - Contextual Pulse (recent news integration)
+ * - Hugo-Editor self-correction
+ * - Media matching (if media_strategy = 'auto')
+ */
 export async function POST(request: Request) {
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
@@ -15,36 +26,43 @@ export async function POST(request: Request) {
   }
 
   try {
-    const content = await generateContent({
-      projectId,
+    // Create a task (same as Agent Hugo would)
+    const taskId = await createTask(projectId, 'generate_content', {
       platform,
-      contentType,
-      patternId,
-    });
+      contentType: contentType || undefined,
+      patternId: patternId || undefined,
+      source: 'manual_generate',
+    }, { priority: 8 }); // High priority for manual generation
 
-    // Save to content_queue as draft
-    const { data: saved, error } = await supabase
-      .from('content_queue')
-      .insert({
-        project_id: projectId,
-        text_content: content.text,
-        image_prompt: content.image_prompt,
-        alt_text: content.alt_text,
-        pattern_id: patternId || null,
-        content_type: contentType || 'educational',
-        platforms: [platform],
-        ai_scores: content.scores,
-        status: 'review',
-        source: 'ai_generated',
-      })
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!taskId) {
+      return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });
     }
 
-    return NextResponse.json({ content, saved });
+    // Execute immediately (same pipeline as cron)
+    const result = await executeTask(taskId);
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 500 });
+    }
+
+    // Get the saved content from content_queue
+    const { data: saved } = await supabase
+      .from('content_queue')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    return NextResponse.json({
+      content: {
+        text: result.result?.text || '',
+        image_prompt: result.result?.image_prompt || null,
+        alt_text: result.result?.alt_text || null,
+        scores: result.result?.scores || {},
+      },
+      saved,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });

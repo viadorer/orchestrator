@@ -124,18 +124,24 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
     patternTemplate = pattern?.structure_template;
   }
 
-  // Load news context
+  // Load news context (Contextual Pulse)
   let newsContext: string | undefined;
   if (supabase) {
-    const { data: news } = await supabase
-      .from('project_news')
-      .select('title, summary')
-      .eq('project_id', req.projectId)
-      .eq('is_used', false)
-      .order('fetched_at', { ascending: false })
-      .limit(3);
-    if (news && news.length > 0) {
-      newsContext = news.map((n: { title: string; summary: string }) => `- ${n.title}: ${n.summary}`).join('\n');
+    try {
+      const { data: news } = await supabase
+        .from('project_news')
+        .select('title, summary, source_name')
+        .eq('project_id', req.projectId)
+        .eq('is_used_in_post', false)
+        .order('published_at', { ascending: false })
+        .limit(3);
+      if (news && news.length > 0) {
+        newsContext = news.map((n: { title: string; summary: string; source_name: string }) =>
+          `- [${n.source_name}] ${n.title}: ${n.summary}`
+        ).join('\n');
+      }
+    } catch {
+      // project_news table may not exist yet
     }
   }
 

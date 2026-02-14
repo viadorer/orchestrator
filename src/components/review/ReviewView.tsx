@@ -311,10 +311,22 @@ export function ReviewView() {
                   {item.platforms.map(p => (
                     <span key={p} className="px-1.5 py-0.5 rounded bg-slate-800 text-xs text-slate-400">{p}</span>
                   ))}
-                  {item.image_url && (
+                  {item.image_url && item.visual_type === 'matched_photo' && (
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-xs text-emerald-400" title="Fotka z Media Library (pgvector match)">📷 library</span>
+                  )}
+                  {item.image_url && item.visual_type === 'generated_photo' && (
+                    <span className="px-1.5 py-0.5 rounded bg-violet-500/20 text-xs text-violet-400" title="AI vygenerovaná fotka (Imagen 4)">🎨 imagen</span>
+                  )}
+                  {item.image_url && !item.visual_type?.includes('photo') && (
                     <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-xs text-emerald-400">📷 foto</span>
                   )}
-                  {!item.image_url && item.image_prompt && (
+                  {item.chart_url && (
+                    <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-xs text-blue-400">📊 graf</span>
+                  )}
+                  {item.card_url && (
+                    <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-xs text-indigo-400">🃏 karta</span>
+                  )}
+                  {!item.image_url && !item.chart_url && !item.card_url && item.image_prompt && (
                     <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-xs text-amber-400">🎨 prompt</span>
                   )}
                 </div>

@@ -99,6 +99,17 @@ export async function POST(request: Request) {
           pattern_id: post.pattern_id,
         });
 
+      // Update media_assets: mark which post used this photo
+      if (post.matched_media_id) {
+        await supabase
+          .from('media_assets')
+          .update({
+            last_used_in: post.id,
+            last_used_at: new Date().toISOString(),
+          })
+          .eq('id', post.matched_media_id);
+      }
+
       results.push({ id: post.id, status: 'sent', late_post_id: lateResult._id });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';

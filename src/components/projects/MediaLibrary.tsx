@@ -21,6 +21,9 @@ interface MediaAsset {
   is_processed: boolean;
   processing_error: string | null;
   created_at: string;
+  last_used_in: string | null;
+  last_used_at: string | null;
+  source: string | null;
 }
 
 interface MediaLibraryProps {
@@ -271,6 +274,13 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
                 )}
               </div>
 
+              {/* Source badge */}
+              {asset.source === 'imagen_generated' && (
+                <div className="absolute top-1 left-1">
+                  <span className="text-[8px] bg-violet-600 text-white px-1 rounded" title="AI generováno">AI</span>
+                </div>
+              )}
+
               {/* Processing status */}
               {!asset.is_processed && (
                 <div className="absolute top-1 right-1">
@@ -339,6 +349,22 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
                       <div><span className="text-slate-500">Kvalita:</span> <span className="text-slate-200">{selected.ai_quality_score?.toFixed(1) || '–'}/10</span></div>
                       <div><span className="text-slate-500">Použito:</span> <span className="text-slate-200">{selected.times_used}×</span></div>
                     </div>
+                    {selected.source && (
+                      <div>
+                        <span className="text-slate-500">Zdroj:</span>{' '}
+                        <span className={`${selected.source === 'imagen_generated' ? 'text-violet-400' : 'text-slate-200'}`}>
+                          {selected.source === 'imagen_generated' ? '🎨 Imagen 4' : selected.source === 'upload' ? '📤 Upload' : selected.source}
+                        </span>
+                      </div>
+                    )}
+                    {selected.times_used > 0 && selected.last_used_at && (
+                      <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                        <span className="text-emerald-400 text-[10px] font-medium">Použito v příspěvku</span>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {new Date(selected.last_used_at).toLocaleDateString('cs-CZ')} · ID: {selected.last_used_in?.slice(0, 8)}...
+                        </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full gap-2">

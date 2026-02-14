@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  Plus, Search, ExternalLink, Pencil, BookOpen, Trash2, X, Save,
+  Plus, Search, ExternalLink, Pencil, BookOpen, Trash2, X, Save, Upload,
   ArrowLeft, Share2, Palette, BarChart3, ShieldAlert, Type, Sliders, FileText, Image, Rss, MessageCircle, Bot,
 } from 'lucide-react';
 import { ProjectPrompts } from './ProjectPrompts';
@@ -1181,6 +1181,51 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
   const [font, setFont] = useState(vi.font);
   const [logoUrl, setLogoUrl] = useState(vi.logo_url || '');
   const [style, setStyle] = useState(vi.style);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadLogo = async (file: File) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`/api/projects/${project.id}/logo`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.logo_url) {
+        setLogoUrl(data.logo_url);
+      } else {
+        alert(data.error || 'Upload selhal');
+      }
+    } catch {
+      alert('Upload selhal');
+    }
+    setUploading(false);
+  };
+
+  const deleteLogo = async () => {
+    setUploading(true);
+    try {
+      await fetch(`/api/projects/${project.id}/logo`, { method: 'DELETE' });
+      setLogoUrl('');
+    } catch { /* ignore */ }
+    setUploading(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) uploadLogo(file);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadLogo(file);
+  };
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -1244,24 +1289,70 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
         </div>
       </div>
 
-      {/* Logo URL */}
+      {/* Logo Upload */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">Logo URL</label>
+        <label className="block text-sm font-medium text-slate-300 mb-1.5">Logo projektu</label>
         <input
-          value={logoUrl}
-          onChange={(e) => setLogoUrl(e.target.value)}
-          placeholder="https://example.com/logo.png"
-          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif"
+          onChange={handleFileSelect}
+          className="hidden"
         />
-        <p className="text-xs text-slate-500 mt-1">
-          URL loga projektu. Používá se na kartách a jako overlay na AI generovaných obrázcích (Imagen).
-        </p>
-        {logoUrl && (
-          <div className="mt-2 flex items-center gap-3 p-3 rounded-lg bg-slate-800">
-            <img src={logoUrl} alt="Logo preview" className="w-12 h-12 rounded object-contain" onError={(e) => { (e.target as HTMLImageElement).src = ''; }} />
-            <span className="text-xs text-slate-400">Náhled loga</span>
+        {logoUrl ? (
+          <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-800 border border-slate-700">
+            <img src={logoUrl} alt="Logo" className="w-16 h-16 rounded-lg object-contain bg-white/5 p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white font-medium truncate">Logo nahráno</p>
+              <p className="text-xs text-slate-500 truncate">{logoUrl.split('/').pop()}</p>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="px-3 py-1.5 rounded-lg bg-slate-700 text-xs text-slate-300 hover:text-white hover:bg-slate-600 transition-colors"
+              >
+                Změnit
+              </button>
+              <button
+                onClick={deleteLogo}
+                disabled={uploading}
+                className="px-3 py-1.5 rounded-lg bg-red-600/20 text-xs text-red-400 hover:bg-red-600/30 transition-colors"
+              >
+                Smazat
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`flex flex-col items-center justify-center gap-3 p-8 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+              dragOver
+                ? 'border-violet-500 bg-violet-600/10'
+                : 'border-slate-700 bg-slate-800/50 hover:border-slate-600 hover:bg-slate-800'
+            }`}
+          >
+            {uploading ? (
+              <div className="animate-spin w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full" />
+            ) : (
+              <>
+                <div className="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-slate-400" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-slate-300">Přetáhněte logo sem nebo klikněte</p>
+                  <p className="text-xs text-slate-500 mt-1">PNG, JPG, SVG, WebP • max 2 MB</p>
+                </div>
+              </>
+            )}
           </div>
         )}
+        <p className="text-xs text-slate-500 mt-2">
+          Používá se na kartách a jako overlay na AI generovaných obrázcích (Imagen).
+        </p>
       </div>
 
       <SaveBtn onClick={() => onSave({

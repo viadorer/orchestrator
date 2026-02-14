@@ -133,21 +133,41 @@ export function AgentView() {
   // Execute single task
   const handleExecute = async (taskId: string) => {
     setExecuting(taskId);
-    await fetch(`/api/agent/tasks/${taskId}/execute`, { method: 'POST' });
+    try {
+      const res = await fetch(`/api/agent/tasks/${taskId}/execute`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Task execution failed:', data.error || res.statusText);
+      }
+    } catch (err) {
+      console.error('Task execution error:', err);
+    }
     await loadProjectData();
     setExecuting(null);
+    // Auto-refresh after 3s to catch async completions
+    setTimeout(() => loadProjectData(), 3000);
   };
 
   // Run all pending
   const handleRunAll = async () => {
     setRunningAll(true);
-    await fetch('/api/agent/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: selectedProject }),
-    });
+    try {
+      const res = await fetch('/api/agent/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: selectedProject }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Run all failed:', data.error || res.statusText);
+      }
+    } catch (err) {
+      console.error('Run all error:', err);
+    }
     await loadProjectData();
     setRunningAll(false);
+    // Auto-refresh after 5s
+    setTimeout(() => loadProjectData(), 5000);
   };
 
   const statusIcon = (status: string) => {

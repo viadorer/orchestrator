@@ -1096,6 +1096,14 @@ export async function runPendingTasks(projectId?: string): Promise<{
 }> {
   if (!supabase) return { executed: 0, failed: 0, skipped: 0, auto_scheduled: 0 };
 
+  // Step 0: Recover stuck 'running' tasks (older than 5 min → reset to failed)
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  await supabase
+    .from('agent_tasks')
+    .update({ status: 'failed', error_message: 'Timeout – task stuck in running state', completed_at: new Date().toISOString() })
+    .eq('status', 'running')
+    .lt('started_at', fiveMinAgo);
+
   // Step 1: Auto-schedule if no projectId specified (full cron run)
   let autoScheduled = 0;
   if (!projectId) {

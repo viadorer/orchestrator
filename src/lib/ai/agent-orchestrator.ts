@@ -488,15 +488,24 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
   if (!task) return { success: false, error: 'Task not found' };
 
   // Mark as running
-  const { error: runningError } = await supabase.from('agent_tasks').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', taskId);
-  if (runningError) {
-    await supabase.from('agent_log').insert({
-      project_id: task.project_id,
-      task_id: taskId,
-      action: 'task_status_update_failed',
-      details: { target_status: 'running', error: runningError.message, code: runningError.code },
-    });
-  }
+  const { data: runningData, error: runningError } = await supabase
+    .from('agent_tasks')
+    .update({ status: 'running', started_at: new Date().toISOString() })
+    .eq('id', taskId)
+    .select('id, status');
+
+  await supabase.from('agent_log').insert({
+    project_id: task.project_id,
+    task_id: taskId,
+    action: 'task_status_debug',
+    details: {
+      target_status: 'running',
+      rows_affected: runningData?.length ?? 0,
+      new_status: runningData?.[0]?.status ?? null,
+      error: runningError?.message ?? null,
+      error_code: runningError?.code ?? null,
+    },
+  });
 
   try {
     // Load project context
@@ -675,21 +684,24 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
     });
 
     // ---- Mark completed ----
-    const { error: updateError } = await supabase.from('agent_tasks').update({
+    const { data: completedData, error: updateError } = await supabase.from('agent_tasks').update({
       status: 'completed',
       result,
       completed_at: new Date().toISOString(),
-    }).eq('id', taskId);
+    }).eq('id', taskId).select('id, status');
 
-    if (updateError) {
-      // Log the update failure for debugging
-      await supabase.from('agent_log').insert({
-        project_id: task.project_id,
-        task_id: taskId,
-        action: 'task_update_failed',
-        details: { error: updateError.message, code: updateError.code },
-      });
-    }
+    await supabase.from('agent_log').insert({
+      project_id: task.project_id,
+      task_id: taskId,
+      action: 'task_completed_debug',
+      details: {
+        rows_affected: completedData?.length ?? 0,
+        new_status: completedData?.[0]?.status ?? null,
+        error: updateError?.message ?? null,
+        error_code: updateError?.code ?? null,
+        result_keys: Object.keys(result),
+      },
+    });
 
     // ---- Handle recurring ----
     if (task.is_recurring && task.recurrence_rule) {

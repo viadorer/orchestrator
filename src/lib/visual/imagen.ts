@@ -133,7 +133,7 @@ export async function generateAndStoreImage(options: {
     }
 
     // 6. Insert into media_assets
-    const assetData: Record<string, unknown> = {
+    const coreAssetData: Record<string, unknown> = {
       project_id: projectId,
       storage_path: storagePath,
       public_url: publicUrl,
@@ -147,26 +147,43 @@ export async function generateAndStoreImage(options: {
       ai_quality_score: qualityScore,
       is_processed: true,
       is_active: true,
-      source: 'imagen_generated',
-      generation_prompt: imagePrompt,
       times_used: postId ? 1 : 0,
       last_used_at: postId ? new Date().toISOString() : null,
       last_used_in: postId || null,
     };
 
     if (embedding) {
-      assetData.embedding = JSON.stringify(embedding);
+      coreAssetData.embedding = JSON.stringify(embedding);
     }
 
-    const { data: insertedAsset, error: insertError } = await supabase
+    // Try full insert with optional columns (source, generation_prompt)
+    const fullAssetData = { ...coreAssetData, source: 'imagen_generated', generation_prompt: imagePrompt };
+
+    let insertedAsset: { id: string } | null = null;
+    const { data: fullData, error: fullError } = await supabase
       .from('media_assets')
-      .insert(assetData)
+      .insert(fullAssetData)
       .select('id')
       .single();
 
-    if (insertError) {
-      // Asset insert failed but image is uploaded — still return URL
-      await logImagenEvent(projectId, 'imagen_asset_insert_error', { error: insertError.message, storage_path: storagePath });
+    if (fullError) {
+      // Retry with core columns only (source/generation_prompt may not exist yet)
+      const { data: coreData, error: coreError } = await supabase
+        .from('media_assets')
+        .insert(coreAssetData)
+        .select('id')
+        .single();
+
+      if (coreError) {
+        await logImagenEvent(projectId, 'imagen_asset_insert_error', { error: coreError.message, full_error: fullError.message, storage_path: storagePath });
+        return { success: true, public_url: publicUrl, media_asset_id: null, storage_path: storagePath };
+      }
+      insertedAsset = coreData;
+    } else {
+      insertedAsset = fullData;
+    }
+
+    if (!insertedAsset) {
       return { success: true, public_url: publicUrl, media_asset_id: null, storage_path: storagePath };
     }
 

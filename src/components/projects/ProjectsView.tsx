@@ -35,10 +35,13 @@ interface KBEntry {
   content: string;
 }
 
-const CATEGORIES = ['product', 'audience', 'usp', 'faq', 'case_study', 'general'] as const;
+const CATEGORIES = ['product', 'audience', 'usp', 'faq', 'case_study', 'data', 'market', 'legal', 'process', 'general'] as const;
 const CATEGORY_LABELS: Record<string, string> = {
-  product: 'Produkt', audience: 'Cílová skupina', usp: 'USP',
-  faq: 'FAQ', case_study: 'Případovka', general: 'Obecné',
+  product: 'Produkt & Služba', audience: 'Cílová skupina', usp: 'Konkurenční výhoda',
+  faq: 'Otázky & Odpovědi', case_study: 'Příběhy & Reference',
+  data: 'Čísla & Statistiky', market: 'Trh & Trendy',
+  legal: 'Legislativa', process: 'Jak to funguje',
+  general: 'Ostatní',
 };
 const PLATFORMS = [
   'facebook', 'instagram', 'linkedin', 'x', 'tiktok',

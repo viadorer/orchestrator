@@ -1650,7 +1650,7 @@ export async function getProjectHealth(projectId: string): Promise<Record<string
   });
 
   // KB completeness
-  const categories = ['product', 'audience', 'usp', 'faq', 'case_study', 'general'];
+  const categories = ['product', 'audience', 'usp', 'faq', 'case_study', 'data', 'market', 'legal', 'process', 'general'];
   const presentCategories = [...new Set(ctx.kbEntries.map(e => e.category))];
   const missingCategories = categories.filter(c => !presentCategories.includes(c));
 

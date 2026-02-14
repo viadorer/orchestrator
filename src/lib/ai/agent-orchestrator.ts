@@ -197,7 +197,59 @@ async function buildAgentPrompt(
     parts.push('Poučení: Přizpůsob styl a obsah podle těchto úprav. Opakuj vzory, které admin preferuje.');
   }
 
-  // 11. Task-specific prompt from global templates
+  // 11. Agent Memory – context from previous analyses
+  if (supabase) {
+    try {
+      const { data: memories } = await supabase
+        .from('agent_memory')
+        .select('memory_type, content, updated_at')
+        .eq('project_id', project.id)
+        .order('updated_at', { ascending: false });
+
+      if (memories && memories.length > 0) {
+        parts.push('\n---\nAGENT MEMORY (tvé předchozí analýzy a poznatky):');
+        for (const mem of memories) {
+          const age = Math.round((Date.now() - new Date(mem.updated_at).getTime()) / (1000 * 60 * 60));
+          parts.push(`\n[${mem.memory_type}] (před ${age}h):`);
+          const content = mem.content as Record<string, unknown>;
+          // Compact summary per type
+          switch (mem.memory_type) {
+            case 'kb_gaps':
+              if (content.suggestions) parts.push(`  Doporučení: ${JSON.stringify(content.suggestions)}`);
+              if (content.completeness_score) parts.push(`  Kompletnost KB: ${content.completeness_score}/10`);
+              break;
+            case 'mix_correction':
+              if (content.next_type) parts.push(`  Doporučený další typ: ${content.next_type}`);
+              if (content.recommendation) parts.push(`  Doporučení: ${JSON.stringify(content.recommendation)}`);
+              break;
+            case 'performance_insights':
+              if (content.summary) parts.push(`  Shrnutí: ${content.summary}`);
+              if (content.recommendations) parts.push(`  Doporučení: ${JSON.stringify(content.recommendations)}`);
+              break;
+            case 'schedule_optimization':
+              if (content.best_times) parts.push(`  Nejlepší časy: ${JSON.stringify(content.best_times)}`);
+              break;
+            case 'week_plan':
+              parts.push(`  Aktuální plán: ${JSON.stringify(content.plan)}`);
+              break;
+            case 'suggested_topics':
+              parts.push(`  Navržená témata: ${JSON.stringify(content.topics)}`);
+              break;
+            case 'sentiment_report':
+              if (content.issues) parts.push(`  Problémy: ${JSON.stringify(content.issues)}`);
+              break;
+            default:
+              parts.push(`  ${JSON.stringify(content).substring(0, 200)}`);
+          }
+        }
+        parts.push('\nVyužij tyto poznatky při generování. Reaguj na doporučení z předchozích analýz.');
+      }
+    } catch {
+      // agent_memory table may not exist yet
+    }
+  }
+
+  // 12. Task-specific prompt from global templates
   const taskPromptMap: Record<string, string> = {
     generate_content: 'system_role',
     generate_week_plan: 'agent_week_planner',
@@ -472,6 +524,223 @@ function parseAIResponse(rawResponse: string): Record<string, unknown> {
 }
 
 // ============================================
+// Agent: Post-processing – Hugo acts on task results
+// ============================================
+
+async function processTaskResult(
+  task: Record<string, unknown>,
+  result: Record<string, unknown>,
+  ctx: ProjectContext,
+): Promise<void> {
+  if (!supabase) return;
+  const projectId = task.project_id as string;
+  const taskType = task.task_type as string;
+  const params = (task.params as Record<string, unknown>) || {};
+
+  try {
+    switch (taskType) {
+      // ---- SUGGEST TOPICS → create generate_content tasks ----
+      case 'suggest_topics': {
+        const topics = result.topics as Array<Record<string, unknown>> | undefined;
+        if (topics && topics.length > 0) {
+          const platforms = (ctx.project.platforms as string[]) || ['facebook'];
+          const platform = (params.platform as string) || platforms[0];
+          // Create a generate_content task for each topic (max 5)
+          for (const topic of topics.slice(0, 5)) {
+            const topicTitle = (topic.title || topic.topic || '') as string;
+            if (!topicTitle) continue;
+            await createTask(projectId, 'generate_content', {
+              platform,
+              human_topic: topicTitle,
+              human_notes: (topic.description || topic.angle || '') as string,
+              contentType: (topic.content_type || 'educational') as string,
+              source: 'agent_suggest_topics',
+            }, { priority: 4 });
+          }
+          // Save to agent_memory for context
+          await upsertAgentMemory(projectId, 'suggested_topics', {
+            topics: topics.slice(0, 5).map(t => ({
+              title: t.title || t.topic,
+              type: t.content_type || 'educational',
+            })),
+            generated_at: new Date().toISOString(),
+          });
+        }
+        break;
+      }
+
+      // ---- WEEK PLAN → schedule tasks across the week ----
+      case 'generate_week_plan': {
+        const weekPlan = result.week_plan as Array<Record<string, unknown>> | undefined;
+        const plan = weekPlan || result.plan as Array<Record<string, unknown>> | undefined;
+        if (plan && plan.length > 0) {
+          const platforms = (ctx.project.platforms as string[]) || ['facebook'];
+          const orchConfig = (ctx.project.orchestrator_config as Record<string, unknown>) || {};
+          const postingHours = (orchConfig.posting_hours as number[]) || [9, 12, 17];
+
+          for (const day of plan) {
+            const dayName = (day.day || day.date || '') as string;
+            const topic = (day.topic || day.title || '') as string;
+            const contentType = (day.content_type || day.type || 'educational') as string;
+            const platform = (day.platform as string) || platforms[0];
+            if (!topic) continue;
+
+            // Calculate scheduled_for based on day name
+            const scheduledDate = resolveDayToDate(dayName, postingHours[0] || 9);
+            if (!scheduledDate) continue;
+
+            await createTask(projectId, 'generate_content', {
+              platform,
+              human_topic: topic,
+              contentType,
+              source: 'agent_week_plan',
+            }, {
+              priority: 3,
+              scheduledFor: scheduledDate.toISOString(),
+            });
+          }
+          // Save plan to memory
+          await upsertAgentMemory(projectId, 'week_plan', {
+            plan: plan.slice(0, 7),
+            generated_at: new Date().toISOString(),
+          });
+        }
+        break;
+      }
+
+      // ---- KB GAP ANALYSIS → save insights to memory ----
+      case 'kb_gap_analysis': {
+        const gaps = result.gaps as Array<Record<string, unknown>> | undefined;
+        const suggestions = result.suggestions as string[] | undefined;
+        await upsertAgentMemory(projectId, 'kb_gaps', {
+          gaps: gaps?.slice(0, 10) || [],
+          suggestions: suggestions?.slice(0, 10) || [],
+          weak_entries: result.weak_entries || [],
+          completeness_score: result.completeness_score || null,
+          analyzed_at: new Date().toISOString(),
+        });
+        break;
+      }
+
+      // ---- CONTENT MIX ANALYSIS → save correction to memory ----
+      case 'analyze_content_mix': {
+        await upsertAgentMemory(projectId, 'mix_correction', {
+          current_mix: result.current_mix || result.actual_mix || {},
+          target_mix: result.target_mix || {},
+          recommendation: result.recommendation || result.recommendations || null,
+          next_type: result.next_recommended_type || result.suggested_next || null,
+          analyzed_at: new Date().toISOString(),
+        });
+        break;
+      }
+
+      // ---- OPTIMIZE SCHEDULE → update orchestrator_config posting hours ----
+      case 'optimize_schedule': {
+        const bestTimes = result.best_times || result.optimal_times || result.recommended_times;
+        if (bestTimes) {
+          // Save to memory (don't auto-update config without admin approval)
+          await upsertAgentMemory(projectId, 'schedule_optimization', {
+            best_times: bestTimes,
+            timezone: result.timezone || 'Europe/Prague',
+            analyzed_at: new Date().toISOString(),
+          });
+        }
+        break;
+      }
+
+      // ---- PERFORMANCE REPORT → save metrics to memory ----
+      case 'performance_report': {
+        await upsertAgentMemory(projectId, 'performance_insights', {
+          summary: result.summary || null,
+          metrics: result.metrics || {},
+          trends: result.trends || [],
+          recommendations: result.recommendations || [],
+          analyzed_at: new Date().toISOString(),
+        });
+        break;
+      }
+
+      // ---- SENTIMENT CHECK → flag posts if negative ----
+      case 'sentiment_check': {
+        const sentiment = result.sentiment || result.overall_sentiment;
+        const score = result.score || result.sentiment_score;
+        await upsertAgentMemory(projectId, 'sentiment_report', {
+          sentiment,
+          score,
+          issues: result.issues || result.flags || [],
+          analyzed_at: new Date().toISOString(),
+        });
+        break;
+      }
+    }
+  } catch (err) {
+    // Post-processing failure should not fail the task
+    await supabase.from('agent_log').insert({
+      project_id: projectId,
+      task_id: task.id as string,
+      action: 'post_processing_error',
+      details: { task_type: taskType, error: err instanceof Error ? err.message : 'Unknown' },
+    });
+  }
+}
+
+// ---- Agent Memory: upsert (one entry per project+type) ----
+async function upsertAgentMemory(
+  projectId: string,
+  memoryType: string,
+  content: Record<string, unknown>,
+): Promise<void> {
+  if (!supabase) return;
+
+  // Check if memory exists
+  const { data: existing } = await supabase
+    .from('agent_memory')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('memory_type', memoryType)
+    .single();
+
+  if (existing) {
+    await supabase.from('agent_memory')
+      .update({ content, updated_at: new Date().toISOString() })
+      .eq('id', existing.id);
+  } else {
+    await supabase.from('agent_memory').insert({
+      project_id: projectId,
+      memory_type: memoryType,
+      content,
+    });
+  }
+}
+
+// ---- Resolve day name to actual Date ----
+function resolveDayToDate(dayName: string, hour: number): Date | null {
+  const dayMap: Record<string, number> = {
+    'pondělí': 1, 'monday': 1, 'po': 1,
+    'úterý': 2, 'tuesday': 2, 'út': 2,
+    'středa': 3, 'wednesday': 3, 'st': 3,
+    'čtvrtek': 4, 'thursday': 4, 'čt': 4,
+    'pátek': 5, 'friday': 5, 'pá': 5,
+    'sobota': 6, 'saturday': 6, 'so': 6,
+    'neděle': 0, 'sunday': 0, 'ne': 0,
+  };
+
+  const normalized = dayName.toLowerCase().trim();
+  const targetDay = dayMap[normalized];
+  if (targetDay === undefined) return null;
+
+  const now = new Date();
+  const currentDay = now.getDay();
+  let daysAhead = targetDay - currentDay;
+  if (daysAhead <= 0) daysAhead += 7; // Next week
+
+  const date = new Date(now);
+  date.setDate(date.getDate() + daysAhead);
+  date.setHours(hour, 0, 0, 0);
+  return date;
+}
+
+// ============================================
 // Agent: Execute task (with auto-retry + editor)
 // ============================================
 
@@ -650,6 +919,9 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
 
     // Clean up internal fields before storing
     delete result._resolved_content_type;
+
+    // ---- Post-processing: Hugo acts on results ----
+    await processTaskResult(task, result, ctx);
 
     // ---- Log ----
     await supabase.from('agent_log').insert({

@@ -204,6 +204,31 @@ export function ProjectsView() {
               <span>•</span>
               <span className="capitalize">{project.mood_settings.style}</span>
             </div>
+
+            {/* Orchestrator config summary */}
+            {!!(project.orchestrator_config as Record<string, unknown>)?.enabled && (() => {
+              const oc = project.orchestrator_config as Record<string, unknown>;
+              const freqMap: Record<string, string> = { '2x_daily': '2x denne', 'daily': 'denne', '3x_week': '3x tydne', 'weekly': 'tydne' };
+              return (
+                <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-slate-800">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                    {freqMap[(oc.posting_frequency as string)] || String(oc.posting_frequency || 'daily')}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                    {((oc.posting_times as string[]) || []).join(', ')}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                    max {(oc.max_posts_per_day as number) || 2}/den
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${oc.auto_publish ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
+                    {oc.auto_publish ? `auto ≥${oc.auto_publish_threshold}` : 'manual review'}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                    media: {(oc.media_strategy as string) || 'auto'}
+                  </span>
+                </div>
+              );
+            })()}
           </button>
         ))}
       </div>

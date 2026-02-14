@@ -99,6 +99,8 @@ export async function GET() {
 
       const vi = (p.visual_identity as Record<string, string>) || {};
 
+      const oc = (p.orchestrator_config as Record<string, unknown>) || {};
+
       return {
         id: pid,
         name: p.name,
@@ -113,7 +115,15 @@ export async function GET() {
         total_posts: pReview.length + pApproved.length + pSent.length + pScheduled.length,
         avg_score: avgScore ? Math.round(avgScore * 10) / 10 : null,
         media_count: pMedia.length,
-        orchestrator_enabled: !!(p.orchestrator_config as Record<string, unknown>)?.enabled,
+        orchestrator_enabled: !!oc.enabled,
+        posting_frequency: (oc.posting_frequency as string) || 'daily',
+        posting_times: (oc.posting_times as string[]) || ['09:00', '15:00'],
+        max_posts_per_day: (oc.max_posts_per_day as number) || 2,
+        auto_publish: !!oc.auto_publish,
+        auto_publish_threshold: (oc.auto_publish_threshold as number) || 8.5,
+        media_strategy: (oc.media_strategy as string) || 'auto',
+        content_strategy: (oc.content_strategy as string) || '4-1-1',
+        pause_weekends: !!oc.pause_weekends,
       };
     });
 

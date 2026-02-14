@@ -31,7 +31,23 @@ interface ProjectStat {
   avg_score: number | null;
   media_count: number;
   orchestrator_enabled: boolean;
+  posting_frequency: string;
+  posting_times: string[];
+  max_posts_per_day: number;
+  auto_publish: boolean;
+  auto_publish_threshold: number;
+  media_strategy: string;
+  content_strategy: string;
+  pause_weekends: boolean;
 }
+
+const FREQ_LABELS: Record<string, string> = {
+  '2x_daily': '2x denne',
+  'daily': 'denne',
+  '3x_week': '3x tydne',
+  'weekly': 'tydne',
+  'custom': 'vlastni',
+};
 
 interface MediaStats {
   total: number;
@@ -313,67 +329,99 @@ export function DashboardView() {
           ) : (
             <div className="divide-y divide-slate-800">
               {projectStats.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800/30 transition-colors">
-                  {/* Logo / color dot */}
-                  <div className="flex-shrink-0">
-                    {p.logo_url ? (
-                      <img src={p.logo_url} alt="" className="w-9 h-9 rounded-lg object-cover" />
-                    ) : (
-                      <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-xs font-bold"
-                        style={{ backgroundColor: p.primary_color || '#6d28d9' }}
-                      >
-                        {p.name.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Name + platforms */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-white truncate">{p.name}</span>
-                      {p.orchestrator_enabled && (
-                        <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-medium">AUTO</span>
+                <div key={p.id} className="px-4 py-3 hover:bg-slate-800/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    {/* Logo / color dot */}
+                    <div className="flex-shrink-0">
+                      {p.logo_url ? (
+                        <img src={p.logo_url} alt="" className="w-9 h-9 rounded-lg object-cover" />
+                      ) : (
+                        <div
+                          className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-xs font-bold"
+                          style={{ backgroundColor: p.primary_color || '#6d28d9' }}
+                        >
+                          {p.name.charAt(0).toUpperCase()}
+                        </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      {p.platforms.map((pl: string) => (
-                        <span key={pl} className="text-[10px] text-slate-500">{pl}</span>
-                      ))}
+
+                    {/* Name + platforms */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-white truncate">{p.name}</span>
+                        {p.orchestrator_enabled ? (
+                          <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-medium">AUTO</span>
+                        ) : (
+                          <span className="text-[9px] bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded font-medium">OFF</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {p.platforms.map((pl: string) => (
+                          <span key={pl} className="text-[10px] text-slate-500">{pl}</span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="text-center">
+                        <div className="text-white font-semibold">{p.total_posts}</div>
+                        <div className="text-[10px] text-slate-500">postu</div>
+                      </div>
+                      {p.review > 0 && (
+                        <div className="text-center">
+                          <div className="text-amber-400 font-semibold">{p.review}</div>
+                          <div className="text-[10px] text-slate-500">review</div>
+                        </div>
+                      )}
+                      <div className="text-center">
+                        <div className="text-emerald-400 font-semibold">{p.sent}</div>
+                        <div className="text-[10px] text-slate-500">sent</div>
+                      </div>
+                      {p.avg_score && (
+                        <div className="text-center">
+                          <div className={`font-semibold ${p.avg_score >= 8 ? 'text-emerald-400' : p.avg_score >= 6 ? 'text-amber-400' : 'text-red-400'}`}>
+                            {p.avg_score}
+                          </div>
+                          <div className="text-[10px] text-slate-500">score</div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Stats */}
-                  <div className="flex items-center gap-4 text-xs">
-                    <div className="text-center">
-                      <div className="text-white font-semibold">{p.total_posts}</div>
-                      <div className="text-[10px] text-slate-500">postů</div>
+                  {/* Orchestrator config row */}
+                  {p.orchestrator_enabled && (
+                    <div className="flex items-center gap-3 mt-2 ml-12 flex-wrap">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                        {FREQ_LABELS[p.posting_frequency] || p.posting_frequency}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                        {p.posting_times.join(', ')}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                        max {p.max_posts_per_day}/den
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                        {p.content_strategy}
+                      </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${p.auto_publish ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
+                        {p.auto_publish ? `auto-publish ≥${p.auto_publish_threshold}` : 'manual review'}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                        media: {p.media_strategy}
+                      </span>
+                      {p.pause_weekends && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-500">
+                          pause weekends
+                        </span>
+                      )}
+                      {p.media_count > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">
+                          {p.media_count} medii
+                        </span>
+                      )}
                     </div>
-                    {p.review > 0 && (
-                      <div className="text-center">
-                        <div className="text-amber-400 font-semibold">{p.review}</div>
-                        <div className="text-[10px] text-slate-500">review</div>
-                      </div>
-                    )}
-                    <div className="text-center">
-                      <div className="text-emerald-400 font-semibold">{p.sent}</div>
-                      <div className="text-[10px] text-slate-500">odesláno</div>
-                    </div>
-                    {p.avg_score && (
-                      <div className="text-center">
-                        <div className={`font-semibold ${p.avg_score >= 8 ? 'text-emerald-400' : p.avg_score >= 6 ? 'text-amber-400' : 'text-red-400'}`}>
-                          {p.avg_score}
-                        </div>
-                        <div className="text-[10px] text-slate-500">skóre</div>
-                      </div>
-                    )}
-                    {p.media_count > 0 && (
-                      <div className="text-center">
-                        <div className="text-blue-400 font-semibold">{p.media_count}</div>
-                        <div className="text-[10px] text-slate-500">médií</div>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -204,6 +204,18 @@ export function ReviewView() {
                 {selected.has(item.id) && <Check className="w-3 h-3 text-white" />}
               </button>
 
+              {/* Thumbnail – matched photo */}
+              {(item.image_url || item.chart_url || item.card_url) && (
+                <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-slate-700 bg-slate-800">
+                  <img
+                    src={item.image_url || item.chart_url || item.card_url || ''}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1.5">
@@ -216,6 +228,9 @@ export function ReviewView() {
                   ))}
                   {item.image_url && (
                     <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-xs text-emerald-400">📷 foto</span>
+                  )}
+                  {!item.image_url && item.image_prompt && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-xs text-amber-400">🎨 prompt</span>
                   )}
                 </div>
 

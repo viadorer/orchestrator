@@ -499,9 +499,12 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
     task_id: taskId,
     action: 'task_status_debug',
     details: {
+      task_id_used: taskId,
+      task_id_type: typeof taskId,
       target_status: 'running',
       rows_affected: runningData?.length ?? 0,
       new_status: runningData?.[0]?.status ?? null,
+      returned_id: runningData?.[0]?.id ?? null,
       error: runningError?.message ?? null,
       error_code: runningError?.code ?? null,
     },

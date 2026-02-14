@@ -14,14 +14,17 @@ import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { generateChartUrl, CHART_TEMPLATES, type ChartData, type VisualIdentity } from './quickchart';
 import { generateAndStoreImage, buildCleanImagePrompt } from './imagen';
+import { generateMediaEmbedding } from '@/lib/ai/vision-engine';
+import { supabase } from '@/lib/supabase/client';
 
 export interface VisualAssets {
-  visual_type: 'chart' | 'card' | 'photo' | 'generated_photo' | 'none';
+  visual_type: 'chart' | 'card' | 'photo' | 'generated_photo' | 'matched_photo' | 'none';
   chart_url: string | null;
   card_url: string | null;
   image_prompt: string | null;
   generated_image_url?: string | null;
   media_asset_id?: string | null;
+  match_similarity?: number;
 }
 
 interface VisualContext {
@@ -200,9 +203,60 @@ function generateCardVisual(
   };
 }
 
+// ============================================
+// Media Library matching (pgvector similarity)
+// ============================================
+
+const MATCH_THRESHOLD = 0.45; // Minimum similarity to use a library photo
+
+async function matchMediaFromLibrary(
+  projectId: string,
+  postText: string,
+  imagePrompt: string,
+  platform: string,
+): Promise<{ public_url: string; asset_id: string; similarity: number } | null> {
+  if (!supabase) return null;
+
+  try {
+    // Generate embedding from post text + image prompt
+    const searchText = `${postText.substring(0, 200)} ${imagePrompt}`;
+    const embedding = await generateMediaEmbedding(searchText, []);
+    if (!embedding) return null;
+
+    // Call pgvector RPC
+    const { data, error } = await supabase.rpc('match_media_assets', {
+      query_embedding: JSON.stringify(embedding),
+      match_project_id: projectId,
+      match_threshold: MATCH_THRESHOLD,
+      match_count: 3,
+      filter_file_type: 'image',
+      exclude_recently_used: true,
+    });
+
+    if (error || !data || data.length === 0) return null;
+
+    const best = data[0];
+    console.log(`[visual-agent] Media match: ${best.file_name} (similarity: ${best.similarity.toFixed(3)}, quality: ${best.ai_quality_score})`);
+
+    // Increment usage counter
+    await supabase.rpc('increment_media_usage', { asset_id: best.id });
+
+    return {
+      public_url: best.public_url,
+      asset_id: best.id,
+      similarity: best.similarity,
+    };
+  } catch (err) {
+    console.error('[visual-agent] Media match error:', err);
+    return null;
+  }
+}
+
 /**
- * Generate photo visual using Imagen 4 API
- * Falls back to image_prompt text if Imagen fails or projectId not provided
+ * Generate photo visual:
+ * 1. Try matching from Media Library (pgvector)
+ * 2. If no match → generate with Imagen 4
+ * 3. Fallback → return image_prompt text only
  */
 async function generatePhotoVisual(
   decision: { image_prompt?: string },
@@ -231,7 +285,23 @@ async function generatePhotoVisual(
     };
   }
 
-  // Generate with Imagen 4 and store in Supabase
+  // Step 1: Try Media Library match (pgvector)
+  const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform);
+  if (match) {
+    console.log(`[visual-agent] Using library photo (similarity: ${match.similarity.toFixed(3)})`);
+    return {
+      visual_type: 'matched_photo',
+      chart_url: null,
+      card_url: null,
+      image_prompt: cleanPrompt,
+      generated_image_url: match.public_url,
+      media_asset_id: match.asset_id,
+      match_similarity: match.similarity,
+    };
+  }
+
+  // Step 2: Generate with Imagen 4
+  console.log('[visual-agent] No library match, generating with Imagen 4...');
   const result = await generateAndStoreImage({
     projectId: ctx.projectId,
     imagePrompt: cleanPrompt,
@@ -250,7 +320,7 @@ async function generatePhotoVisual(
     };
   }
 
-  // Fallback: return prompt text only
+  // Step 3: Fallback — return prompt text only
   return {
     visual_type: 'photo',
     chart_url: null,

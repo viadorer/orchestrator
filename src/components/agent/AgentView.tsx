@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Bot, Play, Loader2, CheckCircle, XCircle, Clock, AlertTriangle,
   Sparkles, Calendar, Brain, Shield, TrendingUp, BookOpen,
-  ChevronDown, ChevronUp, Zap, Activity, RotateCcw, Trash2,
+  ChevronDown, ChevronUp, Zap, Activity, RotateCcw, Trash2, Map,
 } from 'lucide-react';
+import { AgentDiagram } from './AgentDiagram';
 
 interface Project {
   id: string;
@@ -83,6 +84,7 @@ export function AgentView() {
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState(false);
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all');
+  const [agentTab, setAgentTab] = useState<'tasks' | 'diagram'>('tasks');
 
   const filteredTasks = taskFilter === 'all' ? tasks : tasks.filter(t => t.status === taskFilter);
 
@@ -237,6 +239,25 @@ export function AgentView() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Tab switcher */}
+          <div className="flex gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+            <button
+              onClick={() => setAgentTab('tasks')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                agentTab === 'tasks' ? 'bg-violet-600/20 text-violet-300' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" /> Úkoly
+            </button>
+            <button
+              onClick={() => setAgentTab('diagram')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                agentTab === 'diagram' ? 'bg-violet-600/20 text-violet-300' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Map className="w-3.5 h-3.5" /> Architektura
+            </button>
+          </div>
           {/* Project selector */}
           <select
             value={selectedProject}
@@ -262,6 +283,11 @@ export function AgentView() {
         </div>
       </div>
 
+      {/* Diagram tab */}
+      {agentTab === 'diagram' && <AgentDiagram />}
+
+      {/* Tasks tab */}
+      {agentTab === 'tasks' && <>
       {/* Health card */}
       {health && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6">
@@ -484,6 +510,7 @@ export function AgentView() {
           </div>
         </div>
       </div>
+      </>}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, Search, ExternalLink, Pencil, BookOpen, Trash2, X, Save,
-  ArrowLeft, Share2, Palette, BarChart3, ShieldAlert, Type, Sliders, FileText, Image, Rss, MessageCircle,
+  ArrowLeft, Share2, Palette, BarChart3, ShieldAlert, Type, Sliders, FileText, Image, Rss, MessageCircle, Bot,
 } from 'lucide-react';
 import { ProjectPrompts } from './ProjectPrompts';
 import { MediaLibrary } from './MediaLibrary';
@@ -168,9 +168,17 @@ export function ProjectsView() {
                 <h3 className="font-semibold text-white group-hover:text-violet-300 transition-colors">{project.name}</h3>
                 <p className="text-xs text-slate-500 mt-0.5">{project.slug}</p>
               </div>
-              {project.late_social_set_id && (
-                <ExternalLink className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-              )}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {!!(project.orchestrator_config as Record<string, unknown>)?.enabled && (
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30" title="Hugo Agent aktivní">
+                    <Bot className="w-3.5 h-3.5 text-emerald-400" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  </div>
+                )}
+                {project.late_social_set_id && (
+                  <ExternalLink className="w-4 h-4 text-emerald-500" />
+                )}
+              </div>
             </div>
 
             {project.description && (

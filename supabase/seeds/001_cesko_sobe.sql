@@ -133,29 +133,59 @@ INSERT INTO knowledge_base (project_id, category, title, content, is_active) VAL
 ('a1b2c3d4-0001-4000-8000-000000000001', 'faq', 'Jak se liší ČeskoSobě od finančních poradců?',
 'Finanční poradci prodávají produkty a berou provize. ČeskoSobě je komunita, která sdílí zkušenosti. Žádné provize, žádné produkty. Jen fakta, čísla a vzájemná podpora.', true);
 
--- ---- GENERAL (Demografická data) ----
+-- ---- DATA (Čísla & Statistiky – Hugo rotuje mezi záznamy) ----
 
 INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
-('a1b2c3d4-0001-4000-8000-000000000001', 'general', 'Porodnost v ČR 2024',
-'V roce 2024 se v ČR rodí průměrně 1,37 dítěte na jednu ženu. Pro udržení populace je potřeba 2,1. Pokles z 1,83 v roce 2021 – trend je prudce sestupný. Zdroj: ČSÚ.', true),
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Porodnost v ČR 2024',
+'1,37 dítěte na ženu (2024). Pro udržení populace je potřeba 2,1. Pokles z 1,83 v roce 2021 – trend je prudce sestupný. Zdroj: ČSÚ.', true),
 
-('a1b2c3d4-0001-4000-8000-000000000001', 'general', 'Poměr pracujících k důchodcům',
-'V roce 2050 budou na jednoho důchodce pracovat pouze 2 lidé. Dnes jsou to přibližně 3 pracující na jednoho seniora. Průběžný systém financování důchodů to neunese.', true),
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Prostá reprodukce',
+'2,1 dítěte na ženu – tolik je potřeba pro prostou reprodukci populace. ČR je na 1,37. Deficit: 0,73 dítěte na ženu. Každý rok se prohlubuje.', true),
 
-('a1b2c3d4-0001-4000-8000-000000000001', 'general', 'Stárnutí populace 2050',
-'V roce 2050 bude 30 % české populace starší 65 let. Dnes je to 21 %. Z 2,26 milionu na více než 3 miliony seniorů za jednu generaci.', true),
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Poměr pracujících k důchodcům',
+'V roce 2050 budou na jednoho důchodce pracovat pouze 2 lidé (poměr 2:1). Dnes jsou to přibližně 3 pracující na jednoho seniora (3:1). Průběžný systém financování důchodů to neunese.', true),
 
-('a1b2c3d4-0001-4000-8000-000000000001', 'general', 'Průměrný důchod 2024',
-'Průměrný starobní důchod v ČR v roce 2024 činí 20 736 Kč měsíčně. A to ještě systém relativně funguje. S klesající porodností a stárnoucí populací bude tlak na snižování reálné hodnoty důchodů narůstat.', true),
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Stárnutí populace 2050',
+'30 % české populace bude v roce 2050 starší 65 let. Dnes je to 21,1 %. Z 2,26 milionu na více než 3 miliony seniorů za jednu generaci.', true),
 
-('a1b2c3d4-0001-4000-8000-000000000001', 'general', 'Celosvětový problém',
-'Demografický problém není jen český. Stejnou situaci řeší Německo (1,35), Japonsko (1,20), Itálie (1,24), Jižní Korea (0,72). Nikde na světě to za občany nevyřeší stát. Řešení je vždy na jednotlivci.', true),
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Průměrný důchod 2024',
+'20 736 Kč – průměrný starobní důchod v ČR (2024). S klesající porodností a stárnoucí populací bude tlak na snižování reálné hodnoty důchodů narůstat.', true),
 
-('a1b2c3d4-0001-4000-8000-000000000001', 'general', 'Nemovitosti vs inflace',
-'Nemovitosti v ČR historicky rostou rychleji než inflace. Průměrný roční růst cen bytů v ČR za posledních 10 let: cca 8–10 %. Inflace za stejné období: cca 3–5 % (mimo výjimečný rok 2022). Nemovitost je přirozený hedge proti inflaci.', true),
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Náhradový poměr',
+'45 % – současný poměr důchodu k průměrné mzdě (tzv. náhradový poměr). To znamená, že důchodce dostane méně než polovinu toho, co vydělával.', true),
 
-('a1b2c3d4-0001-4000-8000-000000000001', 'general', 'Hypotéka splácená nájmem',
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Cena bytu vs průměrný plat',
+'13,3 průměrných ročních platů – tolik stojí průměrný byt v ČR. Jeden z nejhorších poměrů v EU. Pro ty, kdo nezačnou včas, se vlastní bydlení v důchodu stává nedostupným luxusem.', true),
+
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Inflační cíl a úspory',
+'2 % – dlouhodobý inflační cíl ČNB. Peníze pod polštářem ztratí polovinu hodnoty za 25–30 let. Spoření bez investování je pomalá ztráta.', true),
+
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Věk dožití ČR',
+'76,1 let muži / 82,1 let ženy – průměrný věk dožití v ČR. Lidé v důchodovém systému zůstávají déle. Systém musí vyplácet déle, ale přispívá do něj méně lidí.', true),
+
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Životní úroveň seniora: vlastní vs nájem',
+'+20 % až +50 % – odhadovaný rozdíl v životní úrovni seniora ve vlastním bydlení vs. v nájmu. Kdo nemá splacený byt, platí z důchodu nájem. Kdo má, žije důstojněji.', true),
+
+('a1b2c3d4-0001-4000-8000-000000000001', 'data', 'Celosvětový demografický problém',
+'Demografický problém není jen český. Německo: 1,35. Japonsko: 1,20. Itálie: 1,24. Jižní Korea: 0,72. Nikde na světě to za občany nevyřeší stát. Řešení je vždy na jednotlivci.', true);
+
+-- ---- MARKET (Trh & Trendy) ----
+
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('a1b2c3d4-0001-4000-8000-000000000001', 'market', 'Nemovitosti vs inflace',
+'Nemovitosti v ČR historicky rostou rychleji než inflace. Průměrný roční růst cen bytů za posledních 10 let: cca 8–10 %. Inflace za stejné období: cca 3–5 % (mimo výjimečný rok 2022). Nemovitost je přirozený hedge proti inflaci.', true),
+
+('a1b2c3d4-0001-4000-8000-000000000001', 'market', 'Hypotéka splácená nájmem',
 'Průměrný nájem 2+kk v krajském městě ČR: 14 000–18 000 Kč/měsíc. Průměrná splátka hypotéky na 2+kk (80 % LTV, 30 let): 12 000–16 000 Kč/měsíc. Nájem pokryje splátku. Po splacení hypotéky máte byt a čistý měsíční příjem.', true);
+
+-- ---- PROCESS (Jak to funguje) ----
+
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('a1b2c3d4-0001-4000-8000-000000000001', 'process', 'Cesta k investiční nemovitosti',
+'5 kroků: 1) Porozumět číslům (demografie, důchody). 2) Spočítat si vlastní situaci. 3) Naspořit vlastní zdroje (min. 20 % ceny). 4) Vybrat lokalitu s dobrým poměrem cena/nájem. 5) Hypotéka, kterou splácí nájemník.', true),
+
+('a1b2c3d4-0001-4000-8000-000000000001', 'process', 'Jak funguje splácení nájmem',
+'Koupíte byt na hypotéku. Pronajmete ho. Nájemník platí nájem, který pokrývá splátku hypotéky. Po 25–30 letech máte splacený byt a čistý měsíční příjem z nájmu. Celou dobu roste hodnota nemovitosti.', true);
 
 -- ---- CASE STUDY ----
 
@@ -268,26 +298,34 @@ TÓNOVÝ KOMPAS:
 -- ---- GUARDRAIL: Fakta ----
 
 ('a1b2c3d4-0001-4000-8000-000000000001', 'guardrail_facts', 'guardrail',
-'GUARDRAIL FAKTŮ:
-- NIKDY nevymýšlej čísla. Používej POUZE data z Knowledge Base.
-- Pokud si nejsi jistý číslem, NEPOUŽIJ ho.
-- Každé tvrzení musí být podložitelné.
-- Neříkej "zaručeně", "určitě", "vždy". Říkej "historicky", "v průměru", "podle dat".
+'GUARDRAIL PRÁCE S FAKTY A DATY
 
-POVINNÁ ČÍSLA (použij alespoň jedno v každém postu):
-- 1,37 dítěte na ženu (2024)
-- 2,1 potřeba pro udržení populace
-- 2:1 poměr pracujících k důchodcům v 2050
-- 30 % populace nad 65 let v 2050
-- 20 736 Kč průměrný důchod
-- 3:1 dnešní poměr pracujících k důchodcům
+1. ZDROJE DAT:
+   - Používej VÝHRADNĚ čísla z Knowledge Base nebo ověřených RSS novinek.
+   - NIKDY si nevymýšlej čísla, statistiky ani procenta.
+   - Pokud si nejsi 100% jistý číslem, NEPOUŽIJ ho.
 
-ZAKÁZANÉ FORMULACE:
-- "Zaručený výnos" → "Historický průměrný růst"
-- "Bez rizika" → "S kalkulovaným rizikem"
-- "Vždy roste" → "Historicky rostla rychleji než inflace"
-- "Musíte investovat" → "Máte možnost jednat"',
-'Guardrail faktů – žádné vymýšlení, jen KB data', 35),
+2. DÁVKOVÁNÍ:
+   - Maximálně 1–2 čísla na post. Méně = více. Jeden úderný fakt je silnější než tři.
+   - Ne každý post potřebuje číslo. Střídej posty s čísly a posty bez nich.
+   - Číslo použij jen když přináší wow efekt nebo nový pohled.
+
+3. ROTACE:
+   - Nepoužívej stejné číslo ve dvou po sobě jdoucích postech.
+   - Střídej kategorie dat z KB (demografie, ekonomika, bydlení, trh).
+   - Zkontroluj nedávné posty – pokud číslo už bylo použito, vyber jiné.
+
+4. FORMULACE:
+   - NEŘÍKEJ: zaručeně, určitě, vždy, bez rizika, musíte
+   - ŘÍKEJ: historicky, v průměru, podle dat, máte možnost
+   - NEŘÍKEJ: pasivní příjem → ŘÍKEJ: pravidelný příjem nebo dodatečné zajištění
+   - NEŘÍKEJ: finanční svoboda → ŘÍKEJ: finanční soběstačnost
+   - NEŘÍKEJ: stát se o vás nepostará → ŘÍKEJ: role státu se nevyhnutelně promění
+
+5. PODLOŽITELNOST:
+   - Každé tvrzení musí být podložitelné faktem z KB.
+   - Pokud KB fakt nemá zdroj, formuluj opatrněji (data naznačují, odborníci uvádějí).',
+'Guardrail faktů – rotace, dávkování, žádné vymýšlení', 35),
 
 -- ---- GUARDRAIL: Politická neutralita ----
 

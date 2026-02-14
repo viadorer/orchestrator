@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { projectId, platform, contentType, patternId } = body;
+  const { projectId, platform, contentType, patternId, forcePhoto } = body;
 
   if (!projectId || !platform) {
     return NextResponse.json({ error: 'projectId and platform are required' }, { status: 400 });
@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       platform,
       contentType,
       patternId,
+      forcePhoto: !!forcePhoto,
     });
 
     // Resolve actual content_type (engine picks via 4-1-1 when auto)

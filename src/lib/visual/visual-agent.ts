@@ -35,12 +35,22 @@ interface VisualContext {
   kbEntries: Array<{ category: string; title: string; content: string }>;
   projectId?: string;
   logoUrl?: string | null;
+  forcePhoto?: boolean;
 }
 
 /**
  * Hugo decides what visual the post needs and generates it
  */
 export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAssets> {
+  // Force photo mode: skip Hugo's decision, generate image prompt and go straight to photo
+  if (ctx.forcePhoto) {
+    console.log('[visual-agent] forcePhoto mode — generating photo directly');
+    const decision = await decideVisualType(ctx);
+    // Use Hugo's image_prompt if available, otherwise generate a generic one
+    const imagePrompt = decision.image_prompt || `Professional photo related to: ${ctx.text.substring(0, 150)}`;
+    return generatePhotoVisual({ image_prompt: imagePrompt }, ctx);
+  }
+
   // Step 1: Ask Hugo what visual type this post needs
   const decision = await decideVisualType(ctx);
 

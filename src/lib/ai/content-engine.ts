@@ -39,6 +39,7 @@ export interface GenerateRequest {
   platform: string;
   contentType?: string;
   patternId?: string;
+  forcePhoto?: boolean;
 }
 
 /**
@@ -295,7 +296,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
   const mediaStrategy = (orchConfig.media_strategy as string) || 'auto';
 
   // Generate visual assets (chart/card/photo)
-  if (mediaStrategy !== 'none') {
+  if (mediaStrategy !== 'none' || req.forcePhoto) {
     try {
       const visualIdentity = (project.visual_identity as Record<string, string>) || {};
       const visual = await generateVisualAssets({
@@ -306,6 +307,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         kbEntries: ctx.kbEntries,
         projectId: req.projectId,
         logoUrl: (visualIdentity as Record<string, string>).logo_url || null,
+        forcePhoto: req.forcePhoto,
       });
       content.visual = visual;
     } catch {

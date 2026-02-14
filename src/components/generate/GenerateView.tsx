@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Sparkles, Loader2, Zap } from 'lucide-react';
+import { Sparkles, Loader2, Zap, ImageIcon } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -46,6 +46,7 @@ export function GenerateView() {
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [error, setError] = useState('');
   const [batchCount, setBatchCount] = useState(1);
+  const [forcePhoto, setForcePhoto] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -78,6 +79,7 @@ export function GenerateView() {
             platform: selectedPlatform,
             contentType: selectedType || undefined,
             patternId: selectedPattern || undefined,
+            forcePhoto,
           }),
         });
 
@@ -197,6 +199,28 @@ export function GenerateView() {
               ))}
             </select>
           </div>
+
+          {/* Force photo toggle */}
+          <button
+            type="button"
+            onClick={() => setForcePhoto(!forcePhoto)}
+            className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border transition-colors ${
+              forcePhoto
+                ? 'bg-violet-600/10 border-violet-500/40 text-violet-300'
+                : 'bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-700'
+            }`}
+          >
+            <ImageIcon className={`w-5 h-5 flex-shrink-0 ${forcePhoto ? 'text-violet-400' : 'text-slate-600'}`} />
+            <div className="text-left flex-1">
+              <div className="text-sm font-medium">Vynutit fotku</div>
+              <div className="text-[11px] opacity-70">
+                {forcePhoto ? 'Imagen 4 vygeneruje AI fotku ke každému příspěvku' : 'Hugo rozhodne, zda post potřebuje vizuál'}
+              </div>
+            </div>
+            <div className={`w-9 h-5 rounded-full transition-colors flex items-center ${forcePhoto ? 'bg-violet-500 justify-end' : 'bg-slate-700 justify-start'}`}>
+              <div className="w-4 h-4 rounded-full bg-white mx-0.5 shadow-sm" />
+            </div>
+          </button>
 
           {/* Batch count */}
           <div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, use } from 'react';
+import { MessageCircle, Send, Sparkles } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -13,6 +14,7 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [projectName, setProjectName] = useState('');
+  const [sampleQuestions, setSampleQuestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,6 +23,12 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
       .then(r => r.json())
       .then(d => setProjectName(d.name || 'Hugo'))
       .catch(() => setProjectName('Hugo'));
+
+    // Load sample questions from KB
+    fetch(`/api/chat/${projectId}/suggestions`)
+      .then(r => r.json())
+      .then(d => setSampleQuestions(d.questions || []))
+      .catch(() => setSampleQuestions([]));
   }, [projectId]);
 
   useEffect(() => {
@@ -70,9 +78,7 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 shadow-lg">
         <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
-          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
+          <MessageCircle className="w-5 h-5 text-white" />
         </div>
         <div>
           <div className="text-sm font-semibold">Hugo</div>
@@ -89,25 +95,25 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
         {messages.length === 0 && (
           <div className="text-center py-12">
             <div className="w-16 h-16 rounded-full bg-violet-600/20 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
+              <Sparkles className="w-8 h-8 text-violet-400" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-1">Ahoj! Jsem Hugo 👋</h3>
+            <h3 className="text-lg font-semibold text-white mb-1">Ahoj! Jsem Hugo</h3>
             <p className="text-sm text-slate-400 max-w-xs mx-auto">
               AI asistent {projectName ? `projektu ${projectName}` : ''}. Zeptejte se mě na cokoliv.
             </p>
-            <div className="mt-6 flex flex-wrap gap-2 justify-center">
-              {['Co je to ČeskoSobě?', 'Jak začít investovat?', 'Proč nájemní nemovitosti?'].map((q) => (
-                <button
-                  key={q}
-                  onClick={() => { setInput(q); }}
-                  className="px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
+            {sampleQuestions.length > 0 && (
+              <div className="mt-6 flex flex-wrap gap-2 justify-center">
+                {sampleQuestions.map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => { setInput(q); }}
+                    className="px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -162,9 +168,7 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
             disabled={!input.trim() || loading}
             className="flex-shrink-0 w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center text-white hover:bg-violet-500 disabled:opacity-40 disabled:hover:bg-violet-600 transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
+            <Send className="w-5 h-5" />
           </button>
         </div>
         <div className="text-center mt-2">

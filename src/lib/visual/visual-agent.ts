@@ -46,8 +46,6 @@ export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAs
 
   // Step 2: Generate the visual based on decision
   switch (decision.visual_type) {
-    case 'chart':
-      return generateChartVisual(decision, ctx);
     case 'card':
       return generateCardVisual(decision, ctx);
     case 'photo':
@@ -80,24 +78,19 @@ PROJEKT: ${ctx.projectName}
 PLATFORMA: ${ctx.platform}
 
 PRAVIDLA:
-- LinkedIn: Preferuj "card" (textová karta s velkým číslem) nebo "chart" (graf).
-- Instagram: VŽDY potřebuje vizuál. Preferuj "card" nebo "chart".
-- Facebook: "card" nebo "chart" pokud jsou čísla, jinak "none".
+- LinkedIn: Preferuj "card" (textová karta s velkým číslem) nebo "photo".
+- Instagram: VŽDY potřebuje vizuál. Preferuj "card" nebo "photo".
+- Facebook: "card" pokud jsou čísla, "photo" pro lifestyle, jinak "none".
 - X/Twitter: Většinou "none" (text stačí), "card" jen pro silná čísla.
 
 TYPY VIZUÁLŮ:
-1. "chart" – pokud post obsahuje SROVNÁNÍ čísel nebo TREND (např. porodnost klesá, poměr pracujících).
-   Dostupné šablony: workerRatio, fertilityRate, agingPopulation, pensionVsRent.
-   Nebo vlastní data pro graf.
-2. "card" – pokud post začíná VELKÝM ČÍSLEM (hook). Číslo se zobrazí velké na tmavém pozadí.
-3. "photo" – pokud post potřebuje realistickou fotku (lifestyle, architektura).
-4. "none" – pokud text funguje sám o sobě.
+1. "card" – pokud post začíná VELKÝM ČÍSLEM (hook). Číslo se zobrazí velké na tmavém pozadí.
+2. "photo" – pokud post potřebuje realistickou fotku (lifestyle, architektura, lidi).
+3. "none" – pokud text funguje sám o sobě.
 
 Vrať POUZE JSON:
 {
-  "visual_type": "chart|card|photo|none",
-  "template_key": "workerRatio|fertilityRate|agingPopulation|pensionVsRent|null",
-  "chart_data": { "type": "bar", "title": "...", "labels": [...], "datasets": [...] } | null,
+  "visual_type": "card|photo|none",
   "card_hook": "1,37" | null,
   "card_body": "dětí na ženu v ČR" | null,
   "card_subtitle": "Pro udržení populace je potřeba 2,1" | null,

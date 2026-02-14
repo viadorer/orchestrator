@@ -34,6 +34,18 @@ export async function POST(request: Request) {
       ai_scores: content.scores,
       status: 'review',
       source: 'ai_generated',
+      generation_context: {
+        content_type: contentType || 'auto',
+        platform,
+        pattern_id: patternId || null,
+        editor_used: !!content.editor_review,
+        editor_changes: content.editor_review?.changes || [],
+        media_matched: !!content.matched_media_id,
+        media_id: content.matched_media_id || null,
+        model: 'gemini-2.0-flash',
+        source: 'manual_ui',
+        timestamp: new Date().toISOString(),
+      },
     };
     if (content.matched_image_url) insertData.image_url = content.matched_image_url;
     if (content.matched_media_id) insertData.matched_media_id = content.matched_media_id;

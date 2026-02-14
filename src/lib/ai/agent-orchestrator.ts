@@ -922,6 +922,59 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         || (result._resolved_content_type as string)
         || 'educational';
 
+      // ---- Build generation_context (debug trace) ----
+      // Count loaded agent memories
+      let memoryTypesLoaded: string[] = [];
+      try {
+        if (supabase) {
+          const { data: mems } = await supabase
+            .from('agent_memory')
+            .select('memory_type')
+            .eq('project_id', task.project_id);
+          memoryTypesLoaded = (mems || []).map((m: { memory_type: string }) => m.memory_type);
+        }
+      } catch { /* ignore */ }
+
+      // Count news injected
+      let newsInjected = 0;
+      let newsTitles: string[] = [];
+      try {
+        const recentNews = await getRelevantNews(task.project_id as string, {
+          limit: 5, hoursBack: 72, minRelevance: 0.3, onlyUnused: true,
+        });
+        newsInjected = recentNews.length;
+        newsTitles = recentNews.map(n => n.title);
+      } catch { /* ignore */ }
+
+      const generationContext: Record<string, unknown> = {
+        task_id: taskId,
+        content_type: resolvedContentType,
+        content_type_reason: task.params?.contentType
+          ? 'explicit (human/task param)'
+          : `4-1-1 rule: ${resolvedContentType} selected by getNextContentType`,
+        platform,
+        kb_entries_used: ctx.kbEntries.length,
+        kb_categories: [...new Set(ctx.kbEntries.map(e => e.category))],
+        news_injected: newsInjected,
+        news_titles: newsTitles,
+        memory_types_loaded: memoryTypesLoaded,
+        dedup_posts_checked: ctx.recentPosts.length,
+        feedback_entries: ctx.feedbackHistory.length,
+        attempts,
+        editor_used: !!result.editor_review,
+        editor_changes: (result.editor_review as Record<string, unknown>)?.changes || [],
+        media_matched: !!matchedMediaId,
+        media_id: matchedMediaId,
+        media_strategy: mediaStrategy,
+        tokens_used: totalTokens,
+        model: 'gemini-2.0-flash',
+        temperature: 0.7 + (attempts > 1 ? attempts * 0.05 : 0),
+        auto_scheduled: !!task.params?.auto_scheduled,
+        human_topic: (task.params?.human_topic as string) || null,
+        source: (task.params?.source as string) || 'agent',
+        timestamp: new Date().toISOString(),
+      };
+
       // Save to content_queue – use only core columns first, add optional ones if available
       const coreInsert: Record<string, unknown> = {
         project_id: task.project_id,
@@ -932,6 +985,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         ai_scores: scores || {},
         status: postStatus,
         source: task.params?.human_topic ? 'human_priority' : 'ai_generated',
+        generation_context: generationContext,
       };
 
       // Try full insert with all optional columns

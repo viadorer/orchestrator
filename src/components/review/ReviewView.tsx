@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info } from 'lucide-react';
 import { PostPreview } from './PostPreview';
 
 interface QueueItem {
@@ -27,6 +27,7 @@ interface QueueItem {
   card_url?: string | null;
   editor_review?: Record<string, unknown> | null;
   image_url?: string | null;
+  generation_context?: Record<string, unknown> | null;
 }
 
 type SortBy = 'overall_asc' | 'overall_desc' | 'date_desc' | 'date_asc';
@@ -246,6 +247,11 @@ export function ReviewView() {
                   </div>
                 )}
 
+                {/* Generation context (debug trace) */}
+                {expanded === item.id && item.generation_context && (
+                  <GenerationContextPanel context={item.generation_context} />
+                )}
+
                 {/* Editor review details */}
                 {expanded === item.id && item.editor_review && (
                   <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
@@ -313,6 +319,60 @@ export function ReviewView() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ---- Generation Context Panel ---- */
+function GenerationContextPanel({ context }: { context: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false);
+
+  const items: Array<{ label: string; value: string; color?: string }> = [
+    { label: 'Zdroj', value: (context.source as string) || 'agent', color: context.source === 'manual_ui' ? 'text-blue-400' : 'text-violet-400' },
+    { label: 'Content type', value: `${context.content_type || '?'}`, color: 'text-white' },
+    { label: 'Důvod typu', value: (context.content_type_reason as string) || '–' },
+    { label: 'Platforma', value: (context.platform as string) || '–' },
+    { label: 'KB záznamy', value: `${context.kb_entries_used ?? '?'} (${(context.kb_categories as string[])?.join(', ') || '–'})` },
+    { label: 'Novinky', value: context.news_injected ? `${context.news_injected} (${(context.news_titles as string[])?.slice(0, 2).join(', ')})` : 'žádné' },
+    { label: 'Agent memory', value: (context.memory_types_loaded as string[])?.join(', ') || 'žádná' },
+    { label: 'Dedup postů', value: `${context.dedup_posts_checked ?? '?'}` },
+    { label: 'Feedback', value: `${context.feedback_entries ?? 0} úprav` },
+    { label: 'Pokusy', value: `${context.attempts ?? 1}` },
+    { label: 'Editor', value: context.editor_used ? `ano (${(context.editor_changes as string[])?.length || 0} změn)` : 'ne', color: context.editor_used ? 'text-emerald-400' : 'text-slate-500' },
+    { label: 'Média', value: context.media_matched ? `matched (${context.media_strategy})` : `ne (${context.media_strategy})`, color: context.media_matched ? 'text-emerald-400' : 'text-slate-500' },
+    { label: 'Tokeny', value: `${context.tokens_used ?? '?'}` },
+    { label: 'Model', value: (context.model as string) || '–' },
+  ];
+
+  if (context.human_topic) {
+    items.unshift({ label: 'Lidské téma', value: context.human_topic as string, color: 'text-amber-400' });
+  }
+
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+      >
+        <Info className="w-3.5 h-3.5" />
+        {open ? 'Skrýt kontext generování' : 'Zobrazit kontext generování'}
+      </button>
+      {open && (
+        <div className="mt-2 p-3 bg-slate-800/50 rounded-lg border border-slate-700 grid grid-cols-2 gap-x-4 gap-y-1.5">
+          <div className="col-span-2 text-xs font-medium text-violet-400 mb-1">Kontext generování</div>
+          {items.map((item) => (
+            <div key={item.label} className="flex justify-between text-xs">
+              <span className="text-slate-500">{item.label}</span>
+              <span className={item.color || 'text-slate-300'}>{item.value}</span>
+            </div>
+          ))}
+          {typeof context.timestamp === 'string' && (
+            <div className="col-span-2 text-[10px] text-slate-600 mt-1 text-right">
+              {new Date(context.timestamp).toLocaleString('cs-CZ')}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

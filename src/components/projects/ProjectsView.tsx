@@ -828,6 +828,29 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
 
   return (
     <div className="space-y-6">
+      {/* Header with export */}
+      {entries.length > 0 && (
+        <div className="flex justify-end">
+          <div className="relative group">
+            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700 transition-colors">
+              <Share2 className="w-3.5 h-3.5" /> Export KB
+            </button>
+            <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[140px]">
+              {(['md', 'sql', 'csv'] as const).map(fmt => (
+                <a
+                  key={fmt}
+                  href={`/api/projects/${projectId}/kb/export?format=${fmt}`}
+                  download
+                  className="block px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors first:rounded-t-lg last:rounded-b-lg"
+                >
+                  {fmt === 'md' ? 'Markdown (.md)' : fmt === 'sql' ? 'SQL (.sql)' : 'CSV (.csv)'}
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="flex flex-wrap gap-2">
         <button onClick={() => setFilterCat('all')}

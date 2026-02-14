@@ -1451,10 +1451,50 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
       scheduled++;
     }
 
-    // Weekly: content mix analysis (Monday)
-    if (localDay === 1 && hoursSinceLastPost < 168) {
-      await createTask(project.id, 'analyze_content_mix', {}, { priority: 2 });
-      scheduled++;
+  }
+
+  // ---- Weekly analytics tasks (run independently of content scheduling) ----
+  // These run for ALL active projects with KB, regardless of pending content tasks
+  for (const project of projects) {
+    const config = getConfig(project);
+    if (!config.enabled) continue;
+
+    const localDay = getProjectLocalDay(config.timezone);
+    const localHour = getProjectLocalHour(config.timezone);
+
+    // Only schedule analytics during morning hours (8-10) to avoid duplicates from hourly cron
+    if (localHour < 8 || localHour > 10) continue;
+
+    // Check KB exists (analytics need data to analyze)
+    const { count: kbCount } = await supabase
+      .from('knowledge_base')
+      .select('id', { count: 'exact' })
+      .eq('project_id', project.id)
+      .eq('is_active', true);
+    if ((kbCount || 0) === 0) continue;
+
+    // Monday: Content Mix Analysis
+    if (localDay === 1) {
+      const hasPending = await hasRecentAnalyticsTask(project.id, 'analyze_content_mix', 48);
+      if (!hasPending) {
+        await createTask(project.id, 'analyze_content_mix', {
+          auto_scheduled: true,
+          reason: 'weekly_monday_audit',
+        }, { priority: 2 });
+        scheduled++;
+      }
+    }
+
+    // Wednesday: KB Gap Analysis
+    if (localDay === 3) {
+      const hasPending = await hasRecentAnalyticsTask(project.id, 'kb_gap_analysis', 48);
+      if (!hasPending) {
+        await createTask(project.id, 'kb_gap_analysis', {
+          auto_scheduled: true,
+          reason: 'weekly_wednesday_audit',
+        }, { priority: 2 });
+        scheduled++;
+      }
     }
   }
 
@@ -1470,6 +1510,29 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
   });
 
   return { scheduled, projects_checked: projects.length, skipped_reasons: skipped };
+}
+
+/**
+ * Check if an analytics task of given type was already created/completed recently.
+ * Prevents duplicate scheduling from hourly cron.
+ */
+async function hasRecentAnalyticsTask(
+  projectId: string,
+  taskType: string,
+  withinHours: number,
+): Promise<boolean> {
+  if (!supabase) return true; // fail-safe: don't create if can't check
+
+  const since = new Date(Date.now() - withinHours * 60 * 60 * 1000).toISOString();
+
+  const { count } = await supabase
+    .from('agent_tasks')
+    .select('id', { count: 'exact' })
+    .eq('project_id', projectId)
+    .eq('task_type', taskType)
+    .gte('created_at', since);
+
+  return (count || 0) > 0;
 }
 
 // ============================================

@@ -507,42 +507,48 @@ function PlatformPickerModal({
   onConfirm: (postId: string, platforms: string[]) => void;
   onClose: () => void;
 }) {
+  const [projectName, setProjectName] = useState<string>('');
   const [projectPlatforms, setProjectPlatforms] = useState<string[]>([]);
   const [lateAccounts, setLateAccounts] = useState<Record<string, string>>({});
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(currentPlatforms);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(`/api/projects/${projectId}`)
       .then(r => r.json())
       .then(project => {
-        const platforms = project.platforms || [];
-        const accounts = project.late_accounts || {};
+        const platforms: string[] = project.platforms || [];
+        const accounts: Record<string, string> = project.late_accounts || {};
+        setProjectName(project.name || '');
         setProjectPlatforms(platforms);
         setLateAccounts(accounts);
-        // Pre-select all platforms that have getLate account IDs
+        // Pre-select: only platforms that belong to THIS project AND have getLate account
         const connected = platforms.filter((p: string) => accounts[p]);
-        setSelectedPlatforms(connected.length > 0 ? connected : currentPlatforms);
+        // Fallback: select platforms from post that exist in this project
+        const validCurrent = currentPlatforms.filter((p: string) => platforms.includes(p));
+        setSelectedPlatforms(connected.length > 0 ? connected : validCurrent);
         setLoading(false);
       })
       .catch(() => {
-        setProjectPlatforms(currentPlatforms);
-        setSelectedPlatforms(currentPlatforms);
+        setProjectPlatforms([]);
+        setSelectedPlatforms([]);
         setLoading(false);
       });
   }, [projectId, currentPlatforms]);
 
+  const connectedPlatforms = projectPlatforms.filter(p => lateAccounts[p]);
+  const unconnectedPlatforms = projectPlatforms.filter(p => !lateAccounts[p]);
+
   const toggle = (p: string) => {
+    // Only allow toggling connected platforms
+    if (!connectedPlatforms.includes(p)) return;
     setSelectedPlatforms(prev =>
       prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
     );
   };
 
-  const selectAll = () => setSelectedPlatforms([...projectPlatforms]);
+  const selectAll = () => setSelectedPlatforms([...connectedPlatforms]);
   const selectNone = () => setSelectedPlatforms([]);
-
-  const connectedCount = selectedPlatforms.filter(p => lateAccounts[p]).length;
-  const unconnected = selectedPlatforms.filter(p => !lateAccounts[p]);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -553,7 +559,9 @@ function PlatformPickerModal({
               {mode === 'publish' ? 'Odeslat na sítě' : 'Schválit + vybrat sítě'}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              {mode === 'publish' ? 'Vyberte sítě pro okamžité odeslání' : 'Na které sítě se post odešle'}
+              {projectName && <span className="text-violet-400 font-medium">{projectName}</span>}
+              {projectName ? ' — ' : ''}
+              {mode === 'publish' ? 'vyberte sítě pro okamžité odeslání' : 'na které sítě se post odešle'}
             </p>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400">
@@ -575,56 +583,69 @@ function PlatformPickerModal({
                 <button onClick={selectNone} className="text-xs text-slate-400 hover:text-white">Zrušit výběr</button>
               </div>
 
-              {/* Platform grid */}
-              <div className="grid grid-cols-2 gap-2">
-                {projectPlatforms.map(p => {
-                  const isSelected = selectedPlatforms.includes(p);
-                  const hasAccount = !!lateAccounts[p];
-                  return (
-                    <button
-                      key={p}
-                      onClick={() => toggle(p)}
-                      className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all border ${
-                        isSelected
-                          ? 'border-violet-500/50 bg-violet-600/10'
-                          : 'border-slate-800 bg-slate-800/50 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        isSelected ? (PLATFORM_COLORS[p] || 'bg-slate-700') : 'bg-slate-700'
-                      }`}>
-                        <Share2 className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-slate-400'}`}>
-                          {PLATFORM_LABELS[p] || p}
+              {/* Connected platforms (selectable) */}
+              {connectedPlatforms.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  {connectedPlatforms.map(p => {
+                    const isSelected = selectedPlatforms.includes(p);
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => toggle(p)}
+                        className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all border ${
+                          isSelected
+                            ? 'border-violet-500/50 bg-violet-600/10'
+                            : 'border-slate-800 bg-slate-800/50 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          isSelected ? (PLATFORM_COLORS[p] || 'bg-slate-700') : 'bg-slate-700'
+                        }`}>
+                          <Share2 className="w-4 h-4 text-white" />
                         </div>
-                        <div className={`text-[10px] ${hasAccount ? 'text-emerald-500' : 'text-red-400'}`}>
-                          {hasAccount ? `ID: ${lateAccounts[p].slice(0, 8)}...` : 'Nepropojeno'}
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-slate-400'}`}>
+                            {PLATFORM_LABELS[p] || p}
+                          </div>
+                          <div className="text-[10px] text-emerald-500">
+                            ID: {lateAccounts[p].slice(0, 8)}...
+                          </div>
                         </div>
-                      </div>
-                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
-                        isSelected ? 'bg-violet-600 border-violet-600' : 'border-slate-600'
-                      }`}>
-                        {isSelected && <Check className="w-3 h-3 text-white" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                          isSelected ? 'bg-violet-600 border-violet-600' : 'border-slate-600'
+                        }`}>
+                          {isSelected && <Check className="w-3 h-3 text-white" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-              {/* Warning for unconnected */}
-              {unconnected.length > 0 && (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <p className="text-xs text-amber-400">
-                    {unconnected.map(p => PLATFORM_LABELS[p] || p).join(', ')} nemá propojený getLate účet. Post se na tyto sítě neodešle.
-                  </p>
+              {connectedPlatforms.length === 0 && (
+                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
+                  <p className="text-sm text-red-400 font-medium">Není propojená žádná síť</p>
+                  <p className="text-xs text-red-400/70 mt-1">Propojte getLate Account ID v nastavení projektu</p>
+                </div>
+              )}
+
+              {/* Unconnected platforms (disabled, info only) */}
+              {unconnectedPlatforms.length > 0 && (
+                <div>
+                  <div className="text-[10px] text-slate-600 uppercase tracking-wider mb-1.5">Nepropojené sítě ({unconnectedPlatforms.length})</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {unconnectedPlatforms.map(p => (
+                      <span key={p} className="px-2 py-1 rounded-lg bg-slate-800/50 text-[11px] text-slate-600">
+                        {PLATFORM_LABELS[p] || p}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 
               {/* Summary */}
               <div className="text-xs text-slate-500">
-                {connectedCount} z {selectedPlatforms.length} vybraných platforem má propojený účet
+                {selectedPlatforms.length} z {connectedPlatforms.length} propojených sítí vybráno
               </div>
             </>
           )}
@@ -635,7 +656,7 @@ function PlatformPickerModal({
             Zrušit
           </button>
           <button
-            onClick={() => onConfirm(postId, selectedPlatforms)}
+            onClick={() => onConfirm(postId, selectedPlatforms.filter(p => projectPlatforms.includes(p)))}
             disabled={selectedPlatforms.length === 0}
             className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors"
           >

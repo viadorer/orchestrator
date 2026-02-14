@@ -985,12 +985,12 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         ai_scores: scores || {},
         status: postStatus,
         source: task.params?.human_topic ? 'human_priority' : 'ai_generated',
-        generation_context: generationContext,
       };
 
-      // Try full insert with all optional columns
+      // Try full insert with all optional columns (including generation_context)
       const fullInsert: Record<string, unknown> = {
         ...coreInsert,
+        generation_context: generationContext,
         alt_text: (result.alt_text as string) || null,
         editor_review: result.editor_review || null,
         visual_type: matchedImageUrl ? 'matched_photo' : visualData.visual_type,
@@ -1002,7 +1002,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
 
       const { error: queueError } = await supabase.from('content_queue').insert(fullInsert);
 
-      // If full insert fails, retry with core columns only
+      // If full insert fails, retry with core columns only (no generation_context)
       if (queueError) {
         console.error('content_queue full insert failed:', queueError.message);
         const { error: coreError } = await supabase.from('content_queue').insert(coreInsert);

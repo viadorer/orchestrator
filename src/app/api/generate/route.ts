@@ -60,6 +60,7 @@ export async function POST(request: Request) {
     if (error && error.message.includes('column')) {
       delete insertData.image_url;
       delete insertData.matched_media_id;
+      delete insertData.generation_context;
       const retry = await supabase
         .from('content_queue')
         .insert(insertData)

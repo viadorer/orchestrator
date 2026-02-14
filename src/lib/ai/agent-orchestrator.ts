@@ -1443,13 +1443,16 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
 
     for (let i = 0; i < postsToGenerate; i++) {
       const platform = platforms[i % platforms.length];
+      // Stagger tasks: spread across time (2-15 min delay per project + post index)
+      const staggerMinutes = Math.floor(Math.random() * 13) + 2 + (scheduled * 5);
+      const scheduledFor = new Date(Date.now() + staggerMinutes * 60 * 1000);
       await createTask(project.id, 'generate_content', {
         platform,
         auto_scheduled: true,
         media_strategy: config.media_strategy,
         auto_publish: config.auto_publish,
         auto_publish_threshold: config.auto_publish_threshold,
-      }, { priority: 3 });
+      }, { priority: 3, scheduledFor: scheduledFor.toISOString() });
       scheduled++;
     }
 
@@ -1626,6 +1629,12 @@ export async function runPendingTasks(projectId?: string): Promise<{
     const result = await executeTask(task.id);
     if (result.success) executed++;
     else failed++;
+
+    // Stagger execution: wait 3-8 seconds between tasks to avoid API burst
+    if (tasks.indexOf(task) < tasks.length - 1) {
+      const delayMs = 3000 + Math.floor(Math.random() * 5000);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
   }
 
   return { executed, failed, skipped, auto_scheduled: autoScheduled };

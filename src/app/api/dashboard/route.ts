@@ -10,6 +10,9 @@ export async function GET() {
   }
 
   try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     const [
       projectsRes,
       reviewRes,
@@ -19,6 +22,9 @@ export async function GET() {
       rejectedRes,
       agentLogRes,
       mediaRes,
+      pendingTasksRes,
+      runningTasksRes,
+      recentTasksRes,
     ] = await Promise.all([
       // Projects with queue counts
       supabase
@@ -43,6 +49,25 @@ export async function GET() {
         .from('media_assets')
         .select('id, project_id, is_processed, source, file_size, created_at')
         .eq('is_active', true),
+      // Agent tasks: pending
+      supabase
+        .from('agent_tasks')
+        .select('id, project_id, task_type, status, priority, scheduled_for, created_at')
+        .eq('status', 'pending')
+        .order('scheduled_for', { ascending: true }),
+      // Agent tasks: running
+      supabase
+        .from('agent_tasks')
+        .select('id, project_id, task_type, status, started_at')
+        .eq('status', 'running'),
+      // Agent tasks: recent completed/failed (today)
+      supabase
+        .from('agent_tasks')
+        .select('id, project_id, task_type, status, completed_at, error_message, started_at')
+        .in('status', ['completed', 'failed'])
+        .gte('completed_at', todayStart.toISOString())
+        .order('completed_at', { ascending: false })
+        .limit(20),
     ]);
 
     const projects = projectsRes.data || [];
@@ -53,6 +78,9 @@ export async function GET() {
     const rejected = rejectedRes.data || [];
     const agentLog = agentLogRes.data || [];
     const media = mediaRes.data || [];
+    const pendingTasks = pendingTasksRes.data || [];
+    const runningTasks = runningTasksRes.data || [];
+    const recentTasks = recentTasksRes.data || [];
 
     // Per-project stats
     const projectStats = projects.map((p: Record<string, unknown>) => {
@@ -116,6 +144,24 @@ export async function GET() {
       };
     });
 
+    // Agent tasks with project names
+    const enrichTask = (t: Record<string, unknown>) => {
+      const proj = projects.find((p: Record<string, unknown>) => p.id === t.project_id);
+      return { ...t, project_name: (proj as Record<string, unknown>)?.name || 'Unknown' };
+    };
+
+    const agentTasks = {
+      pending: pendingTasks.map(enrichTask),
+      running: runningTasks.map(enrichTask),
+      recent: recentTasks.map(enrichTask),
+      counts: {
+        pending: pendingTasks.length,
+        running: runningTasks.length,
+        completed_today: recentTasks.filter((t: Record<string, unknown>) => t.status === 'completed').length,
+        failed_today: recentTasks.filter((t: Record<string, unknown>) => t.status === 'failed').length,
+      },
+    };
+
     return NextResponse.json({
       stats: {
         totalProjects: projects.length,
@@ -129,6 +175,7 @@ export async function GET() {
       projectStats,
       mediaStats,
       recentActivity,
+      agentTasks,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

@@ -49,6 +49,44 @@ interface ActivityItem {
   created_at: string;
 }
 
+interface AgentTask {
+  id: string;
+  project_id: string;
+  project_name: string;
+  task_type: string;
+  status: string;
+  priority: number;
+  scheduled_for?: string;
+  started_at?: string;
+  completed_at?: string;
+  error_message?: string;
+}
+
+interface AgentTasksData {
+  pending: AgentTask[];
+  running: AgentTask[];
+  recent: AgentTask[];
+  counts: {
+    pending: number;
+    running: number;
+    completed_today: number;
+    failed_today: number;
+  };
+}
+
+const TASK_LABELS: Record<string, string> = {
+  generate_content: 'Generování postu',
+  generate_week_plan: 'Týdenní plán',
+  analyze_content_mix: 'Analýza mixu',
+  suggest_topics: 'Návrh témat',
+  react_to_news: 'Reakce na zprávy',
+  quality_review: 'Quality review',
+  sentiment_check: 'Sentiment check',
+  dedup_check: 'Dedup check',
+  optimize_schedule: 'Optimalizace plánu',
+  kb_gap_analysis: 'KB gap analýza',
+};
+
 const ACTION_LABELS: Record<string, { label: string; color: string; icon: typeof Bot }> = {
   content_generated: { label: 'Post vygenerován', color: 'text-emerald-400', icon: Sparkles },
   media_processed: { label: 'Médium otagováno', color: 'text-blue-400', icon: Image },
@@ -65,6 +103,7 @@ export function DashboardView() {
   const [projectStats, setProjectStats] = useState<ProjectStat[]>([]);
   const [mediaStats, setMediaStats] = useState<MediaStats | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [agentTasks, setAgentTasks] = useState<AgentTasksData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -76,6 +115,7 @@ export function DashboardView() {
         if (data.projectStats) setProjectStats(data.projectStats);
         if (data.mediaStats) setMediaStats(data.mediaStats);
         if (data.recentActivity) setActivity(data.recentActivity);
+        if (data.agentTasks) setAgentTasks(data.agentTasks);
       } catch {
         setStats({
           totalProjects: 0, reviewCount: 0, approvedCount: 0,
@@ -141,6 +181,117 @@ export function DashboardView() {
           </div>
         ))}
       </div>
+
+      {/* Agent Tasks */}
+      {agentTasks && (agentTasks.counts.running > 0 || agentTasks.counts.pending > 0 || agentTasks.counts.completed_today > 0) && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl">
+          <div className="flex items-center justify-between p-4 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Bot className="w-4 h-4 text-violet-400" />
+              <h2 className="text-sm font-semibold text-white">Agent Hugo</h2>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              {agentTasks.counts.running > 0 && (
+                <span className="flex items-center gap-1.5 text-amber-400">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                  </span>
+                  {agentTasks.counts.running} running
+                </span>
+              )}
+              {agentTasks.counts.pending > 0 && (
+                <span className="text-slate-400">{agentTasks.counts.pending} pending</span>
+              )}
+              {agentTasks.counts.completed_today > 0 && (
+                <span className="text-emerald-400">{agentTasks.counts.completed_today} done</span>
+              )}
+              {agentTasks.counts.failed_today > 0 && (
+                <span className="text-red-400">{agentTasks.counts.failed_today} failed</span>
+              )}
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-800/50 max-h-[280px] overflow-y-auto">
+            {/* Running tasks */}
+            {agentTasks.running.map((task) => (
+              <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+                <div className="relative flex h-2.5 w-2.5 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-amber-400">{TASK_LABELS[task.task_type] || task.task_type}</span>
+                    <span className="text-[10px] text-slate-600">|</span>
+                    <span className="text-[10px] text-slate-500 truncate">{task.project_name}</span>
+                  </div>
+                  {task.started_at && (
+                    <div className="text-[10px] text-slate-600 mt-0.5">
+                      started {formatTime(task.started_at)}
+                    </div>
+                  )}
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-medium">RUNNING</span>
+              </div>
+            ))}
+
+            {/* Pending tasks */}
+            {agentTasks.pending.map((task) => (
+              <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+                <Clock className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-300">{TASK_LABELS[task.task_type] || task.task_type}</span>
+                    <span className="text-[10px] text-slate-600">|</span>
+                    <span className="text-[10px] text-slate-500 truncate">{task.project_name}</span>
+                  </div>
+                  {task.scheduled_for && (
+                    <div className="text-[10px] text-slate-600 mt-0.5">
+                      scheduled {formatTime(task.scheduled_for)}
+                    </div>
+                  )}
+                </div>
+                {task.priority >= 10 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-medium">PRIORITY</span>
+                )}
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">PENDING</span>
+              </div>
+            ))}
+
+            {/* Recent completed/failed */}
+            {agentTasks.recent.slice(0, 8).map((task) => (
+              <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 opacity-70">
+                {task.status === 'completed' ? (
+                  <CheckCircle2 className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+                ) : (
+                  <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium ${task.status === 'completed' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {TASK_LABELS[task.task_type] || task.task_type}
+                    </span>
+                    <span className="text-[10px] text-slate-600">|</span>
+                    <span className="text-[10px] text-slate-500 truncate">{task.project_name}</span>
+                  </div>
+                  {task.error_message && (
+                    <div className="text-[10px] text-red-400/70 mt-0.5 truncate">{task.error_message}</div>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-600">{task.completed_at ? formatTime(task.completed_at) : ''}</span>
+              </div>
+            ))}
+
+            {agentTasks.counts.running === 0 && agentTasks.counts.pending === 0 && agentTasks.recent.length === 0 && (
+              <div className="p-6 text-center">
+                <Bot className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                <p className="text-xs text-slate-500">Agent je v klidu</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Projects list */}

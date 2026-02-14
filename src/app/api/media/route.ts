@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
+import { processMediaAsset } from '@/lib/ai/vision-engine';
 import { NextResponse } from 'next/server';
 
 /**
@@ -63,5 +64,12 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ asset: data });
+  // Auto-process: AI tagging + embedding (async, don't block response)
+  if (data?.id) {
+    processMediaAsset(data.id).catch(() => {
+      // Processing failed silently – will be retried by cron
+    });
+  }
+
+  return NextResponse.json({ asset: data, processing: true });
 }

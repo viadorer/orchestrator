@@ -5,6 +5,7 @@ import {
   Bot, Play, Loader2, CheckCircle, XCircle, Clock, AlertTriangle,
   Sparkles, Calendar, Brain, Shield, TrendingUp, BookOpen,
   ChevronDown, ChevronUp, Zap, Activity, RotateCcw, Trash2, Map,
+  Pencil, Save,
 } from 'lucide-react';
 import { AgentDiagram } from './AgentDiagram';
 
@@ -517,19 +518,102 @@ export function AgentView() {
 
 /* ---- Task Result: readable output per task type ---- */
 function TaskResult({ task }: { task: AgentTask }) {
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [feedbackNote, setFeedbackNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
   if (!task.result) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = task.result as Record<string, any>;
+
+  const startEdit = () => {
+    setEditing(true);
+    setEditText(r.text as string);
+    setFeedbackNote('');
+  };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    // Find the content_queue entry for this task and update it
+    try {
+      // Search for the queue item by text match
+      const searchRes = await fetch(`/api/queue?status=review`);
+      const items = await searchRes.json();
+      const match = Array.isArray(items) ? items.find((i: { text_content: string }) => 
+        i.text_content === (r.text as string)
+      ) : null;
+
+      if (match) {
+        await fetch(`/api/queue/${match.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text_content: editText,
+            edited_text: editText,
+            feedback_note: feedbackNote || null,
+          }),
+        });
+      }
+    } catch (err) {
+      console.error('Edit failed:', err);
+    }
+    setSaving(false);
+    setEditing(false);
+  };
 
   return (
     <div className="border-t border-slate-800 p-4 bg-slate-800/30 space-y-3">
       {/* Generated post text */}
       {r.text && (
         <div>
-          <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1">Vygenerovaný text</div>
-          <div className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed bg-slate-900 rounded-lg p-3 border border-slate-700">
-            {r.text as string}
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Vygenerovaný text</div>
+            {!editing && (
+              <button
+                onClick={startEdit}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-blue-400 hover:bg-blue-600/10 transition-colors"
+              >
+                <Pencil className="w-3 h-3" /> Upravit
+              </button>
+            )}
           </div>
+          {editing ? (
+            <div className="space-y-3">
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                rows={Math.min(20, Math.max(6, editText.split('\n').length + 2))}
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-violet-500/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y"
+              />
+              <input
+                value={feedbackNote}
+                onChange={(e) => setFeedbackNote(e.target.value)}
+                placeholder="Poznámka pro Huga (volitelné) – např. 'Zkrátit hook', 'Víc dat'"
+                className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={saveEdit}
+                  disabled={saving || editText === (r.text as string)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+                >
+                  <Save className="w-3.5 h-3.5" /> {saving ? 'Ukládám...' : 'Uložit úpravu'}
+                </button>
+                <button
+                  onClick={() => setEditing(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-colors"
+                >
+                  Zrušit
+                </button>
+                <span className="text-[10px] text-slate-600 ml-auto">{editText.length} znaků</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed bg-slate-900 rounded-lg p-3 border border-slate-700">
+              {r.text as string}
+            </div>
+          )}
         </div>
       )}
 

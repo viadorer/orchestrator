@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info, Share2 } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info, Share2, Pencil, Save } from 'lucide-react';
 import { PostPreview } from './PostPreview';
 
 interface QueueItem {
@@ -56,6 +56,10 @@ export function ReviewView() {
   const [sortBy, setSortBy] = useState<SortBy>('overall_asc');
   const [statusFilter, setStatusFilter] = useState<string>('review');
   const [platformPicker, setPlatformPicker] = useState<{ postId: string; projectId: string; currentPlatforms: string[] } | null>(null);
+  const [editingPost, setEditingPost] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [feedbackNote, setFeedbackNote] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -123,6 +127,37 @@ export function ReviewView() {
 
   const rejectOne = async (id: string) => {
     await fetch(`/api/queue/${id}`, { method: 'DELETE' });
+    loadItems();
+  };
+
+  const startEdit = (item: QueueItem) => {
+    setEditingPost(item.id);
+    setEditText(item.text_content);
+    setFeedbackNote('');
+    setExpanded(item.id);
+  };
+
+  const cancelEdit = () => {
+    setEditingPost(null);
+    setEditText('');
+    setFeedbackNote('');
+  };
+
+  const saveEdit = async (item: QueueItem) => {
+    setSaving(true);
+    await fetch(`/api/queue/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text_content: editText,
+        edited_text: editText,
+        feedback_note: feedbackNote || null,
+      }),
+    });
+    setSaving(false);
+    setEditingPost(null);
+    setEditText('');
+    setFeedbackNote('');
     loadItems();
   };
 
@@ -260,22 +295,59 @@ export function ReviewView() {
                   )}
                 </div>
 
-                <p className={`text-sm text-slate-200 ${expanded === item.id ? '' : 'line-clamp-3'}`}>
-                  {item.text_content}
-                </p>
+                {editingPost === item.id ? (
+                  <div className="space-y-3">
+                    <textarea
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      rows={Math.min(20, Math.max(6, editText.split('\n').length + 2))}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-violet-500/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y"
+                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={feedbackNote}
+                        onChange={(e) => setFeedbackNote(e.target.value)}
+                        placeholder="Poznámka pro Huga (volitelné) – např. 'Zkrátit hook', 'Víc dat'"
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => saveEdit(item)}
+                        disabled={saving || editText === item.text_content}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+                      >
+                        <Save className="w-3.5 h-3.5" /> {saving ? 'Ukládám...' : 'Uložit úpravu'}
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-colors"
+                      >
+                        Zrušit
+                      </button>
+                      <span className="text-[10px] text-slate-600 ml-auto">{editText.length} znaků</span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className={`text-sm text-slate-200 ${expanded === item.id ? '' : 'line-clamp-3'}`}>
+                      {item.text_content}
+                    </p>
 
-                {item.text_content.length > 200 && (
-                  <button
-                    onClick={() => setExpanded(expanded === item.id ? null : item.id)}
-                    className="flex items-center gap-1 mt-1 text-xs text-slate-500 hover:text-white transition-colors"
-                  >
-                    {expanded === item.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    {expanded === item.id ? 'Méně' : 'Více'}
-                  </button>
+                    {item.text_content.length > 200 && (
+                      <button
+                        onClick={() => setExpanded(expanded === item.id ? null : item.id)}
+                        className="flex items-center gap-1 mt-1 text-xs text-slate-500 hover:text-white transition-colors"
+                      >
+                        {expanded === item.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        {expanded === item.id ? 'Méně' : 'Více'}
+                      </button>
+                    )}
+                  </>
                 )}
 
                 {/* Platform preview mockup (expanded) */}
-                {expanded === item.id && (
+                {expanded === item.id && editingPost !== item.id && (
                   <div className="mt-4">
                     <PostPreview
                       text={item.text_content}
@@ -339,6 +411,13 @@ export function ReviewView() {
               <div className="flex flex-col gap-1.5 flex-shrink-0">
                 {statusFilter === 'review' && (
                   <>
+                    <button
+                      onClick={() => startEdit(item)}
+                      className="p-2 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition-colors"
+                      title="Upravit text"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => approveOne(item)}
                       className="p-2 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors"

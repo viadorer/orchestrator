@@ -168,9 +168,21 @@ export function ProjectsView() {
             className="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-violet-500/50 transition-colors text-left group"
           >
             <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="font-semibold text-white group-hover:text-violet-300 transition-colors">{project.name}</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{project.slug}</p>
+              <div className="flex items-center gap-3">
+                {project.visual_identity?.logo_url ? (
+                  <img src={project.visual_identity.logo_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                ) : (
+                  <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                    style={{ backgroundColor: project.visual_identity?.primary_color || '#6d28d9' }}
+                  >
+                    {project.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <h3 className="font-semibold text-white group-hover:text-violet-300 transition-colors">{project.name}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">{project.slug}</p>
+                </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {!!(project.orchestrator_config as Record<string, unknown>)?.enabled && (

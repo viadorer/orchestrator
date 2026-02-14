@@ -101,13 +101,13 @@ export function GenerateView() {
   };
 
   return (
-    <div className="p-6 w-full">
-      <div className="mb-6">
+    <div className="p-4 w-full h-full flex flex-col">
+      <div className="mb-4 flex-shrink-0">
         <h1 className="text-2xl font-bold text-white">Generovat obsah</h1>
-        <p className="text-slate-400 mt-1">Hugo vytvoří příspěvek podle nastavení projektu</p>
+        <p className="text-slate-400 mt-0.5 text-sm">Hugo vytvoří příspěvek podle nastavení projektu</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
         {/* Settings panel */}
         <div className="space-y-4">
           {/* Project */}
@@ -237,7 +237,7 @@ export function GenerateView() {
         </div>
 
         {/* Result panel */}
-        <div>
+        <div className="overflow-y-auto">
           {error && (
             <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
               {error}

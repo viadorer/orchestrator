@@ -863,7 +863,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         || 'auto';
 
       // Generate visual assets (chart/card/photo)
-      let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null } = {
+      let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null; generated_image_url?: string | null; media_asset_id?: string | null } = {
         visual_type: 'none', chart_url: null, card_url: null, image_prompt: (result.image_prompt as string) || null,
       };
       try {
@@ -874,15 +874,19 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
           platform,
           visualIdentity,
           kbEntries: ctx.kbEntries,
+          projectId: task.project_id,
+          logoUrl: (visualIdentity as Record<string, string>).logo_url || null,
         });
       } catch {
         // Visual generation failed, continue without
       }
 
-      // ---- Media Library matching (pgvector) ----
-      let matchedImageUrl: string | null = null;
-      let matchedMediaId: string | null = null;
-      if (mediaStrategy === 'auto') {
+      // ---- Media: Imagen generated > Media Library match > none ----
+      let matchedImageUrl: string | null = visualData.generated_image_url || null;
+      let matchedMediaId: string | null = visualData.media_asset_id || null;
+
+      // If Imagen didn't generate, try Media Library matching (pgvector)
+      if (!matchedImageUrl && mediaStrategy === 'auto') {
         try {
           const matches = await findMatchingMedia(task.project_id, result.text as string, {
             limit: 5,
@@ -890,7 +894,6 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
             excludeRecentlyUsed: true,
           });
           if (matches.length > 0) {
-            // Best match = highest similarity + least used
             const best = matches[0];
             matchedImageUrl = best.public_url;
             matchedMediaId = best.id;
@@ -901,7 +904,6 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         }
       }
 
-      // Determine final image: matched photo > chart > card
       const finalImageUrl = matchedImageUrl || null;
 
       // Determine post status: auto-publish or review

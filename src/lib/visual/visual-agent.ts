@@ -3,21 +3,25 @@
  * 
  * Hugo rozhodne, jaký vizuál post potřebuje, a automaticky ho vygeneruje.
  * 
- * 3 vrstvy:
+ * 4 vrstvy:
  * 1. QuickChart.io – grafy z demografických dat (zdarma)
  * 2. Textová karta (@vercel/og) – hook číslo na pozadí s logem
- * 3. Image prompt – popis pro budoucí AI generátor (DALL-E 3 apod.)
+ * 3. Imagen 4 – AI generování fotek (Google Gemini API)
+ * 4. Image prompt fallback – textový popis pokud Imagen selže
  */
 
 import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { generateChartUrl, CHART_TEMPLATES, type ChartData, type VisualIdentity } from './quickchart';
+import { generateAndStoreImage, buildCleanImagePrompt } from './imagen';
 
 export interface VisualAssets {
-  visual_type: 'chart' | 'card' | 'photo' | 'none';
+  visual_type: 'chart' | 'card' | 'photo' | 'generated_photo' | 'none';
   chart_url: string | null;
   card_url: string | null;
   image_prompt: string | null;
+  generated_image_url?: string | null;
+  media_asset_id?: string | null;
 }
 
 interface VisualContext {
@@ -26,6 +30,8 @@ interface VisualContext {
   platform: string;
   visualIdentity: Partial<VisualIdentity>;
   kbEntries: Array<{ category: string; title: string; content: string }>;
+  projectId?: string;
+  logoUrl?: string | null;
 }
 
 /**
@@ -42,12 +48,7 @@ export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAs
     case 'card':
       return generateCardVisual(decision, ctx);
     case 'photo':
-      return {
-        visual_type: 'photo',
-        chart_url: null,
-        card_url: null,
-        image_prompt: decision.image_prompt || null,
-      };
+      return generatePhotoVisual(decision, ctx);
     default:
       return { visual_type: 'none', chart_url: null, card_url: null, image_prompt: null };
   }
@@ -196,5 +197,64 @@ function generateCardVisual(
     chart_url: null,
     card_url: cardUrl,
     image_prompt: null,
+  };
+}
+
+/**
+ * Generate photo visual using Imagen 4 API
+ * Falls back to image_prompt text if Imagen fails or projectId not provided
+ */
+async function generatePhotoVisual(
+  decision: { image_prompt?: string },
+  ctx: VisualContext,
+): Promise<VisualAssets> {
+  const rawPrompt = decision.image_prompt || '';
+  if (!rawPrompt) {
+    return { visual_type: 'none', chart_url: null, card_url: null, image_prompt: null };
+  }
+
+  // Build clean English prompt without marketing buzzwords
+  const cleanPrompt = buildCleanImagePrompt({
+    rawPrompt,
+    projectName: ctx.projectName,
+    platform: ctx.platform,
+    visualIdentity: ctx.visualIdentity,
+  });
+
+  // If no projectId, return prompt only (can't store without project)
+  if (!ctx.projectId) {
+    return {
+      visual_type: 'photo',
+      chart_url: null,
+      card_url: null,
+      image_prompt: cleanPrompt,
+    };
+  }
+
+  // Generate with Imagen 4 and store in Supabase
+  const result = await generateAndStoreImage({
+    projectId: ctx.projectId,
+    imagePrompt: cleanPrompt,
+    platform: ctx.platform,
+    logoUrl: ctx.logoUrl,
+  });
+
+  if (result.success && result.public_url) {
+    return {
+      visual_type: 'generated_photo',
+      chart_url: null,
+      card_url: null,
+      image_prompt: cleanPrompt,
+      generated_image_url: result.public_url,
+      media_asset_id: result.media_asset_id,
+    };
+  }
+
+  // Fallback: return prompt text only
+  return {
+    visual_type: 'photo',
+    chart_url: null,
+    card_url: null,
+    image_prompt: cleanPrompt,
   };
 }

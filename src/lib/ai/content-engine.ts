@@ -294,6 +294,8 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         platform: req.platform,
         visualIdentity,
         kbEntries: ctx.kbEntries,
+        projectId: req.projectId,
+        logoUrl: (visualIdentity as Record<string, string>).logo_url || null,
       });
       content.visual = visual;
     } catch {

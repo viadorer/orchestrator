@@ -36,6 +36,6 @@ export async function GET(request: Request) {
     media_failed: mediaResult.failed,
     duration_ms: duration,
     timestamp: new Date().toISOString(),
-    message: `Hugo: ${taskResult.executed} tasks, ${taskResult.auto_scheduled} scheduled, ${mediaResult.processed} media tagged.`,
+    message: `Hugo: ${taskResult.executed} tasks, ${taskResult.skipped} skipped (daily limit), ${taskResult.auto_scheduled} scheduled, ${mediaResult.processed} media tagged.`,
   });
 }

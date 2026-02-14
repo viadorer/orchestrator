@@ -22,6 +22,8 @@ import { buildContentPrompt, getPromptTemplate, getProjectPrompts, type PromptCo
 import { generateVisualAssets } from '@/lib/visual/visual-agent';
 import { findMatchingMedia, markMediaUsed } from '@/lib/ai/vision-engine';
 import { getRelevantNews } from '@/lib/rss/fetcher';
+import { getNextContentType } from './content-engine';
+import { hugoEditorReview } from './hugo-editor';
 
 // ============================================
 // Constants
@@ -224,7 +226,23 @@ async function buildAgentPrompt(
   switch (taskType) {
     case 'generate_content': {
       const platform = (params.platform as string) || (project.platforms as string[])?.[0] || 'linkedin';
-      const contentType = params.contentType as string;
+      // Smart content type selection: use getNextContentType if not explicitly set
+      const contentMix = (project.content_mix as Record<string, number>) || { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 };
+      const contentType = (params.contentType as string) || await getNextContentType(project.id as string, contentMix);
+
+      // ---- Style rules ----
+      const styleRules = project.style_rules as Record<string, unknown>;
+      if (styleRules && Object.keys(styleRules).length > 0) {
+        parts.push('\n---\nPRAVIDLA FORMÁTU:');
+        for (const [key, value] of Object.entries(styleRules)) {
+          parts.push(`- ${key}: ${value}`);
+        }
+      }
+
+      // ---- Content mix context for this generation ----
+      parts.push(`\nAKTUÁLNÍ GENEROVÁNÍ: typ="${contentType}", platforma="${platform}"`);
+      parts.push(`CÍLOVÝ MIX: ${JSON.stringify(contentMix)}`);
+      parts.push('Generuj obsah odpovídající zadanému typu. Dodržuj cílový content mix.');
 
       // ---- Load per-project prompts (examples, identity, guardrails, etc.) ----
       const projectPrompts = await getProjectPrompts(project.id as string);
@@ -249,6 +267,14 @@ async function buildAgentPrompt(
           }
         }
 
+        // Platform-specific rules (only for current platform)
+        for (const pp of projectPrompts.filter(p => p.category === 'platform_rules')) {
+          if (pp.slug.includes(platform) || pp.slug === 'platform_rules') {
+            parts.push(`\n---\n[PLATFORM RULES – ${platform.toUpperCase()}]:`);
+            parts.push(pp.content);
+          }
+        }
+
         // Examples: CRITICAL for quality – these are the reference standard
         const examples = byCategory.get('examples');
         if (examples) {
@@ -259,21 +285,36 @@ async function buildAgentPrompt(
         }
       }
 
-      // ---- Load ALL published posts for dedup ----
+      // ---- Load ALL posts for dedup (including review!) ----
       if (supabase) {
         const { data: publishedPosts } = await supabase
           .from('content_queue')
-          .select('text_content')
+          .select('text_content, content_type')
           .eq('project_id', project.id)
-          .in('status', ['approved', 'sent', 'scheduled', 'published'])
+          .in('status', ['approved', 'sent', 'scheduled', 'published', 'review'])
           .order('created_at', { ascending: false })
           .limit(50);
 
         if (publishedPosts && publishedPosts.length > 0) {
-          parts.push('\n---\nPUBLIKOVANÉ POSTY (tyto texty už EXISTUJÍ – NESMÍŠ je opakovat ani parafrázovat):');
+          // Analyze used hooks to force diversity
+          const usedHooks = publishedPosts.map(p => {
+            const text = (p.text_content as string) || '';
+            return text.split('\n')[0].substring(0, 80);
+          });
+          const usedTypes = publishedPosts.map(p => (p.content_type as string) || 'educational');
+          const typeCounts: Record<string, number> = {};
+          usedTypes.forEach(t => { typeCounts[t] = (typeCounts[t] || 0) + 1; });
+
+          parts.push('\n---\nEXISTUJÍCÍ POSTY (tyto texty už EXISTUJÍ – NESMÍŠ je opakovat ani parafrázovat):');
           for (let i = 0; i < publishedPosts.length; i++) {
             const text = (publishedPosts[i].text_content as string) || '';
-            parts.push(`${i + 1}. "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"`);
+            const type = (publishedPosts[i].content_type as string) || '';
+            parts.push(`${i + 1}. [${type}] "${text.substring(0, 200)}${text.length > 200 ? '...' : ''}"`);
+          }
+          parts.push(`\nSTATISTIKA TYPŮ: ${JSON.stringify(typeCounts)}`);
+          parts.push(`\nPOUŽITÉ HOOKY (NESMÍŠ začínat stejně):`);
+          for (const hook of usedHooks.slice(0, 20)) {
+            parts.push(`- "${hook}"`);
           }
           parts.push('\nKAŽDÝ nový post MUSÍ být o JINÉM tématu, s JINÝM hookem, JINOU strukturou.');
           parts.push('Pokud všechny KB fakta už byly použity, najdi NOVÝ ÚHEL na stejné téma.');
@@ -303,9 +344,30 @@ async function buildAgentPrompt(
         // News fetch failed, continue without
       }
 
+      // ---- Load content pattern for structural variety ----
+      if (supabase) {
+        try {
+          const { data: patterns } = await supabase
+            .from('content_patterns')
+            .select('id, name, structure_template, content_type')
+            .eq('project_id', project.id)
+            .eq('is_active', true);
+          if (patterns && patterns.length > 0) {
+            // Pick a pattern matching the content type, or random
+            const matching = patterns.filter(p => !p.content_type || p.content_type === contentType);
+            const pattern = matching.length > 0
+              ? matching[Math.floor(Math.random() * matching.length)]
+              : patterns[Math.floor(Math.random() * patterns.length)];
+            parts.push(`\n---\nVZOR PŘÍSPĚVKU (dodržuj tuto strukturu):\n${pattern.structure_template}`);
+          }
+        } catch {
+          // content_patterns table may not exist
+        }
+      }
+
       // ---- Creative instructions ----
       parts.push(`\n---\nGENERUJ příspěvek pro platformu: ${platform}`);
-      if (contentType) parts.push(`Typ obsahu: ${contentType}`);
+      parts.push(`Typ obsahu: ${contentType}`);
 
       parts.push(`\nKREATIVITA – POVINNÁ PRAVIDLA:
 1. HOOK: Každý post MUSÍ začínat jinak. Střídej typy hooků:
@@ -386,155 +448,8 @@ async function buildAgentPrompt(
   return parts.join('\n');
 }
 
-// ============================================
-// Hugo-Editor: Self-correction (2nd AI pass)
-// Per-project: načítá guardrails, quality_criteria,
-// editor_rules a examples z project_prompt_templates
-// ============================================
-
-async function hugoEditorReview(
-  text: string,
-  ctx: ProjectContext,
-  platform: string
-): Promise<{ improved_text: string; editor_scores: Record<string, number>; changes: string[] }> {
-  const project = ctx.project;
-  const projectId = project.id as string;
-  const mood = project.mood_settings as Record<string, string>;
-
-  // Load per-project editor instructions from DB
-  const [guardrails, qualityCriteria, editorRules, examples] = await Promise.all([
-    getProjectPrompts(projectId, 'guardrail'),
-    getProjectPrompts(projectId, 'quality_criteria'),
-    getProjectPrompts(projectId, 'editor_rules'),
-    getProjectPrompts(projectId, 'examples'),
-  ]);
-
-  // Build editor prompt dynamically from per-project templates
-  const parts: string[] = [];
-
-  parts.push(`Jsi Hugo-Editor – kontrolor kvality obsahu pro projekt "${project.name}".
-Tvůj úkol: zkontrolovat post, ohodnotit ho a pokud nesplňuje standardy, PŘEPSAT ho.
-Jsi PŘÍSNÝ. Jsi NESMLOUVAVÝ. Kvalita je vše.`);
-
-  parts.push(`\nPLATFORMA: ${platform}`);
-  parts.push(`TÓN: ${mood?.tone || 'professional'} | ENERGIE: ${mood?.energy || 'medium'} | STYL: ${mood?.style || 'informative'}`);
-
-  parts.push(`\n---\nPŮVODNÍ POST K REVIEW:\n"""\n${text}\n"""`);
-
-  // Inject per-project guardrails
-  if (guardrails.length > 0) {
-    parts.push('\n---\nGUARDRAILS PROJEKTU (MUSÍŠ dodržet):');
-    for (const g of guardrails) {
-      parts.push(g.content);
-    }
-  }
-
-  // Inject per-project quality criteria
-  if (qualityCriteria.length > 0) {
-    parts.push('\n---\nKRITÉRIA KVALITY (hodnoť podle nich):');
-    for (const q of qualityCriteria) {
-      parts.push(q.content);
-    }
-  }
-
-  // Inject per-project editor-specific rules
-  if (editorRules.length > 0) {
-    parts.push('\n---\nSPECIFICKÁ PRAVIDLA PRO EDITORA:');
-    for (const e of editorRules) {
-      parts.push(e.content);
-    }
-  }
-
-  // Inject examples (good/bad posts)
-  if (examples.length > 0) {
-    parts.push('\n---\nPŘÍKLADY (referenční vzory):');
-    for (const ex of examples) {
-      parts.push(ex.content);
-    }
-  }
-
-  // Inject KB facts for fact-checking
-  if (ctx.kbEntries.length > 0) {
-    parts.push('\n---\nKNOWLEDGE BASE (ověř fakta proti těmto záznamům):');
-    for (const entry of ctx.kbEntries.slice(0, 10)) {
-      parts.push(`[${entry.category}] ${entry.title}: ${entry.content.substring(0, 200)}`);
-    }
-  }
-
-  // Feedback loop
-  if (ctx.feedbackHistory.length > 0) {
-    parts.push('\n---\nFEEDBACK OD ADMINA (respektuj tyto preference):');
-    for (const fb of ctx.feedbackHistory) {
-      parts.push(`- Původní: "${fb.original_text.substring(0, 80)}..." → Upraveno: "${fb.edited_text.substring(0, 80)}..."`);
-      if (fb.feedback_note) parts.push(`  Poznámka: ${fb.feedback_note}`);
-    }
-  }
-
-  // Fallback: generic checklist if no per-project templates
-  if (guardrails.length === 0 && qualityCriteria.length === 0) {
-    parts.push(`\n---\nGENERICKÝ KONTROLNÍ SEZNAM:
-1. HOOK: Je první věta dostatečně silná? Zastaví scrollování?
-2. HODNOTA: Přináší post konkrétní hodnotu čtenáři?
-3. AUTENTICITA: Zní to jako člověk, ne jako AI? Žádné generické fráze?
-4. STRUKTURA: Je vizuálně přehledné? Krátké odstavce?
-5. CTA: Je výzva k akci přirozená?
-6. FAKTA: Jsou všechna tvrzení podložená KB?`);
-  }
-
-  parts.push(`\n---\nINSTRUKCE:
-- Pokud post splňuje VŠECHNA kritéria (skóre 8+), vrať ho beze změny.
-- Pokud má slabiny, PŘEPIŠ ho a vylepši. Buď konkrétní v popisu změn.
-- Pokud porušuje guardrails → skóre MAX 4/10 a PŘEPIŠ.
-- NIKDY nezhoršuj kvalitu. NIKDY nepřidávej generické fráze.
-
-Vrať POUZE JSON:
-{
-  "improved_text": "Vylepšený text postu (nebo původní pokud je dobrý)",
-  "editor_scores": {"hook": N, "value": N, "authenticity": N, "structure": N, "guardrails": N, "facts": N, "cta": N, "overall": N},
-  "changes": ["Popis změny 1", "Popis změny 2"],
-  "guardrail_violations": ["Porušení 1"] 
-}`);
-
-  const editorPrompt = parts.join('\n');
-
-  const { text: rawResponse, usage } = await generateText({
-    model: google('gemini-2.0-flash'),
-    prompt: editorPrompt,
-    temperature: 0.3,
-  });
-
-  // Log editor tokens
-  if (supabase && projectId) {
-    await supabase.from('agent_log').insert({
-      project_id: projectId,
-      action: 'hugo_editor_review',
-      details: {
-        platform,
-        guardrails_loaded: guardrails.length,
-        quality_criteria_loaded: qualityCriteria.length,
-        editor_rules_loaded: editorRules.length,
-        feedback_entries: ctx.feedbackHistory.length,
-      },
-      tokens_used: usage?.totalTokens || 0,
-      model_used: 'gemini-2.0-flash',
-    });
-  }
-
-  try {
-    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-  } catch {
-    // Editor failed, return original
-  }
-
-  return {
-    improved_text: text,
-    editor_scores: { overall: 7 },
-    changes: ['Editor review failed, using original'],
-  };
-}
+// Hugo-Editor imported from shared module (hugo-editor.ts)
+// to avoid circular dependency with content-engine
 
 // ============================================
 // Parse AI response to JSON
@@ -591,6 +506,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
       totalTokens = (result._total_tokens as number) || 0;
       delete result._attempts;
       delete result._total_tokens;
+      // Keep _resolved_content_type for saving, will be cleaned up after
     } else {
       // ---- OTHER TASK TYPES ----
       const prompt = await buildAgentPrompt(task.task_type, ctx, task.params || {});
@@ -609,7 +525,11 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
     if (task.task_type === 'generate_content' && result.text) {
       const scores = result.scores as Record<string, number> | undefined;
       const platform = (task.params?.platform as string) || (ctx.project.platforms as string[])?.[0] || 'linkedin';
-      const mediaStrategy = (task.params?.media_strategy as string) || 'auto';
+      // Read media_strategy: task params > project orchestrator_config > default 'auto'
+      const orchConfig = (ctx.project.orchestrator_config as Record<string, unknown>) || {};
+      const mediaStrategy = (task.params?.media_strategy as string)
+        || (orchConfig.media_strategy as string)
+        || 'auto';
 
       // Generate visual assets (chart/card/photo)
       let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null } = {
@@ -666,12 +586,17 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         postStatus = 'review';
       }
 
+      // Resolve content type (same logic as prompt building)
+      const resolvedContentType = (task.params?.contentType as string)
+        || (result._resolved_content_type as string)
+        || 'educational';
+
       // Save to content_queue – use only core columns first, add optional ones if available
       const coreInsert: Record<string, unknown> = {
         project_id: task.project_id,
         text_content: result.text as string,
         image_prompt: (result.image_prompt as string) || null,
-        content_type: (task.params?.contentType as string) || 'educational',
+        content_type: resolvedContentType,
         platforms: [platform],
         ai_scores: scores || {},
         status: postStatus,
@@ -722,6 +647,9 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         });
       }
     }
+
+    // Clean up internal fields before storing
+    delete result._resolved_content_type;
 
     // ---- Log ----
     await supabase.from('agent_log').insert({
@@ -790,6 +718,9 @@ async function generateContentWithRetry(
 ): Promise<Record<string, unknown>> {
   const params = (task.params as Record<string, unknown>) || {};
   const platform = (params.platform as string) || (ctx.project.platforms as string[])?.[0] || 'linkedin';
+  // Resolve content type once (same logic as buildAgentPrompt)
+  const contentMix = (ctx.project.content_mix as Record<string, number>) || { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 };
+  const resolvedContentType = (params.contentType as string) || await getNextContentType(task.project_id as string, contentMix);
   let totalTokens = 0;
   let bestResult: Record<string, unknown> = {};
   let bestScore = 0;
@@ -798,6 +729,7 @@ async function generateContentWithRetry(
     // Build prompt (uses per-project prompts if available)
     const prompt = await buildAgentPrompt('generate_content', ctx, {
       ...params,
+      contentType: resolvedContentType,
       _attempt: attempt,
       _previous_score: bestScore > 0 ? bestScore : undefined,
     });
@@ -866,6 +798,7 @@ async function generateContentWithRetry(
     ...bestResult,
     _attempts: Math.min(MAX_RETRY_ATTEMPTS, (bestScore >= MIN_QUALITY_SCORE ? 1 : MAX_RETRY_ATTEMPTS)),
     _total_tokens: totalTokens,
+    _resolved_content_type: resolvedContentType,
   };
 }
 
@@ -1158,9 +1091,10 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
 export async function runPendingTasks(projectId?: string): Promise<{
   executed: number;
   failed: number;
+  skipped: number;
   auto_scheduled: number;
 }> {
-  if (!supabase) return { executed: 0, failed: 0, auto_scheduled: 0 };
+  if (!supabase) return { executed: 0, failed: 0, skipped: 0, auto_scheduled: 0 };
 
   // Step 1: Auto-schedule if no projectId specified (full cron run)
   let autoScheduled = 0;
@@ -1172,7 +1106,7 @@ export async function runPendingTasks(projectId?: string): Promise<{
   // Step 2: Run pending tasks (priority DESC = human topics first)
   let query = supabase
     .from('agent_tasks')
-    .select('id, priority')
+    .select('id, priority, project_id, task_type')
     .eq('status', 'pending')
     .lte('scheduled_for', new Date().toISOString())
     .order('priority', { ascending: false }) // HIGH priority first (10 = human)
@@ -1184,18 +1118,56 @@ export async function runPendingTasks(projectId?: string): Promise<{
   }
 
   const { data: tasks } = await query;
-  if (!tasks || tasks.length === 0) return { executed: 0, failed: 0, auto_scheduled: autoScheduled };
+  if (!tasks || tasks.length === 0) return { executed: 0, failed: 0, skipped: 0, auto_scheduled: autoScheduled };
 
   let executed = 0;
   let failed = 0;
+  let skipped = 0;
+
+  // Track daily generate_content count per project to enforce limits
+  const dailyGenerateCounts: Record<string, number> = {};
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
   for (const task of tasks) {
+    // Enforce daily limit for generate_content tasks
+    if (task.task_type === 'generate_content') {
+      const pid = task.project_id;
+
+      // Lazy-load today's count for this project
+      if (dailyGenerateCounts[pid] === undefined) {
+        const { count } = await supabase
+          .from('content_queue')
+          .select('id', { count: 'exact' })
+          .eq('project_id', pid)
+          .gte('created_at', todayStart.toISOString());
+        dailyGenerateCounts[pid] = count || 0;
+      }
+
+      // Get project's max_posts_per_day (default 3)
+      const { data: proj } = await supabase
+        .from('projects')
+        .select('orchestrator_config')
+        .eq('id', pid)
+        .single();
+      const maxPerDay = (proj?.orchestrator_config as Record<string, unknown>)?.max_posts_per_day as number || 3;
+
+      if (dailyGenerateCounts[pid] >= maxPerDay) {
+        // Skip this task – daily limit reached
+        skipped++;
+        continue;
+      }
+
+      // Increment counter
+      dailyGenerateCounts[pid]++;
+    }
+
     const result = await executeTask(task.id);
     if (result.success) executed++;
     else failed++;
   }
 
-  return { executed, failed, auto_scheduled: autoScheduled };
+  return { executed, failed, skipped, auto_scheduled: autoScheduled };
 }
 
 // ============================================

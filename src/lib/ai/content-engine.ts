@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, type PromptContext } from './prompt-builder';
 import { generateVisualAssets, type VisualAssets } from '@/lib/visual/visual-agent';
 import { findMatchingMedia, markMediaUsed } from '@/lib/ai/vision-engine';
+import { hugoEditorReview, type EditorContext } from './hugo-editor';
 
 export interface GeneratedContent {
   text: string;
@@ -26,6 +27,11 @@ export interface GeneratedContent {
     overall: number;
   };
   visual?: VisualAssets;
+  editor_review?: {
+    changes: string[];
+    original_score: number;
+    editor_score: number;
+  };
 }
 
 export interface GenerateRequest {
@@ -36,7 +42,9 @@ export interface GenerateRequest {
 }
 
 /**
- * Determine next content type based on 4-1-1 rule and post history
+ * Determine next content type based on 4-1-1 rule and post history.
+ * Checks both post_history (published) AND content_queue (pending/review)
+ * to ensure variety even before any posts are published.
  */
 export async function getNextContentType(
   projectId: string,
@@ -44,7 +52,7 @@ export async function getNextContentType(
 ): Promise<string> {
   if (!supabase) return 'educational';
 
-  // Get last 6 posts
+  // Get last 6 published posts
   const { data: history } = await supabase
     .from('post_history')
     .select('content_type')
@@ -52,11 +60,36 @@ export async function getNextContentType(
     .order('posted_at', { ascending: false })
     .limit(6);
 
-  if (!history || history.length === 0) return 'educational';
+  // Also check content_queue (review/approved/scheduled) for unpublished posts
+  const { data: queueHistory } = await supabase
+    .from('content_queue')
+    .select('content_type')
+    .eq('project_id', projectId)
+    .in('status', ['review', 'approved', 'scheduled'])
+    .order('created_at', { ascending: false })
+    .limit(10);
 
-  // Count types in recent history
+  // Merge both sources (queue first as it's more recent)
+  const allPosts = [
+    ...(queueHistory || []),
+    ...(history || []),
+  ].slice(0, 12);
+
+  if (allPosts.length === 0) {
+    // No posts at all — pick randomly weighted by content mix
+    const types = Object.entries(contentMix);
+    const rand = Math.random();
+    let cumulative = 0;
+    for (const [type, ratio] of types) {
+      cumulative += ratio;
+      if (rand <= cumulative) return type;
+    }
+    return types[0]?.[0] || 'educational';
+  }
+
+  // Count types in combined history
   const counts: Record<string, number> = {};
-  for (const h of history) {
+  for (const h of allPosts) {
     counts[h.content_type] = (counts[h.content_type] || 0) + 1;
   }
 
@@ -65,7 +98,7 @@ export async function getNextContentType(
   let bestGap = -Infinity;
 
   for (const [type, targetRatio] of Object.entries(contentMix)) {
-    const actual = (counts[type] || 0) / Math.max(history.length, 1);
+    const actual = (counts[type] || 0) / Math.max(allPosts.length, 1);
     const gap = targetRatio - actual;
     if (gap > bestGap) {
       bestGap = gap;
@@ -83,13 +116,21 @@ async function loadProjectContext(projectId: string): Promise<{
   project: Record<string, unknown>;
   kbEntries: Array<{ category: string; title: string; content: string }>;
   recentPosts: string[];
+  feedbackHistory: Array<{ original_text: string; edited_text: string; feedback_note: string }>;
 } | null> {
   if (!supabase) return null;
 
-  const [projectRes, kbRes, recentRes] = await Promise.all([
+  const [projectRes, kbRes, recentRes, feedbackRes] = await Promise.all([
     supabase.from('projects').select('*').eq('id', projectId).single(),
     supabase.from('knowledge_base').select('category, title, content').eq('project_id', projectId).eq('is_active', true),
     supabase.from('content_queue').select('text_content').eq('project_id', projectId).in('status', ['approved', 'sent', 'scheduled', 'published', 'review']).order('created_at', { ascending: false }).limit(50),
+    // Feedback loop: load recent human edits for learning
+    supabase.from('content_queue')
+      .select('text_content, edited_text, feedback_note')
+      .eq('project_id', projectId)
+      .not('edited_text', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(5),
   ]);
 
   if (!projectRes.data) return null;
@@ -98,6 +139,11 @@ async function loadProjectContext(projectId: string): Promise<{
     project: projectRes.data,
     kbEntries: kbRes.data || [],
     recentPosts: (recentRes.data || []).map((p: { text_content: string }) => p.text_content),
+    feedbackHistory: (feedbackRes.data || []).map((f: Record<string, unknown>) => ({
+      original_text: (f.text_content as string) || '',
+      edited_text: (f.edited_text as string) || '',
+      feedback_note: (f.feedback_note as string) || '',
+    })),
   };
 }
 
@@ -148,6 +194,21 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
     }
   }
 
+  // Build feedback context from human edits
+  let feedbackContext: string | undefined;
+  if (ctx.feedbackHistory.length > 0) {
+    const parts: string[] = [];
+    parts.push('FEEDBACK OD ADMINA (uč se z těchto úprav):');
+    for (const fb of ctx.feedbackHistory) {
+      parts.push(`PŮVODNÍ: "${fb.original_text.substring(0, 100)}..."`);
+      parts.push(`UPRAVENO NA: "${fb.edited_text.substring(0, 100)}..."`);
+      if (fb.feedback_note) parts.push(`POZNÁMKA: ${fb.feedback_note}`);
+      parts.push('---');
+    }
+    parts.push('Poučení: Přizpůsob styl a obsah podle těchto úprav. Opakuj vzory, které admin preferuje.');
+    feedbackContext = parts.join('\n');
+  }
+
   // Build prompt
   const prompt = await buildContentPrompt({
     projectId: req.projectId,
@@ -161,7 +222,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
     semanticAnchors: (project.semantic_anchors as string[]) || [],
     kbEntries: ctx.kbEntries,
     recentPosts: ctx.recentPosts,
-    newsContext,
+    newsContext: [newsContext, feedbackContext].filter(Boolean).join('\n\n---\n'),
   });
 
   // Generate with Gemini
@@ -191,36 +252,72 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
     };
   }
 
+  // Hugo-Editor: self-correction 2nd pass
+  const MIN_QUALITY_SCORE = 7;
+  if (content.scores.overall >= MIN_QUALITY_SCORE) {
+    try {
+      // Build EditorContext for hugoEditorReview
+      const editorCtx: EditorContext = {
+        project,
+        kbEntries: ctx.kbEntries,
+        feedbackHistory: ctx.feedbackHistory,
+      };
+      const editorResult = await hugoEditorReview(content.text, editorCtx, req.platform);
+      if (editorResult.editor_scores.overall >= content.scores.overall) {
+        content.editor_review = {
+          changes: editorResult.changes,
+          original_score: content.scores.overall,
+          editor_score: editorResult.editor_scores.overall,
+        };
+        content.text = editorResult.improved_text;
+        content.scores = {
+          ...content.scores,
+          ...editorResult.editor_scores as GeneratedContent['scores'],
+        };
+      }
+    } catch {
+      // Editor failed, continue with original
+    }
+  }
+
+  // Read media_strategy from project's orchestrator_config
+  const orchConfig = (project.orchestrator_config as Record<string, unknown>) || {};
+  const mediaStrategy = (orchConfig.media_strategy as string) || 'auto';
+
   // Generate visual assets (chart/card/photo)
-  try {
-    const visualIdentity = (project.visual_identity as Record<string, string>) || {};
-    const visual = await generateVisualAssets({
-      text: content.text,
-      projectName: project.name as string,
-      platform: req.platform,
-      visualIdentity,
-      kbEntries: ctx.kbEntries,
-    });
-    content.visual = visual;
-  } catch {
-    // Visual generation failed, continue without
-    content.visual = { visual_type: 'none', chart_url: null, card_url: null, image_prompt: content.image_prompt || null };
+  if (mediaStrategy !== 'none') {
+    try {
+      const visualIdentity = (project.visual_identity as Record<string, string>) || {};
+      const visual = await generateVisualAssets({
+        text: content.text,
+        projectName: project.name as string,
+        platform: req.platform,
+        visualIdentity,
+        kbEntries: ctx.kbEntries,
+      });
+      content.visual = visual;
+    } catch {
+      // Visual generation failed, continue without
+      content.visual = { visual_type: 'none', chart_url: null, card_url: null, image_prompt: content.image_prompt || null };
+    }
   }
 
   // Media matching: find best photo from Media Library (pgvector)
-  try {
-    const matches = await findMatchingMedia(req.projectId, content.text, {
-      limit: 5,
-      fileType: 'image',
-      excludeRecentlyUsed: true,
-    });
-    if (matches.length > 0) {
-      content.matched_image_url = matches[0].public_url;
-      content.matched_media_id = matches[0].id;
-      await markMediaUsed(matches[0].id);
+  if (mediaStrategy === 'auto') {
+    try {
+      const matches = await findMatchingMedia(req.projectId, content.text, {
+        limit: 5,
+        fileType: 'image',
+        excludeRecentlyUsed: true,
+      });
+      if (matches.length > 0) {
+        content.matched_image_url = matches[0].public_url;
+        content.matched_media_id = matches[0].id;
+        await markMediaUsed(matches[0].id);
+      }
+    } catch {
+      // Media matching failed (no media_assets table or no processed photos)
     }
-  } catch {
-    // Media matching failed (no media_assets table or no processed photos)
   }
 
   return content;

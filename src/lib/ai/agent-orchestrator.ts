@@ -488,27 +488,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
   if (!task) return { success: false, error: 'Task not found' };
 
   // Mark as running
-  const { data: runningData, error: runningError } = await supabase
-    .from('agent_tasks')
-    .update({ status: 'running', started_at: new Date().toISOString() })
-    .eq('id', taskId)
-    .select('id, status');
-
-  await supabase.from('agent_log').insert({
-    project_id: task.project_id,
-    task_id: taskId,
-    action: 'task_status_debug',
-    details: {
-      task_id_used: taskId,
-      task_id_type: typeof taskId,
-      target_status: 'running',
-      rows_affected: runningData?.length ?? 0,
-      new_status: runningData?.[0]?.status ?? null,
-      returned_id: runningData?.[0]?.id ?? null,
-      error: runningError?.message ?? null,
-      error_code: runningError?.code ?? null,
-    },
-  });
+  await supabase.from('agent_tasks').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', taskId);
 
   try {
     // Load project context
@@ -687,24 +667,11 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
     });
 
     // ---- Mark completed ----
-    const { data: completedData, error: updateError } = await supabase.from('agent_tasks').update({
+    await supabase.from('agent_tasks').update({
       status: 'completed',
       result,
       completed_at: new Date().toISOString(),
-    }).eq('id', taskId).select('id, status');
-
-    await supabase.from('agent_log').insert({
-      project_id: task.project_id,
-      task_id: taskId,
-      action: 'task_completed_debug',
-      details: {
-        rows_affected: completedData?.length ?? 0,
-        new_status: completedData?.[0]?.status ?? null,
-        error: updateError?.message ?? null,
-        error_code: updateError?.code ?? null,
-        result_keys: Object.keys(result),
-      },
-    });
+    }).eq('id', taskId);
 
     // ---- Handle recurring ----
     if (task.is_recurring && task.recurrence_rule) {

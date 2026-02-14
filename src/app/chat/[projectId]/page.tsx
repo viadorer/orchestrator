@@ -14,14 +14,28 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [projectName, setProjectName] = useState('');
+  const [brandColor, setBrandColor] = useState('#7c3aed');
+  const [accentColor, setAccentColor] = useState('#6366f1');
   const [sampleQuestions, setSampleQuestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Also read color/accent from URL params (passed by widget iframe)
   useEffect(() => {
-    // Load project name
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('color')) setBrandColor(params.get('color')!);
+    if (params.get('accent')) setAccentColor(params.get('accent')!);
+  }, []);
+
+  useEffect(() => {
+    // Load project name + visual identity colors
     fetch(`/api/projects/${projectId}`)
       .then(r => r.json())
-      .then(d => setProjectName(d.name || 'Hugo'))
+      .then(d => {
+        setProjectName(d.name || 'Hugo');
+        const vi = d.visual_identity || {};
+        if (vi.primary_color) setBrandColor(vi.primary_color);
+        if (vi.accent_color) setAccentColor(vi.accent_color);
+      })
       .catch(() => setProjectName('Hugo'));
 
     // Load sample questions from KB
@@ -76,7 +90,7 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-white font-sans">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 shadow-lg">
+      <div className="flex items-center gap-3 px-4 py-3 shadow-lg" style={{ background: `linear-gradient(135deg, ${brandColor}, ${accentColor})` }}>
         <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
           <MessageCircle className="w-5 h-5 text-white" />
         </div>
@@ -94,8 +108,8 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.length === 0 && (
           <div className="text-center py-12">
-            <div className="w-16 h-16 rounded-full bg-violet-600/20 flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="w-8 h-8 text-violet-400" />
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: `${brandColor}33` }}>
+              <Sparkles className="w-8 h-8" style={{ color: brandColor }} />
             </div>
             <h3 className="text-lg font-semibold text-white mb-1">Ahoj! Jsem Hugo</h3>
             <p className="text-sm text-slate-400 max-w-xs mx-auto">
@@ -122,9 +136,10 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
             <div
               className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === 'user'
-                  ? 'bg-violet-600 text-white rounded-br-md'
+                  ? 'text-white rounded-br-md'
                   : 'bg-slate-800 text-slate-200 rounded-bl-md'
               }`}
+              style={msg.role === 'user' ? { backgroundColor: brandColor } : undefined}
             >
               {msg.content.split('\n').map((line, j) => (
                 <span key={j}>
@@ -160,13 +175,14 @@ export default function ChatWidget({ params }: { params: Promise<{ projectId: st
             onKeyDown={handleKeyDown}
             placeholder="Napište zprávu..."
             rows={1}
-            className="flex-1 resize-none bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-            style={{ maxHeight: '120px' }}
+            className="flex-1 resize-none bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:border-transparent"
+            style={{ maxHeight: '120px', '--tw-ring-color': brandColor } as React.CSSProperties}
           />
           <button
             onClick={sendMessage}
             disabled={!input.trim() || loading}
-            className="flex-shrink-0 w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center text-white hover:bg-violet-500 disabled:opacity-40 disabled:hover:bg-violet-600 transition-colors"
+            className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-white disabled:opacity-40 transition-colors"
+            style={{ backgroundColor: brandColor }}
           >
             <Send className="w-5 h-5" />
           </button>

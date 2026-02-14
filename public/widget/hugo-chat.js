@@ -6,6 +6,7 @@
   var projectId = script.getAttribute('data-project-id');
   var position = script.getAttribute('data-position') || 'right'; // 'left' or 'right'
   var color = script.getAttribute('data-color') || '#7c3aed'; // violet-600
+  var accent = script.getAttribute('data-accent') || color;
   var baseUrl = script.getAttribute('data-base-url') || script.src.replace('/widget/hugo-chat.js', '');
 
   if (!projectId) {
@@ -27,7 +28,7 @@
   container.style.cssText = 'position:fixed;bottom:90px;' + position + ':20px;width:380px;height:560px;border-radius:16px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.4);z-index:99998;display:none;transition:opacity 0.2s,transform 0.2s;opacity:0;transform:translateY(10px);';
 
   var iframe = document.createElement('iframe');
-  iframe.src = baseUrl + '/chat/' + projectId;
+  iframe.src = baseUrl + '/chat/' + projectId + '?color=' + encodeURIComponent(color) + '&accent=' + encodeURIComponent(accent);
   iframe.style.cssText = 'width:100%;height:100%;border:none;';
   iframe.allow = 'clipboard-write';
   container.appendChild(iframe);

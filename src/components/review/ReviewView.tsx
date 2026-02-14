@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info, Share2 } from 'lucide-react';
 import { PostPreview } from './PostPreview';
 
 interface QueueItem {
@@ -32,6 +32,22 @@ interface QueueItem {
 
 type SortBy = 'overall_asc' | 'overall_desc' | 'date_desc' | 'date_asc';
 
+const PLATFORM_LABELS: Record<string, string> = {
+  facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn',
+  x: 'X (Twitter)', tiktok: 'TikTok', youtube: 'YouTube',
+  threads: 'Threads', bluesky: 'Bluesky', pinterest: 'Pinterest',
+  reddit: 'Reddit', 'google-business': 'Google Business', telegram: 'Telegram',
+  snapchat: 'Snapchat',
+};
+
+const PLATFORM_COLORS: Record<string, string> = {
+  facebook: 'bg-blue-600', instagram: 'bg-gradient-to-br from-purple-600 to-pink-500',
+  linkedin: 'bg-blue-700', x: 'bg-black', tiktok: 'bg-black',
+  youtube: 'bg-red-600', threads: 'bg-black', bluesky: 'bg-sky-500',
+  pinterest: 'bg-red-700', reddit: 'bg-orange-600',
+  'google-business': 'bg-blue-500', telegram: 'bg-sky-600', snapchat: 'bg-yellow-400',
+};
+
 export function ReviewView() {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +55,7 @@ export function ReviewView() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('overall_asc');
   const [statusFilter, setStatusFilter] = useState<string>('review');
+  const [platformPicker, setPlatformPicker] = useState<{ postId: string; projectId: string; currentPlatforms: string[] } | null>(null);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -86,12 +103,21 @@ export function ReviewView() {
     loadItems();
   };
 
-  const approveOne = async (id: string) => {
-    await fetch(`/api/queue/${id}`, {
+  const approveOne = (item: QueueItem) => {
+    setPlatformPicker({
+      postId: item.id,
+      projectId: item.project_id,
+      currentPlatforms: item.platforms || [],
+    });
+  };
+
+  const confirmApprove = async (postId: string, selectedPlatforms: string[]) => {
+    await fetch(`/api/queue/${postId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'approved' }),
+      body: JSON.stringify({ status: 'approved', platforms: selectedPlatforms }),
     });
+    setPlatformPicker(null);
     loadItems();
   };
 
@@ -314,9 +340,9 @@ export function ReviewView() {
                 {statusFilter === 'review' && (
                   <>
                     <button
-                      onClick={() => approveOne(item.id)}
+                      onClick={() => approveOne(item)}
                       className="p-2 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors"
-                      title="Schválit"
+                      title="Schválit + vybrat sítě"
                     >
                       <Check className="w-4 h-4" />
                     </button>
@@ -333,6 +359,162 @@ export function ReviewView() {
             </div>
           </div>
         ))}
+      </div>
+      {/* Platform Picker Modal */}
+      {platformPicker && (
+        <PlatformPickerModal
+          postId={platformPicker.postId}
+          projectId={platformPicker.projectId}
+          currentPlatforms={platformPicker.currentPlatforms}
+          onConfirm={confirmApprove}
+          onClose={() => setPlatformPicker(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ---- Platform Picker Modal ---- */
+function PlatformPickerModal({
+  postId, projectId, currentPlatforms, onConfirm, onClose,
+}: {
+  postId: string;
+  projectId: string;
+  currentPlatforms: string[];
+  onConfirm: (postId: string, platforms: string[]) => void;
+  onClose: () => void;
+}) {
+  const [projectPlatforms, setProjectPlatforms] = useState<string[]>([]);
+  const [lateAccounts, setLateAccounts] = useState<Record<string, string>>({});
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(currentPlatforms);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/projects/${projectId}`)
+      .then(r => r.json())
+      .then(project => {
+        const platforms = project.platforms || [];
+        const accounts = project.late_accounts || {};
+        setProjectPlatforms(platforms);
+        setLateAccounts(accounts);
+        // Pre-select all platforms that have getLate account IDs
+        const connected = platforms.filter((p: string) => accounts[p]);
+        setSelectedPlatforms(connected.length > 0 ? connected : currentPlatforms);
+        setLoading(false);
+      })
+      .catch(() => {
+        setProjectPlatforms(currentPlatforms);
+        setSelectedPlatforms(currentPlatforms);
+        setLoading(false);
+      });
+  }, [projectId, currentPlatforms]);
+
+  const toggle = (p: string) => {
+    setSelectedPlatforms(prev =>
+      prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]
+    );
+  };
+
+  const selectAll = () => setSelectedPlatforms([...projectPlatforms]);
+  const selectNone = () => setSelectedPlatforms([]);
+
+  const connectedCount = selectedPlatforms.filter(p => lateAccounts[p]).length;
+  const unconnected = selectedPlatforms.filter(p => !lateAccounts[p]);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-5 border-b border-slate-800">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Vyberte platformy</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Na které sítě se post odešle</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full" />
+            </div>
+          ) : (
+            <>
+              {/* Quick actions */}
+              <div className="flex gap-2">
+                <button onClick={selectAll} className="text-xs text-violet-400 hover:text-violet-300">Vybrat vše</button>
+                <span className="text-xs text-slate-600">|</span>
+                <button onClick={selectNone} className="text-xs text-slate-400 hover:text-white">Zrušit výběr</button>
+              </div>
+
+              {/* Platform grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {projectPlatforms.map(p => {
+                  const isSelected = selectedPlatforms.includes(p);
+                  const hasAccount = !!lateAccounts[p];
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => toggle(p)}
+                      className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all border ${
+                        isSelected
+                          ? 'border-violet-500/50 bg-violet-600/10'
+                          : 'border-slate-800 bg-slate-800/50 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? (PLATFORM_COLORS[p] || 'bg-slate-700') : 'bg-slate-700'
+                      }`}>
+                        <Share2 className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-slate-400'}`}>
+                          {PLATFORM_LABELS[p] || p}
+                        </div>
+                        <div className={`text-[10px] ${hasAccount ? 'text-emerald-500' : 'text-red-400'}`}>
+                          {hasAccount ? `ID: ${lateAccounts[p].slice(0, 8)}...` : 'Nepropojeno'}
+                        </div>
+                      </div>
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? 'bg-violet-600 border-violet-600' : 'border-slate-600'
+                      }`}>
+                        {isSelected && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Warning for unconnected */}
+              {unconnected.length > 0 && (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-xs text-amber-400">
+                    {unconnected.map(p => PLATFORM_LABELS[p] || p).join(', ')} nemá propojený getLate účet. Post se na tyto sítě neodešle.
+                  </p>
+                </div>
+              )}
+
+              {/* Summary */}
+              <div className="text-xs text-slate-500">
+                {connectedCount} z {selectedPlatforms.length} vybraných platforem má propojený účet
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-3 p-5 border-t border-slate-800">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white transition-colors">
+            Zrušit
+          </button>
+          <button
+            onClick={() => onConfirm(postId, selectedPlatforms)}
+            disabled={selectedPlatforms.length === 0}
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+          >
+            <Check className="w-4 h-4" /> Schválit ({selectedPlatforms.length} {selectedPlatforms.length === 1 ? 'síť' : selectedPlatforms.length < 5 ? 'sítě' : 'sítí'})
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -24,6 +24,7 @@ interface Project {
   constraints: { forbidden_topics: string[]; mandatory_terms: string[]; max_hashtags: number };
   semantic_anchors: string[];
   style_rules: { start_with_question: boolean; max_bullets: number; no_hashtags_in_text: boolean; max_length: number };
+  visual_identity: { primary_color: string; secondary_color: string; accent_color: string; text_color: string; font: string; logo_url: string | null; style: string } | null;
   is_active: boolean;
 }
 
@@ -66,7 +67,7 @@ const TONES = ['professional', 'casual', 'friendly', 'authoritative', 'playful',
 const ENERGIES = ['low', 'medium', 'high'] as const;
 const STYLES = ['informative', 'entertaining', 'inspirational', 'educational', 'conversational'] as const;
 
-type DetailTab = 'basic' | 'platforms' | 'orchestrator' | 'media' | 'news' | 'chatbot' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts';
+type DetailTab = 'basic' | 'platforms' | 'orchestrator' | 'visual' | 'media' | 'news' | 'chatbot' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts';
 
 export function ProjectsView() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -225,6 +226,7 @@ const TABS: Array<{ id: DetailTab; label: string; icon: React.ElementType }> = [
   { id: 'basic', label: 'Základní', icon: Type },
   { id: 'platforms', label: 'Platformy & getLate', icon: Share2 },
   { id: 'orchestrator', label: 'Orchestrátor', icon: Sliders },
+  { id: 'visual', label: 'Vizuální identita', icon: Palette },
   { id: 'media', label: 'Média', icon: Image },
   { id: 'news', label: 'Novinky', icon: Rss },
   { id: 'chatbot', label: 'Chatbot', icon: MessageCircle },
@@ -295,6 +297,7 @@ function ProjectDetail({
         {tab === 'basic' && <TabBasic project={project} onSave={saveField} />}
         {tab === 'platforms' && <TabPlatforms project={project} onSave={saveField} />}
         {tab === 'orchestrator' && <TabOrchestrator project={project} onSave={saveField} />}
+        {tab === 'visual' && <TabVisualIdentity project={project} onSave={saveField} />}
         {tab === 'media' && <MediaLibrary projectId={project.id} projectName={project.name} />}
         {tab === 'news' && <NewsPanel projectId={project.id} projectName={project.name} />}
         {tab === 'chatbot' && <TabChatbot project={project} onSave={saveField} />}
@@ -912,13 +915,34 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
 }
 
 /* ============================================
-   CREATE PROJECT MODAL (quick)
+   CREATE PROJECT WIZARD (3-step onboarding)
    ============================================ */
 
+const WIZARD_STEPS = [
+  { id: 1, label: 'Základní info', desc: 'Název, popis, platformy' },
+  { id: 2, label: 'Tón & Styl', desc: 'Jak bude Hugo komunikovat' },
+  { id: 3, label: 'Vizuální identita', desc: 'Barvy, logo, font' },
+] as const;
+
 function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Project) => void }) {
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+
+  // Step 1: Basic
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [description, setDescription] = useState('');
+  const [platforms, setPlatforms] = useState<string[]>(['linkedin']);
+
+  // Step 2: Tone
+  const [tone, setTone] = useState('professional');
+  const [energy, setEnergy] = useState('medium');
+  const [style, setStyle] = useState('informative');
+
+  // Step 3: Visual
+  const [primaryColor, setPrimaryColor] = useState('#1a1a2e');
+  const [accentColor, setAccentColor] = useState('#7c3aed');
+  const [logoUrl, setLogoUrl] = useState('');
 
   const handleCreate = async () => {
     setSaving(true);
@@ -928,7 +952,18 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
       body: JSON.stringify({
         name,
         slug: slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        platforms: ['linkedin'],
+        description: description || null,
+        platforms,
+        mood_settings: { tone, energy, style },
+        visual_identity: {
+          primary_color: primaryColor,
+          secondary_color: '#16213e',
+          accent_color: accentColor,
+          text_color: '#ffffff',
+          font: 'Inter',
+          logo_url: logoUrl || null,
+          style: 'minimal',
+        },
       }),
     });
     const data = await res.json();
@@ -936,24 +971,151 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
     if (data.id) onCreated(data);
   };
 
+  const canNext = step === 1 ? !!name : true;
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg">
+        {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
-          <h2 className="text-lg font-semibold text-white">Nový projekt</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-white">Nový projekt</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Krok {step} / {WIZARD_STEPS.length}: {WIZARD_STEPS[step - 1].desc}</p>
+          </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400"><X className="w-5 h-5" /></button>
         </div>
-        <div className="p-5 space-y-4">
-          <Field label="Název" value={name} onChange={setName} placeholder="Hypoteeka.cz" />
-          <Field label="Slug" value={slug} onChange={(v) => setSlug(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="hypoteeka" />
-          <p className="text-xs text-slate-500">Po vytvoření nastavíte platformy, tón, KB a vše ostatní.</p>
+
+        {/* Progress */}
+        <div className="flex gap-1 px-5 pt-4">
+          {WIZARD_STEPS.map(s => (
+            <div key={s.id} className={`flex-1 h-1 rounded-full transition-colors ${s.id <= step ? 'bg-violet-500' : 'bg-slate-800'}`} />
+          ))}
         </div>
-        <div className="flex justify-end gap-3 p-5 border-t border-slate-800">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white transition-colors">Zrušit</button>
-          <button onClick={handleCreate} disabled={saving || !name}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50 transition-colors">
-            <Plus className="w-4 h-4" /> {saving ? 'Vytvářím...' : 'Vytvořit'}
-          </button>
+
+        {/* Content */}
+        <div className="p-5 space-y-4 min-h-[280px]">
+          {step === 1 && (
+            <>
+              <Field label="Název projektu" value={name} onChange={(v) => { setName(v); if (!slug) setSlug(v.toLowerCase().replace(/[^a-z0-9]+/g, '-')); }} placeholder="MůjProjekt.cz" />
+              <Field label="Slug (URL-safe)" value={slug} onChange={(v) => setSlug(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="muj-projekt" />
+              <Field label="Popis (volitelný)" value={description} onChange={setDescription} placeholder="Krátký popis projektu..." multiline />
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Platformy</label>
+                <div className="flex flex-wrap gap-2">
+                  {PLATFORMS.slice(0, 8).map(p => (
+                    <button key={p} onClick={() => setPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        platforms.includes(p) ? `${PLATFORM_COLORS[p]} text-white` : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}>{PLATFORM_LABELS[p] || p}</button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Tón komunikace</label>
+                <div className="flex flex-wrap gap-2">
+                  {TONES.map(t => (
+                    <button key={t} onClick={() => setTone(t)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+                        tone === t ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}>{t}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Energie</label>
+                <div className="flex gap-2">
+                  {ENERGIES.map(e => (
+                    <button key={e} onClick={() => setEnergy(e)}
+                      className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        energy === e ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}>{e === 'low' ? 'Low' : e === 'medium' ? 'Medium' : 'High'}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Styl obsahu</label>
+                <div className="flex flex-wrap gap-2">
+                  {STYLES.map(s => (
+                    <button key={s} onClick={() => setStyle(s)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+                        style === s ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}>{s}</button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Hlavní barva</label>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-10 h-10 rounded-lg border border-slate-700 cursor-pointer bg-transparent" />
+                    <input value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Akcentová barva</label>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={accentColor} onChange={e => setAccentColor(e.target.value)} className="w-10 h-10 rounded-lg border border-slate-700 cursor-pointer bg-transparent" />
+                    <input value={accentColor} onChange={e => setAccentColor(e.target.value)} className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">Logo URL (volitelné)</label>
+                <input value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://example.com/logo.png"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                <p className="text-xs text-slate-500 mt-1">Používá se na kartách a AI obrázcích.</p>
+              </div>
+              {/* Preview */}
+              <div className="p-4 rounded-xl border border-slate-700" style={{ backgroundColor: primaryColor }}>
+                <div className="flex items-center gap-2 mb-2">
+                  {logoUrl && <img src={logoUrl} alt="" className="w-6 h-6 rounded object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+                  <span className="text-sm font-bold text-white">{name || 'Projekt'}</span>
+                </div>
+                <div className="h-0.5 rounded-full mb-2" style={{ backgroundColor: accentColor, width: '30%' }} />
+                <p className="text-xs text-white/70">Ukázka vizuální identity</p>
+              </div>
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <p className="text-xs text-emerald-400">
+                  Po vytvoření se automaticky vygenerují výchozí prompty a KB záznamy. Upravíte je v detailu projektu.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between p-5 border-t border-slate-800">
+          <div>
+            {step > 1 && (
+              <button onClick={() => setStep(step - 1)} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white transition-colors">
+                <ArrowLeft className="w-4 h-4 inline mr-1" /> Zpět
+              </button>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white transition-colors">Zrušit</button>
+            {step < WIZARD_STEPS.length ? (
+              <button onClick={() => setStep(step + 1)} disabled={!canNext}
+                className="px-5 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50 transition-colors">
+                Další
+              </button>
+            ) : (
+              <button onClick={handleCreate} disabled={saving || !name}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors">
+                <Plus className="w-4 h-4" /> {saving ? 'Vytvářím...' : 'Vytvořit projekt'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -999,6 +1161,139 @@ function Field({ label, value, onChange, placeholder, multiline }: {
       ) : (
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={cls} />
       )}
+    </div>
+  );
+}
+
+/* ---- Tab: Visual Identity ---- */
+const VISUAL_STYLES = ['minimal', 'bold', 'elegant', 'playful', 'corporate', 'dark', 'light'] as const;
+const FONTS = ['Inter', 'Poppins', 'Roboto', 'Montserrat', 'Open Sans', 'Lato', 'Raleway', 'Nunito', 'Source Sans Pro', 'DM Sans'] as const;
+
+function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: Partial<Project>) => void }) {
+  const vi = project.visual_identity || {
+    primary_color: '#1a1a2e', secondary_color: '#16213e', accent_color: '#0f3460',
+    text_color: '#ffffff', font: 'Inter', logo_url: null, style: 'minimal',
+  };
+  const [primary, setPrimary] = useState(vi.primary_color);
+  const [secondary, setSecondary] = useState(vi.secondary_color);
+  const [accent, setAccent] = useState(vi.accent_color);
+  const [textColor, setTextColor] = useState(vi.text_color);
+  const [font, setFont] = useState(vi.font);
+  const [logoUrl, setLogoUrl] = useState(vi.logo_url || '');
+  const [style, setStyle] = useState(vi.style);
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h3 className="text-sm font-medium text-white mb-1">Vizuální identita projektu</h3>
+        <p className="text-xs text-slate-500 mb-4">
+          Barvy a styl se používají pro generování grafů (QuickChart), textových karet a AI obrázků (Imagen).
+        </p>
+      </div>
+
+      {/* Color pickers */}
+      <div className="grid grid-cols-2 gap-4">
+        <ColorField label="Primární barva" desc="Pozadí karet, hlavní tón" value={primary} onChange={setPrimary} />
+        <ColorField label="Sekundární barva" desc="Doplňková barva" value={secondary} onChange={setSecondary} />
+        <ColorField label="Akcentová barva" desc="Zvýraznění, CTA" value={accent} onChange={setAccent} />
+        <ColorField label="Barva textu" desc="Text na kartách" value={textColor} onChange={setTextColor} />
+      </div>
+
+      {/* Preview */}
+      <div className="p-6 rounded-xl border border-slate-700" style={{ backgroundColor: primary }}>
+        <div className="flex items-center gap-3 mb-3">
+          {logoUrl && (
+            <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          )}
+          <span className="text-lg font-bold" style={{ color: textColor, fontFamily: font }}>{project.name}</span>
+        </div>
+        <div className="h-1 rounded-full mb-3" style={{ backgroundColor: accent, width: '40%' }} />
+        <p className="text-sm" style={{ color: textColor, fontFamily: font, opacity: 0.8 }}>
+          Ukázka vizuální identity. Takto budou vypadat generované karty a grafy.
+        </p>
+        <div className="mt-3 inline-block px-3 py-1.5 rounded-lg text-xs font-medium" style={{ backgroundColor: accent, color: textColor }}>
+          Ukázkové CTA
+        </div>
+      </div>
+
+      {/* Font */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-2">Font</label>
+        <div className="flex flex-wrap gap-2">
+          {FONTS.map(f => (
+            <button key={f} onClick={() => setFont(f)}
+              className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                font === f ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+              style={{ fontFamily: f }}
+            >{f}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Style */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-2">Vizuální styl</label>
+        <div className="flex flex-wrap gap-2">
+          {VISUAL_STYLES.map(s => (
+            <button key={s} onClick={() => setStyle(s)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+                style === s ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}>{s}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Logo URL */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1.5">Logo URL</label>
+        <input
+          value={logoUrl}
+          onChange={(e) => setLogoUrl(e.target.value)}
+          placeholder="https://example.com/logo.png"
+          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+        />
+        <p className="text-xs text-slate-500 mt-1">
+          URL loga projektu. Používá se na kartách a jako overlay na AI generovaných obrázcích (Imagen).
+        </p>
+        {logoUrl && (
+          <div className="mt-2 flex items-center gap-3 p-3 rounded-lg bg-slate-800">
+            <img src={logoUrl} alt="Logo preview" className="w-12 h-12 rounded object-contain" onError={(e) => { (e.target as HTMLImageElement).src = ''; }} />
+            <span className="text-xs text-slate-400">Náhled loga</span>
+          </div>
+        )}
+      </div>
+
+      <SaveBtn onClick={() => onSave({
+        visual_identity: {
+          primary_color: primary, secondary_color: secondary, accent_color: accent,
+          text_color: textColor, font, logo_url: logoUrl || null, style,
+        },
+      } as Partial<Project>)} />
+    </div>
+  );
+}
+
+function ColorField({ label, desc, value, onChange }: { label: string; desc: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-300 mb-1">{label}</label>
+      <p className="text-xs text-slate-500 mb-1.5">{desc}</p>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-10 h-10 rounded-lg border border-slate-700 cursor-pointer bg-transparent"
+        />
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="#1a1a2e"
+          className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+        />
+        <div className="w-10 h-10 rounded-lg border border-slate-700" style={{ backgroundColor: value }} />
+      </div>
     </div>
   );
 }

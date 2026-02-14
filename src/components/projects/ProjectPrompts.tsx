@@ -30,6 +30,7 @@ const CATEGORIES = [
   { value: 'seasonal', label: 'Sezónní', desc: 'Svátky, události' },
   { value: 'competitor', label: 'Konkurence', desc: 'Pravidla ohledně konkurence' },
   { value: 'legal', label: 'Právní', desc: 'Disclaimery, právní omezení' },
+  { value: 'editor_rules', label: 'Editor Rules', desc: 'Instrukce pro Hugo-Editora (2nd pass)' },
 ] as const;
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -47,6 +48,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   seasonal: 'bg-lime-500/20 text-lime-400',
   competitor: 'bg-slate-500/20 text-slate-400',
   legal: 'bg-gray-500/20 text-gray-400',
+  editor_rules: 'bg-yellow-500/20 text-yellow-400',
 };
 
 export function ProjectPrompts({ projectId }: { projectId: string }) {

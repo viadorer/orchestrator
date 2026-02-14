@@ -251,11 +251,11 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
   }
 
   // Output format
-  parts.push(`\n---\nVÝSTUP: Vrať POUZE JSON objekt (žádný další text):
+  parts.push(`\n---\nVÝSTUP: Vrať POUZE JSON objekt (žádný další text, žádný markdown, žádný \`\`\`json wrapper):
 {
-  "text": "Text příspěvku",
-  "image_prompt": "Popis obrázku pro generování (volitelné)",
-  "alt_text": "Alt text pro obrázek (volitelné)",
+  "text": "Čistý text příspěvku BEZ hashtagů, BEZ emotikonů na konci, BEZ odkazů na web. Pouze samotný text postu.",
+  "image_prompt": "Short English description of the image to generate. Must be in ENGLISH. Example: Professional woman signing mortgage documents in modern office, warm lighting",
+  "alt_text": "Alt text pro obrázek v češtině (volitelné)",
   "scores": {
     "creativity": 1-10,
     "tone_match": 1-10,
@@ -263,7 +263,16 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
     "value_score": 1-10,
     "overall": 1-10
   }
-}`);
+}
+
+DŮLEŽITÉ PRAVIDLO PRO TEXT:
+- ŽÁDNÉ hashtagy (#) v textu
+- ŽÁDNÉ emotikony/emoji
+- ŽÁDNÉ URL odkazy
+- Text musí fungovat sám o sobě jako čistý příspěvek
+- image_prompt MUSÍ být v angličtině (pro AI generátor obrázků)`);
+
+  // Strip markdown code blocks from response (Gemini sometimes wraps in ```json)
 
   return parts.join('\n');
 }

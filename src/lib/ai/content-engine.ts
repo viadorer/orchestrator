@@ -232,10 +232,11 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
     temperature: 0.8,
   });
 
-  // Parse JSON response
+  // Parse JSON response (strip markdown code blocks if present)
+  const cleanedResponse = rawResponse.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   let content: GeneratedContent;
   try {
-    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+    const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in response');
     content = JSON.parse(jsonMatch[0]) as GeneratedContent;
   } catch {
@@ -250,6 +251,15 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         overall: 5,
       },
     };
+  }
+
+  // Sanitize text: remove hashtags, trailing emoji, URLs
+  if (content.text) {
+    content.text = content.text
+      .replace(/\s*#\w[\w\u00C0-\u024F]*/g, '')  // Remove #hashtags
+      .replace(/https?:\/\/\S+/g, '')              // Remove URLs
+      .replace(/\s+$/gm, '')                       // Trim trailing whitespace per line
+      .trim();
   }
 
   // Hugo-Editor: self-correction 2nd pass

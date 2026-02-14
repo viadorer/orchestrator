@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useRouter } from 'next/navigation';
 import { Sidebar, type AdminView } from '@/components/layout/Sidebar';
@@ -19,6 +19,17 @@ export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [view, setView] = useState<AdminView>('dashboard');
+
+  // Listen for navigation events from Dashboard quick actions
+  const handleNavigate = useCallback((e: Event) => {
+    const target = (e as CustomEvent).detail as AdminView;
+    if (target) setView(target);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('navigate', handleNavigate);
+    return () => window.removeEventListener('navigate', handleNavigate);
+  }, [handleNavigate]);
 
   if (loading) {
     return (

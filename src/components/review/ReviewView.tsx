@@ -55,7 +55,7 @@ export function ReviewView() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('overall_asc');
   const [statusFilter, setStatusFilter] = useState<string>('review');
-  const [platformPicker, setPlatformPicker] = useState<{ postId: string; projectId: string; currentPlatforms: string[] } | null>(null);
+  const [platformPicker, setPlatformPicker] = useState<{ postId: string; projectId: string; currentPlatforms: string[]; mode: 'approve' | 'publish' } | null>(null);
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [feedbackNote, setFeedbackNote] = useState('');
@@ -112,15 +112,39 @@ export function ReviewView() {
       postId: item.id,
       projectId: item.project_id,
       currentPlatforms: item.platforms || [],
+      mode: 'approve',
     });
   };
 
-  const confirmApprove = async (postId: string, selectedPlatforms: string[]) => {
-    await fetch(`/api/queue/${postId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'approved', platforms: selectedPlatforms }),
+  const publishOne = (item: QueueItem) => {
+    setPlatformPicker({
+      postId: item.id,
+      projectId: item.project_id,
+      currentPlatforms: item.platforms || [],
+      mode: 'publish',
     });
+  };
+
+  const confirmAction = async (postId: string, selectedPlatforms: string[], mode: 'approve' | 'publish') => {
+    if (mode === 'approve') {
+      await fetch(`/api/queue/${postId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved', platforms: selectedPlatforms }),
+      });
+    } else {
+      // Update platforms first, then publish
+      await fetch(`/api/queue/${postId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platforms: selectedPlatforms }),
+      });
+      await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [postId] }),
+      });
+    }
     setPlatformPicker(null);
     loadItems();
   };
@@ -434,6 +458,24 @@ export function ReviewView() {
                     </button>
                   </>
                 )}
+                {statusFilter === 'approved' && (
+                  <>
+                    <button
+                      onClick={() => startEdit(item)}
+                      className="p-2 rounded-lg bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition-colors"
+                      title="Upravit text"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => publishOne(item)}
+                      className="p-2 rounded-lg bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 transition-colors"
+                      title="Odeslat na sítě"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -445,7 +487,8 @@ export function ReviewView() {
           postId={platformPicker.postId}
           projectId={platformPicker.projectId}
           currentPlatforms={platformPicker.currentPlatforms}
-          onConfirm={confirmApprove}
+          mode={platformPicker.mode}
+          onConfirm={(postId, platforms) => confirmAction(postId, platforms, platformPicker.mode)}
           onClose={() => setPlatformPicker(null)}
         />
       )}
@@ -455,11 +498,12 @@ export function ReviewView() {
 
 /* ---- Platform Picker Modal ---- */
 function PlatformPickerModal({
-  postId, projectId, currentPlatforms, onConfirm, onClose,
+  postId, projectId, currentPlatforms, mode, onConfirm, onClose,
 }: {
   postId: string;
   projectId: string;
   currentPlatforms: string[];
+  mode: 'approve' | 'publish';
   onConfirm: (postId: string, platforms: string[]) => void;
   onClose: () => void;
 }) {
@@ -505,8 +549,12 @@ function PlatformPickerModal({
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md">
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <div>
-            <h2 className="text-lg font-semibold text-white">Vyberte platformy</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Na které sítě se post odešle</p>
+            <h2 className="text-lg font-semibold text-white">
+              {mode === 'publish' ? 'Odeslat na sítě' : 'Schválit + vybrat sítě'}
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {mode === 'publish' ? 'Vyberte sítě pro okamžité odeslání' : 'Na které sítě se post odešle'}
+            </p>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400">
             <X className="w-5 h-5" />
@@ -591,7 +639,8 @@ function PlatformPickerModal({
             disabled={selectedPlatforms.length === 0}
             className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors"
           >
-            <Check className="w-4 h-4" /> Schválit ({selectedPlatforms.length} {selectedPlatforms.length === 1 ? 'síť' : selectedPlatforms.length < 5 ? 'sítě' : 'sítí'})
+            {mode === 'publish' ? <Send className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+            {mode === 'publish' ? 'Odeslat' : 'Schválit'} ({selectedPlatforms.length} {selectedPlatforms.length === 1 ? 'síť' : selectedPlatforms.length < 5 ? 'sítě' : 'sítí'})
           </button>
         </div>
       </div>

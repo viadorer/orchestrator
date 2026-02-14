@@ -69,6 +69,9 @@ interface AgentTask {
   id: string;
   project_id: string;
   project_name: string;
+  project_logo: string | null;
+  project_color: string | null;
+  project_platforms: string[];
   task_type: string;
   status: string;
   priority: number;
@@ -228,74 +231,129 @@ export function DashboardView() {
             </div>
           </div>
 
-          <div className="divide-y divide-slate-800/50 max-h-[280px] overflow-y-auto">
+          <div className="divide-y divide-slate-800/50 max-h-[400px] overflow-y-auto">
             {/* Running tasks */}
             {agentTasks.running.map((task) => (
-              <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
-                <div className="relative flex h-2.5 w-2.5 flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-amber-400">{TASK_LABELS[task.task_type] || task.task_type}</span>
-                    <span className="text-[10px] text-slate-600">|</span>
-                    <span className="text-[10px] text-slate-500 truncate">{task.project_name}</span>
-                  </div>
-                  {task.started_at && (
-                    <div className="text-[10px] text-slate-600 mt-0.5">
-                      started {formatTime(task.started_at)}
+              <div key={task.id} className="px-4 py-3 bg-amber-500/[0.03]">
+                <div className="flex items-center gap-3">
+                  {/* Project logo */}
+                  {task.project_logo ? (
+                    <img src={task.project_logo} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 ring-2 ring-amber-500/30" />
+                  ) : (
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ring-2 ring-amber-500/30"
+                      style={{ backgroundColor: task.project_color || '#6d28d9' }}
+                    >
+                      {task.project_name.charAt(0)}
                     </div>
                   )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-white">{task.project_name}</span>
+                      <div className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[11px] font-medium text-amber-400">{TASK_LABELS[task.task_type] || task.task_type}</span>
+                      {task.project_platforms.length > 0 && (
+                        <>
+                          <span className="text-slate-700">·</span>
+                          <span className="text-[10px] text-slate-500">{task.project_platforms.join(', ')}</span>
+                        </>
+                      )}
+                      {task.started_at && (
+                        <>
+                          <span className="text-slate-700">·</span>
+                          <span className="text-[10px] text-slate-600">{formatTime(task.started_at)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-[10px] px-2 py-1 rounded-md bg-amber-500/10 text-amber-400 font-semibold">RUNNING</span>
                 </div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-medium">RUNNING</span>
               </div>
             ))}
 
             {/* Pending tasks */}
             {agentTasks.pending.map((task) => (
-              <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
-                <Clock className="w-3 h-3 text-slate-500 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-slate-300">{TASK_LABELS[task.task_type] || task.task_type}</span>
-                    <span className="text-[10px] text-slate-600">|</span>
-                    <span className="text-[10px] text-slate-500 truncate">{task.project_name}</span>
-                  </div>
-                  {task.scheduled_for && (
-                    <div className="text-[10px] text-slate-600 mt-0.5">
-                      scheduled {formatTime(task.scheduled_for)}
+              <div key={task.id} className="px-4 py-3">
+                <div className="flex items-center gap-3">
+                  {task.project_logo ? (
+                    <img src={task.project_logo} alt="" className="w-7 h-7 rounded-lg object-cover flex-shrink-0 opacity-70" />
+                  ) : (
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 opacity-70"
+                      style={{ backgroundColor: task.project_color || '#6d28d9' }}
+                    >
+                      {task.project_name.charAt(0)}
                     </div>
                   )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-300">{task.project_name}</span>
+                      <Clock className="w-3 h-3 text-slate-600" />
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[11px] text-slate-400">{TASK_LABELS[task.task_type] || task.task_type}</span>
+                      {task.project_platforms.length > 0 && (
+                        <>
+                          <span className="text-slate-700">·</span>
+                          <span className="text-[10px] text-slate-500">{task.project_platforms.join(', ')}</span>
+                        </>
+                      )}
+                      {task.scheduled_for && (
+                        <>
+                          <span className="text-slate-700">·</span>
+                          <span className="text-[10px] text-slate-600">{formatTime(task.scheduled_for)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {task.priority >= 10 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-medium">PRIORITY</span>
+                    )}
+                    <span className="text-[10px] px-2 py-1 rounded-md bg-slate-800 text-slate-400">PENDING</span>
+                  </div>
                 </div>
-                {task.priority >= 10 && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-medium">PRIORITY</span>
-                )}
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">PENDING</span>
               </div>
             ))}
 
             {/* Recent completed/failed */}
             {agentTasks.recent.slice(0, 8).map((task) => (
-              <div key={task.id} className="flex items-center gap-3 px-4 py-2.5 opacity-70">
-                {task.status === 'completed' ? (
-                  <CheckCircle2 className="w-3 h-3 text-emerald-500 flex-shrink-0" />
-                ) : (
-                  <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-medium ${task.status === 'completed' ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {TASK_LABELS[task.task_type] || task.task_type}
-                    </span>
-                    <span className="text-[10px] text-slate-600">|</span>
-                    <span className="text-[10px] text-slate-500 truncate">{task.project_name}</span>
-                  </div>
-                  {task.error_message && (
-                    <div className="text-[10px] text-red-400/70 mt-0.5 truncate">{task.error_message}</div>
+              <div key={task.id} className="px-4 py-2.5 opacity-60">
+                <div className="flex items-center gap-3">
+                  {task.project_logo ? (
+                    <img src={task.project_logo} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0" />
+                  ) : (
+                    <div
+                      className="w-6 h-6 rounded flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
+                      style={{ backgroundColor: task.project_color || '#6d28d9' }}
+                    >
+                      {task.project_name.charAt(0)}
+                    </div>
                   )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {task.status === 'completed' ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+                      ) : (
+                        <XCircle className="w-3 h-3 text-red-500 flex-shrink-0" />
+                      )}
+                      <span className="text-xs text-slate-400">{task.project_name}</span>
+                      <span className="text-slate-700">·</span>
+                      <span className={`text-[11px] ${task.status === 'completed' ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {TASK_LABELS[task.task_type] || task.task_type}
+                      </span>
+                    </div>
+                    {task.error_message && (
+                      <div className="text-[10px] text-red-400/60 mt-0.5 truncate ml-5">{task.error_message}</div>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-600">{task.completed_at ? formatTime(task.completed_at) : ''}</span>
                 </div>
-                <span className="text-[10px] text-slate-600">{task.completed_at ? formatTime(task.completed_at) : ''}</span>
               </div>
             ))}
 

@@ -154,10 +154,17 @@ export async function GET() {
       };
     });
 
-    // Agent tasks with project names
+    // Agent tasks with project names, logos, colors
     const enrichTask = (t: Record<string, unknown>) => {
-      const proj = projects.find((p: Record<string, unknown>) => p.id === t.project_id);
-      return { ...t, project_name: (proj as Record<string, unknown>)?.name || 'Unknown' };
+      const proj = projects.find((p: Record<string, unknown>) => p.id === t.project_id) as Record<string, unknown> | undefined;
+      const vi = (proj?.visual_identity as Record<string, string>) || {};
+      return {
+        ...t,
+        project_name: proj?.name || 'Unknown',
+        project_logo: vi.logo_url || null,
+        project_color: vi.primary_color || null,
+        project_platforms: (proj?.platforms as string[]) || [],
+      };
     };
 
     const agentTasks = {

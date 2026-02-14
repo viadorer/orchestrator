@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Bot, Play, Loader2, CheckCircle, XCircle, Clock, AlertTriangle,
   Sparkles, Calendar, Brain, Shield, TrendingUp, BookOpen,
-  ChevronDown, ChevronUp, Zap, Activity, RotateCcw,
+  ChevronDown, ChevronUp, Zap, Activity, RotateCcw, Trash2,
 } from 'lucide-react';
 
 interface Project {
@@ -111,23 +111,41 @@ export function AgentView() {
 
   useEffect(() => { loadProjectData(); }, [loadProjectData]);
 
-  // Create task
+  // Create task AND immediately execute it
   const handleCreateTask = async (taskType: string) => {
     setCreatingTask(taskType);
     const currentProject = projects.find(p => p.id === selectedProject);
-    await fetch('/api/agent/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        projectId: selectedProject,
-        taskType,
-        params: {
-          platform: currentProject?.platforms?.[0] || 'linkedin',
-        },
-      }),
-    });
+    try {
+      // 1. Create task
+      const createRes = await fetch('/api/agent/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: selectedProject,
+          taskType,
+          params: {
+            platform: currentProject?.platforms?.[0] || 'linkedin',
+          },
+        }),
+      });
+      const { id: taskId } = await createRes.json();
+
+      // 2. Immediately execute it
+      if (taskId) {
+        await loadProjectData(); // Show task as "running"
+        const execRes = await fetch(`/api/agent/tasks/${taskId}/execute`, { method: 'POST' });
+        if (!execRes.ok) {
+          const data = await execRes.json().catch(() => ({}));
+          console.error('Task execution failed:', data.error || execRes.statusText);
+        }
+      }
+    } catch (err) {
+      console.error('Create+execute error:', err);
+    }
     await loadProjectData();
     setCreatingTask(null);
+    // Auto-refresh after 3s
+    setTimeout(() => loadProjectData(), 3000);
   };
 
   // Execute single task
@@ -168,6 +186,19 @@ export function AgentView() {
     setRunningAll(false);
     // Auto-refresh after 5s
     setTimeout(() => loadProjectData(), 5000);
+  };
+
+  // Delete single task
+  const handleDeleteTask = async (taskId: string) => {
+    await fetch(`/api/agent/tasks?id=${taskId}`, { method: 'DELETE' });
+    await loadProjectData();
+  };
+
+  // Delete all tasks with given status
+  const handleDeleteAllByStatus = async (status: string) => {
+    if (!confirm(`Smazat všechny ${status === 'pending' ? 'čekající' : status === 'failed' ? 'chybové' : status} úkoly?`)) return;
+    await fetch(`/api/agent/tasks?projectId=${selectedProject}&status=${status}`, { method: 'DELETE' });
+    await loadProjectData();
   };
 
   const statusIcon = (status: string) => {
@@ -308,6 +339,15 @@ export function AgentView() {
                     );
                   })}
                 </div>
+                {pendingCount > 0 && (
+                  <button
+                    onClick={() => handleDeleteAllByStatus('pending')}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors text-xs"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Smazat čekající
+                  </button>
+                )}
                 <button
                   onClick={loadProjectData}
                   className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
@@ -363,18 +403,27 @@ export function AgentView() {
 
                       <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                         {task.status === 'pending' && (
-                          <button
-                            onClick={() => handleExecute(task.id)}
-                            disabled={executing === task.id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-500 disabled:opacity-50 transition-colors"
-                          >
-                            {executing === task.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Play className="w-3 h-3" />
-                            )}
-                            Spustit
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleExecute(task.id)}
+                              disabled={executing === task.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-500 disabled:opacity-50 transition-colors"
+                            >
+                              {executing === task.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Play className="w-3 h-3" />
+                              )}
+                              Spustit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTask(task.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors"
+                              title="Smazat"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
                         {(task.result || task.error_message) && (
                           <div className="p-1.5 text-slate-400">

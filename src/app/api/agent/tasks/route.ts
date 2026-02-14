@@ -29,6 +29,38 @@ export async function GET(request: Request) {
   return NextResponse.json(data);
 }
 
+export async function DELETE(request: Request) {
+  if (!supabase) {
+    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const taskId = searchParams.get('id');
+  const projectId = searchParams.get('projectId');
+  const status = searchParams.get('status');
+
+  if (taskId) {
+    // Delete single task
+    const { error } = await supabase.from('agent_tasks').delete().eq('id', taskId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ deleted: 1 });
+  }
+
+  if (projectId && status) {
+    // Delete all tasks with given status for project
+    const { data, error } = await supabase
+      .from('agent_tasks')
+      .delete()
+      .eq('project_id', projectId)
+      .eq('status', status)
+      .select('id');
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ deleted: data?.length || 0 });
+  }
+
+  return NextResponse.json({ error: 'Specify id or projectId+status' }, { status: 400 });
+}
+
 export async function POST(request: Request) {
   const body = await request.json();
   const { projectId, taskType, params, priority, scheduledFor, recurring } = body;

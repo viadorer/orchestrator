@@ -488,7 +488,15 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
   if (!task) return { success: false, error: 'Task not found' };
 
   // Mark as running
-  await supabase.from('agent_tasks').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', taskId);
+  const { error: runningError } = await supabase.from('agent_tasks').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', taskId);
+  if (runningError) {
+    await supabase.from('agent_log').insert({
+      project_id: task.project_id,
+      task_id: taskId,
+      action: 'task_status_update_failed',
+      details: { target_status: 'running', error: runningError.message, code: runningError.code },
+    });
+  }
 
   try {
     // Load project context
@@ -667,11 +675,21 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
     });
 
     // ---- Mark completed ----
-    await supabase.from('agent_tasks').update({
+    const { error: updateError } = await supabase.from('agent_tasks').update({
       status: 'completed',
       result,
       completed_at: new Date().toISOString(),
     }).eq('id', taskId);
+
+    if (updateError) {
+      // Log the update failure for debugging
+      await supabase.from('agent_log').insert({
+        project_id: task.project_id,
+        task_id: taskId,
+        action: 'task_update_failed',
+        details: { error: updateError.message, code: updateError.code },
+      });
+    }
 
     // ---- Handle recurring ----
     if (task.is_recurring && task.recurrence_rule) {

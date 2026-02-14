@@ -1195,13 +1195,15 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
         body: formData,
       });
       const data = await res.json();
-      if (data.logo_url) {
+      console.log('[logo-upload] Response:', res.status, data);
+      if (res.ok && data.logo_url) {
         setLogoUrl(data.logo_url);
       } else {
-        alert(data.error || 'Upload selhal');
+        alert('Logo upload selhal: ' + (data.error || `HTTP ${res.status}`));
       }
-    } catch {
-      alert('Upload selhal');
+    } catch (err) {
+      console.error('[logo-upload] Error:', err);
+      alert('Logo upload selhal: ' + (err instanceof Error ? err.message : 'Neznámá chyba'));
     }
     setUploading(false);
   };

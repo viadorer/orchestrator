@@ -453,46 +453,108 @@ async function buildAgentPrompt(
 }`);
       break;
     }
+    case 'suggest_topics': {
+      const platform = (params.platform as string) || (project.platforms as string[])?.[0] || 'facebook';
+      parts.push(`\n---\nÚKOL: NAVRH TÉMATA PRO OBSAH`);
+      parts.push(`Platforma: ${platform}`);
+      parts.push(`\nAnalyzuj Knowledge Base, nedávné posty a agent memory.`);
+      parts.push(`Navrhni 5 UNIKÁTNÍCH témat, která:`);
+      parts.push(`1. Vycházejí z KB faktů, které JEŠTĚ NEBYLY použity v nedávných postech`);
+      parts.push(`2. Pokrývají různé content typy (educational, soft_sell, hard_sell, engagement, news_reaction)`);
+      parts.push(`3. Reagují na doporučení z předchozích analýz (KB gaps, mix correction)`);
+      parts.push(`4. Jsou relevantní pro cílovou skupinu projektu`);
+      parts.push(`5. Mají potenciál pro vysoký engagement na platformě ${platform}`);
+      parts.push(`\nPro každé téma uveď konkrétní KB fakta, která má post využít.`);
+      parts.push(`\nVrať JSON:\n{"topics": [{"title": "...", "description": "Úhel a klíčové body", "content_type": "educational|soft_sell|hard_sell|engagement|news_reaction", "kb_facts": ["fakt 1", "fakt 2"], "hook_idea": "Návrh úvodního háčku"}]}`);
+      break;
+    }
+    case 'generate_week_plan': {
+      const platforms = (project.platforms as string[]) || ['facebook'];
+      const mix = project.content_mix as Record<string, number>;
+      parts.push(`\n---\nÚKOL: PLÁN OBSAHU NA TÝDEN`);
+      parts.push(`Platformy: ${platforms.join(', ')}`);
+      parts.push(`Cílový mix: ${JSON.stringify(mix)}`);
+      parts.push(`\nVytvoř plán na 5 pracovních dní (pondělí–pátek).`);
+      parts.push(`Pro každý den:`);
+      parts.push(`1. Zvol téma z KB, které ještě nebylo v nedávných postech`);
+      parts.push(`2. Zvol content type tak, aby celkový týden odpovídal cílovému mixu`);
+      parts.push(`3. Zvol platformu (střídej pokud je jich víc)`);
+      parts.push(`4. Navrhni konkrétní hook/úhel`);
+      parts.push(`5. Reaguj na agent memory – pokud mix analýza říká, že chybí soft_sell, přidej víc`);
+      parts.push(`\nVrať JSON:\n{"week_plan": [{"day": "pondělí", "topic": "...", "content_type": "...", "platform": "...", "hook_idea": "...", "kb_sources": ["..."]}]}`);
+      break;
+    }
+    case 'kb_gap_analysis': {
+      parts.push(`\n---\nÚKOL: ANALÝZA MEZER V KNOWLEDGE BASE`);
+      parts.push(`\nProzkoumej KB záznamy a identifikuj:`);
+      parts.push(`1. CHYBĚJÍCÍ KATEGORIE – jaké typy informací chybí pro kvalitní obsah?`);
+      parts.push(`2. SLABÉ ZÁZNAMY – které záznamy potřebují rozšíření nebo aktualizaci?`);
+      parts.push(`3. KONKRÉTNÍ DOPORUČENÍ – co přesně přidat (s příklady)`);
+      parts.push(`4. KOMPLETNOST – celkové skóre 1-10`);
+      parts.push(`\nZaměř se na: case studies, FAQ, data/statistiky, právní aspekty, finanční gramotnost, cílová skupina.`);
+      parts.push(`\nVrať JSON:\n{"completeness_score": 7, "gaps": [{"category": "...", "description": "...", "importance": "high|medium|low"}], "suggestions": ["..."], "weak_entries": ["Název záznamu (id): důvod"]}`);
+      break;
+    }
     case 'analyze_content_mix': {
-      parts.push('\nANALYZUJ aktuální content mix vs cílový. Vrať JSON: {"actual_mix": {...}, "target_mix": {...}, "gaps": [...], "recommendations": [...]}');
+      parts.push(`\n---\nÚKOL: ANALÝZA CONTENT MIXU`);
+      parts.push(`Cílový mix: ${JSON.stringify(project.content_mix)}`);
+      parts.push(`\nAnalyzuj nedávné posty a porovnej aktuální mix s cílovým.`);
+      parts.push(`1. Spočítej kolik postů je v každé kategorii`);
+      parts.push(`2. Porovnej s cílovým mixem`);
+      parts.push(`3. Identifikuj které typy jsou podreprezentované`);
+      parts.push(`4. Doporuč jaký typ by měl být DALŠÍ post`);
+      parts.push(`\nVrať JSON:\n{"current_mix": {"educational": 5, "soft_sell": 1}, "target_mix": {...}, "next_recommended_type": "soft_sell", "recommendations": ["..."]}`);
+      break;
+    }
+    case 'performance_report': {
+      parts.push(`\n---\nÚKOL: REPORT VÝKONU OBSAHU`);
+      parts.push(`\nAnalyzuj všechny dostupné posty a vytvoř report:`);
+      parts.push(`1. PŘEHLED – počet postů, průměrné skóre, nejlepší/nejhorší post`);
+      parts.push(`2. TRENDY – zlepšuje se kvalita? Které typy fungují nejlépe?`);
+      parts.push(`3. DOPORUČENÍ – co zlepšit, na co se zaměřit`);
+      parts.push(`4. KB VYUŽITÍ – které KB záznamy se používají nejvíc/nejméně?`);
+      parts.push(`\nVrať JSON:\n{"summary": "...", "metrics": {"total_posts": N, "avg_score": N, "best_type": "..."}, "trends": ["..."], "recommendations": ["..."]}`);
+      break;
+    }
+    case 'optimize_schedule': {
+      parts.push(`\n---\nÚKOL: OPTIMALIZACE ČASŮ PUBLIKACE`);
+      parts.push(`Platformy: ${(project.platforms as string[])?.join(', ')}`);
+      parts.push(`\nNa základě best practices pro dané platformy navrhni optimální časy:`);
+      parts.push(`1. Pro každou platformu navrhni 2-3 nejlepší časy (hodina + den v týdnu)`);
+      parts.push(`2. Zohledni českou cílovou skupinu (CET/CEST timezone)`);
+      parts.push(`3. Zohledni typ obsahu – edukace ráno, engagement odpoledne`);
+      parts.push(`4. Navrhni frekvenci (kolikrát týdně na každé platformě)`);
+      parts.push(`\nVrať JSON:\n{"best_times": {"facebook": [{"day": "pondělí", "hour": 9, "reason": "..."}], "linkedin": [...]}, "frequency": {"facebook": 3, "linkedin": 2}, "timezone": "Europe/Prague"}`);
+      break;
+    }
+    case 'sentiment_check': {
+      parts.push(`\n---\nÚKOL: SENTIMENT A BEZPEČNOST OBSAHU`);
+      parts.push(`\nZkontroluj VŠECHNY nedávné posty na:`);
+      parts.push(`1. SENTIMENT – je tón konzistentní s nastavením projektu?`);
+      parts.push(`2. BEZPEČNOST – nejsou tam kontroverzní tvrzení, přehnané sliby?`);
+      parts.push(`3. BRAND SAFETY – odpovídá obsah hodnotám projektu?`);
+      parts.push(`4. PRÁVNÍ RIZIKA – nejsou tam neoprávněná tvrzení o výnosech?`);
+      parts.push(`\nVrať JSON:\n{"overall_sentiment": "positive|neutral|negative", "score": 1-10, "issues": [{"post_preview": "...", "issue": "...", "severity": "high|medium|low"}], "recommendations": ["..."]}`);
       break;
     }
     case 'quality_review': {
       const postText = params.post_text as string;
-      if (postText) parts.push(`\nZKONTROLUJ kvalitu tohoto postu:\n"${postText}"\n\nVrať JSON: {"scores": {...}, "issues": [...], "suggestions": [...], "safe_to_publish": true/false}`);
-      break;
-    }
-    case 'sentiment_check': {
-      const text = params.text as string;
-      if (text) parts.push(`\nZKONTROLUJ sentiment a bezpečnost:\n"${text}"\n\nVrať JSON: {"sentiment": "positive/neutral/negative", "safe": true/false, "flags": [...], "risk_level": "low/medium/high"}`);
+      if (postText) {
+        parts.push(`\n---\nÚKOL: KONTROLA KVALITY POSTU`);
+        parts.push(`\nZkontroluj tento post:\n"${postText}"`);
+        parts.push(`\nHodnoť: kreativitu, shodu s tónem, hallucination risk, hodnotu pro čtenáře.`);
+        parts.push(`Vrať JSON: {"scores": {"creativity": N, "tone_match": N, "hallucination_risk": N, "value_score": N, "overall": N}, "issues": ["..."], "suggestions": ["..."], "safe_to_publish": true/false}`);
+      }
       break;
     }
     case 'react_to_news': {
       const newsTitle = params.news_title as string;
       const newsSummary = params.news_summary as string;
-      parts.push(`\nREAGUJ na tuto novinku:\nTitulek: ${newsTitle}\nShrnutí: ${newsSummary}\n\nVytvoř post, který propojí tuto novinku s KB fakty projektu.`);
+      parts.push(`\n---\nÚKOL: REAKCE NA NOVINKU`);
+      parts.push(`Titulek: ${newsTitle}`);
+      parts.push(`Shrnutí: ${newsSummary}`);
+      parts.push(`\nVytvoř post, který propojí tuto novinku s KB fakty projektu. Cituj zdroj.`);
       parts.push('Vrať JSON: {"text": "...", "image_prompt": "...", "scores": {...}}');
-      break;
-    }
-    case 'optimize_schedule': {
-      parts.push('\nNAVRHNI optimální časy publikace pro každou platformu. Zohledni typ obsahu a cílovou skupinu.');
-      parts.push('Vrať JSON: {"schedule": [{"platform": "...", "best_times": ["HH:MM"], "best_days": ["monday",...], "reasoning": "..."}]}');
-      break;
-    }
-    case 'generate_week_plan': {
-      parts.push('\nNAPLÁNUJ obsah na celý týden (Po-Pá). Pro každý den navrhni post pro každou platformu.');
-      parts.push('Zohledni content mix (4-1-1), sezónnost, a KB fakta.');
-      parts.push('Vrať JSON: {"week_plan": [{"day": "monday", "posts": [{"platform": "...", "content_type": "...", "topic": "...", "hook": "..."}]}]}');
-      break;
-    }
-    case 'suggest_topics': {
-      parts.push('\nNAVRHNI 5-10 témat pro příspěvky na základě KB, sezóny a content mixu.');
-      parts.push('Vrať JSON: {"topics": [{"title": "...", "content_type": "...", "platform": "...", "reasoning": "...", "priority": 1-10}]}');
-      break;
-    }
-    case 'kb_gap_analysis': {
-      parts.push('\nANALYZUJ Knowledge Base a najdi mezery. Co chybí pro kvalitní obsah?');
-      parts.push('Vrať JSON: {"gaps": [{"category": "...", "description": "...", "importance": "high/medium/low"}], "recommendations": [...]}');
       break;
     }
   }

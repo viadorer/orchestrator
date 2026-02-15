@@ -5,7 +5,7 @@ import {
   Bot, Play, Loader2, CheckCircle, XCircle, Clock, AlertTriangle,
   Sparkles, Calendar, Brain, Shield, TrendingUp, BookOpen,
   ChevronDown, ChevronUp, Zap, Activity, RotateCcw, Trash2, Map,
-  Pencil, Save,
+  Pencil, Save, Timer,
 } from 'lucide-react';
 import { AgentDiagram } from './AgentDiagram';
 
@@ -85,7 +85,7 @@ export function AgentView() {
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState(false);
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all');
-  const [agentTab, setAgentTab] = useState<'tasks' | 'diagram'>('tasks');
+  const [agentTab, setAgentTab] = useState<'tasks' | 'diagram' | 'cron'>('tasks');
 
   const filteredTasks = taskFilter === 'all' ? tasks : tasks.filter(t => t.status === taskFilter);
 
@@ -251,6 +251,14 @@ export function AgentView() {
               <Zap className="w-3.5 h-3.5" /> Úkoly
             </button>
             <button
+              onClick={() => setAgentTab('cron')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                agentTab === 'cron' ? 'bg-violet-600/20 text-violet-300' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Timer className="w-3.5 h-3.5" /> Cron Plán
+            </button>
+            <button
               onClick={() => setAgentTab('diagram')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 agentTab === 'diagram' ? 'bg-violet-600/20 text-violet-300' : 'text-slate-400 hover:text-white'
@@ -286,6 +294,9 @@ export function AgentView() {
 
       {/* Diagram tab */}
       {agentTab === 'diagram' && <AgentDiagram />}
+
+      {/* Cron Plan tab */}
+      {agentTab === 'cron' && <CronPlanPanel />}
 
       {/* Tasks tab */}
       {agentTab === 'tasks' && <>
@@ -741,6 +752,298 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     <div>
       <div className="text-xs text-slate-500">{label}</div>
       <div className="text-lg font-bold text-white">{value}</div>
+    </div>
+  );
+}
+
+/* ============================================
+   CRON PLAN PANEL
+   ============================================ */
+
+interface CronProject {
+  id: string;
+  name: string;
+  slug: string;
+  platforms: string[];
+  logo_url: string | null;
+  primary_color: string | null;
+  enabled: boolean;
+  frequency: string;
+  posting_times: string[];
+  max_per_day: number;
+  auto_publish: boolean;
+  auto_publish_threshold: number;
+  content_strategy: string;
+  media_strategy: string;
+  pause_weekends: boolean;
+  today_generated: number;
+  pending_tasks: Array<{ task_type: string; scheduled_for: string }>;
+}
+
+interface CronPlanData {
+  projects: CronProject[];
+  cron_schedule: { agent: string; rss: string };
+  last_runs: Array<{ action: string; details: Record<string, unknown>; created_at: string }>;
+  cron_secret_configured: boolean;
+}
+
+const FREQ_MAP: Record<string, string> = {
+  '2x_daily': '2× denně',
+  'daily': '1× denně',
+  '3x_week': '3× týdně',
+  'weekly': '1× týdně',
+  'custom': 'vlastní',
+};
+
+const STRATEGY_MAP: Record<string, string> = {
+  balanced: 'Vyvážená',
+  aggressive: 'Agresivní',
+  conservative: 'Konzervativní',
+  educational: 'Edukativní',
+  engagement: 'Engagement',
+};
+
+const TASK_TYPE_MAP: Record<string, string> = {
+  generate_content: 'Generování postu',
+  generate_week_plan: 'Týdenní plán',
+  analyze_content_mix: 'Analýza mixu',
+  suggest_topics: 'Návrh témat',
+  react_to_news: 'Reakce na zprávy',
+  quality_review: 'Quality review',
+  kb_gap_analysis: 'KB analýza',
+  optimize_schedule: 'Optimalizace',
+};
+
+function CronPlanPanel() {
+  const [data, setData] = useState<CronPlanData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/agent/cron-plan')
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+      </div>
+    );
+  }
+
+  if (!data) return <div className="text-center text-slate-500 py-8">Nepodařilo se načíst cron plán</div>;
+
+  const enabledProjects = data.projects.filter(p => p.enabled);
+  const disabledProjects = data.projects.filter(p => !p.enabled);
+
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'právě teď';
+    if (diffMin < 60) return `před ${diffMin} min`;
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return `před ${diffH} h`;
+    return d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6;
+
+  return (
+    <div className="space-y-6">
+      {/* Cron Schedule Overview */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <Timer className="w-4 h-4 text-blue-400" /> Rozvrh Cron Jobs
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-3 rounded-lg bg-slate-800 border border-slate-700">
+            <div className="flex items-center gap-2 mb-1">
+              <Bot className="w-4 h-4 text-violet-400" />
+              <span className="text-xs font-medium text-white">Agent Hugo</span>
+            </div>
+            <div className="text-[11px] text-slate-400 mb-2">{data.cron_schedule.agent}</div>
+            <div className="text-[10px] text-slate-500">
+              Při každém běhu: auto-schedule projektů → spuštění pending tasků → AI tagging médií
+            </div>
+          </div>
+          <div className="p-3 rounded-lg bg-slate-800 border border-slate-700">
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-medium text-white">RSS Fetch</span>
+            </div>
+            <div className="text-[11px] text-slate-400 mb-2">{data.cron_schedule.rss}</div>
+            <div className="text-[10px] text-slate-500">
+              Stahuje RSS zdroje → AI sumarizace → uložení pro Contextual Pulse
+            </div>
+          </div>
+        </div>
+
+        {/* Last runs */}
+        {data.last_runs.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-slate-700">
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Poslední běhy</div>
+            <div className="space-y-1">
+              {data.last_runs.map((run, i) => (
+                <div key={i} className="flex items-center gap-2 text-[11px]">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="text-slate-400">{run.action === 'cron_agent' ? 'Agent' : 'RSS'}</span>
+                  <span className="text-slate-600">·</span>
+                  <span className="text-slate-500">{formatTime(run.created_at)}</span>
+                  {run.details && 'message' in run.details && (
+                    <>
+                      <span className="text-slate-600">·</span>
+                      <span className="text-slate-500 truncate">{String(run.details.message).substring(0, 80)}</span>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Active Projects */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl">
+        <div className="flex items-center justify-between p-4 border-b border-slate-800">
+          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Play className="w-4 h-4 text-emerald-400" /> Aktivní projekty ({enabledProjects.length})
+          </h2>
+          {isWeekend && (
+            <span className="text-[10px] px-2 py-1 rounded bg-amber-500/10 text-amber-400">
+              Víkend – některé projekty mohou být pozastaveny
+            </span>
+          )}
+        </div>
+
+        {enabledProjects.length === 0 ? (
+          <div className="p-8 text-center">
+            <Bot className="w-10 h-10 text-slate-700 mx-auto mb-2" />
+            <p className="text-sm text-slate-500">Žádný projekt nemá zapnutý orchestrátor</p>
+            <p className="text-xs text-slate-600 mt-1">Zapněte ho v Projekty → Orchestrátor</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-800/50">
+            {enabledProjects.map(p => (
+              <div key={p.id} className="p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  {p.logo_url ? (
+                    <img src={p.logo_url} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                  ) : (
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold"
+                      style={{ backgroundColor: p.primary_color || '#6d28d9' }}
+                    >
+                      {p.name.charAt(0)}
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-white">{p.name}</span>
+                      {p.pause_weekends && isWeekend && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">PAUZA</span>
+                      )}
+                      {p.auto_publish && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
+                          AUTO-PUBLISH ≥{p.auto_publish_threshold}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      {p.platforms.join(', ')}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-white font-semibold">{p.today_generated}/{p.max_per_day}</div>
+                    <div className="text-[10px] text-slate-500">dnes/max</div>
+                  </div>
+                </div>
+
+                {/* What cron does for this project */}
+                <div className="ml-11 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="text-[10px] px-2 py-1 rounded bg-violet-500/10 text-violet-400">
+                      {FREQ_MAP[p.frequency] || p.frequency}
+                    </span>
+                    <span className="text-[10px] px-2 py-1 rounded bg-blue-500/10 text-blue-400">
+                      časy: {p.posting_times.join(', ')}
+                    </span>
+                    <span className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400">
+                      strategie: {STRATEGY_MAP[p.content_strategy] || p.content_strategy}
+                    </span>
+                    <span className="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400">
+                      média: {p.media_strategy}
+                    </span>
+                  </div>
+
+                  {/* Pending tasks */}
+                  {p.pending_tasks.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] text-slate-500">Čekající:</span>
+                      {p.pending_tasks.slice(0, 5).map((t, i) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">
+                          {TASK_TYPE_MAP[t.task_type] || t.task_type}
+                        </span>
+                      ))}
+                      {p.pending_tasks.length > 5 && (
+                        <span className="text-[10px] text-slate-500">+{p.pending_tasks.length - 5}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* What will happen */}
+                  <div className="text-[10px] text-slate-600 leading-relaxed">
+                    {p.today_generated >= p.max_per_day ? (
+                      <span className="text-amber-400">✓ Denní limit dosažen – Hugo dnes nebude generovat další posty</span>
+                    ) : p.pause_weekends && isWeekend ? (
+                      <span className="text-amber-400">⏸ Víkendová pauza – Hugo nebude generovat</span>
+                    ) : (
+                      <span className="text-slate-400">
+                        → Při dalším cronu Hugo vygeneruje post ({FREQ_MAP[p.frequency] || p.frequency}),
+                        {' '}vybere fotku z médií ({p.media_strategy}),
+                        {p.auto_publish ? ` auto-publikuje pokud skóre ≥${p.auto_publish_threshold}` : ' uloží do Review fronty'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Disabled Projects */}
+      {disabledProjects.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl">
+          <div className="p-4 border-b border-slate-800">
+            <h2 className="text-sm font-semibold text-slate-400 flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-slate-500" /> Neaktivní projekty ({disabledProjects.length})
+            </h2>
+          </div>
+          <div className="divide-y divide-slate-800/50">
+            {disabledProjects.map(p => (
+              <div key={p.id} className="px-4 py-3 flex items-center gap-3 opacity-50">
+                {p.logo_url ? (
+                  <img src={p.logo_url} alt="" className="w-6 h-6 rounded object-cover" />
+                ) : (
+                  <div
+                    className="w-6 h-6 rounded flex items-center justify-center text-white text-[9px] font-bold"
+                    style={{ backgroundColor: p.primary_color || '#6d28d9' }}
+                  >
+                    {p.name.charAt(0)}
+                  </div>
+                )}
+                <span className="text-xs text-slate-400">{p.name}</span>
+                <span className="text-[10px] text-slate-600">{p.platforms.join(', ')}</span>
+                <span className="ml-auto text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-500">OFF</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

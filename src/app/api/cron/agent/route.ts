@@ -1,5 +1,6 @@
 import { runPendingTasks } from '@/lib/ai/agent-orchestrator';
 import { processUntaggedMedia } from '@/lib/ai/vision-engine';
+import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
 
 /**
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -30,12 +31,28 @@ export async function GET(request: Request) {
 
   const duration = Date.now() - startTime;
 
-  return NextResponse.json({
+  const result = {
     ...taskResult,
     media_processed: mediaResult.processed,
     media_failed: mediaResult.failed,
     duration_ms: duration,
     timestamp: new Date().toISOString(),
     message: `Hugo: ${taskResult.executed} tasks, ${taskResult.skipped} skipped (daily limit), ${taskResult.auto_scheduled} scheduled, ${mediaResult.processed} media tagged.`,
-  });
+  };
+
+  // Log cron run to agent_log for admin visibility
+  if (supabase) {
+    try {
+      await supabase.from('agent_log').insert({
+        action: 'cron_agent',
+        details: result,
+        tokens_used: 0,
+        model_used: 'system',
+      });
+    } catch {
+      // Don't fail cron on log error
+    }
+  }
+
+  return NextResponse.json(result);
 }

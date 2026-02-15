@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   FolderKanban, ClipboardCheck, Send, TrendingUp, Sparkles, AlertTriangle,
-  Image, Bot, Zap, Clock, CheckCircle2, XCircle, Play,
+  Image, Bot, Zap, Clock, CheckCircle2, XCircle, Play, Timer, ShieldCheck, ShieldAlert,
 } from 'lucide-react';
 
 interface Stats {
@@ -93,6 +93,20 @@ interface AgentTasksData {
   };
 }
 
+interface CronStatus {
+  cron_agent: {
+    last_run: string | null;
+    details: Record<string, unknown> | null;
+    schedule: string;
+  };
+  cron_rss: {
+    last_run: string | null;
+    details: Record<string, unknown> | null;
+    schedule: string;
+  };
+  cron_secret_configured: boolean;
+}
+
 const TASK_LABELS: Record<string, string> = {
   generate_content: 'Generování postu',
   generate_week_plan: 'Týdenní plán',
@@ -123,18 +137,26 @@ export function DashboardView() {
   const [mediaStats, setMediaStats] = useState<MediaStats | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [agentTasks, setAgentTasks] = useState<AgentTasksData | null>(null);
+  const [cronStatus, setCronStatus] = useState<CronStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const res = await fetch('/api/dashboard');
-        const data = await res.json();
+        const [dashRes, cronRes] = await Promise.all([
+          fetch('/api/dashboard'),
+          fetch('/api/cron/status'),
+        ]);
+        const data = await dashRes.json();
         if (data.stats) setStats(data.stats);
         if (data.projectStats) setProjectStats(data.projectStats);
         if (data.mediaStats) setMediaStats(data.mediaStats);
         if (data.recentActivity) setActivity(data.recentActivity);
         if (data.agentTasks) setAgentTasks(data.agentTasks);
+        try {
+          const cronData = await cronRes.json();
+          setCronStatus(cronData);
+        } catch { /* cron status optional */ }
       } catch {
         setStats({
           totalProjects: 0, reviewCount: 0, approvedCount: 0,
@@ -363,6 +385,83 @@ export function DashboardView() {
                 <p className="text-xs text-slate-500">Agent je v klidu</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Cron Status */}
+      {cronStatus && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl">
+          <div className="flex items-center justify-between p-4 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Timer className="w-4 h-4 text-blue-400" />
+              <h2 className="text-sm font-semibold text-white">Cron Jobs</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              {cronStatus.cron_secret_configured ? (
+                <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                  <ShieldCheck className="w-3 h-3" /> CRON_SECRET OK
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-[10px] text-red-400">
+                  <ShieldAlert className="w-3 h-3" /> CRON_SECRET chybí!
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+            {/* Agent Cron */}
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Bot className="w-4 h-4 text-violet-400" />
+                <span className="text-xs font-medium text-white">Agent Hugo</span>
+              </div>
+              <div className="text-[11px] text-slate-500 mb-2">{cronStatus.cron_agent.schedule}</div>
+              {cronStatus.cron_agent.last_run ? (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-xs text-slate-300">Poslední běh: {formatTime(cronStatus.cron_agent.last_run)}</span>
+                  </div>
+                  {cronStatus.cron_agent.details && (
+                    <div className="text-[10px] text-slate-500">
+                      {(cronStatus.cron_agent.details as Record<string, unknown>).message as string || 'OK'}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-red-400" />
+                  <span className="text-xs text-red-400">Nikdy neběžel</span>
+                </div>
+              )}
+            </div>
+            {/* RSS Cron */}
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-medium text-white">RSS Fetch</span>
+              </div>
+              <div className="text-[11px] text-slate-500 mb-2">{cronStatus.cron_rss.schedule}</div>
+              {cronStatus.cron_rss.last_run ? (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-xs text-slate-300">Poslední běh: {formatTime(cronStatus.cron_rss.last_run)}</span>
+                  </div>
+                  {cronStatus.cron_rss.details && (
+                    <div className="text-[10px] text-slate-500">
+                      {JSON.stringify(cronStatus.cron_rss.details).substring(0, 100)}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-red-400" />
+                  <span className="text-xs text-red-400">Nikdy neběžel</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

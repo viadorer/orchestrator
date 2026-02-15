@@ -835,8 +835,11 @@ function CronPlanPanel() {
 
   if (!data) return <div className="text-center text-slate-500 py-8">Nepodařilo se načíst cron plán</div>;
 
-  const enabledProjects = data.projects.filter(p => p.enabled);
-  const disabledProjects = data.projects.filter(p => !p.enabled);
+  const schedule = data.cron_schedule || { agent: '0 8,12,17 * * *', rss: '0 */6 * * *' };
+  const lastRuns = data.last_runs || [];
+  const allProjects = data.projects || [];
+  const enabledProjects = allProjects.filter(p => p.enabled);
+  const disabledProjects = allProjects.filter(p => !p.enabled);
 
   const formatTime = (iso: string) => {
     const d = new Date(iso);
@@ -865,7 +868,7 @@ function CronPlanPanel() {
               <Bot className="w-4 h-4 text-violet-400" />
               <span className="text-xs font-medium text-white">Agent Hugo</span>
             </div>
-            <div className="text-[11px] text-slate-400 mb-2">{data.cron_schedule.agent}</div>
+            <div className="text-[11px] text-slate-400 mb-2">{schedule.agent}</div>
             <div className="text-[10px] text-slate-500">
               Při každém běhu: auto-schedule projektů → spuštění pending tasků → AI tagging médií
             </div>
@@ -875,7 +878,7 @@ function CronPlanPanel() {
               <Zap className="w-4 h-4 text-amber-400" />
               <span className="text-xs font-medium text-white">RSS Fetch</span>
             </div>
-            <div className="text-[11px] text-slate-400 mb-2">{data.cron_schedule.rss}</div>
+            <div className="text-[11px] text-slate-400 mb-2">{schedule.rss}</div>
             <div className="text-[10px] text-slate-500">
               Stahuje RSS zdroje → AI sumarizace → uložení pro Contextual Pulse
             </div>
@@ -883,11 +886,11 @@ function CronPlanPanel() {
         </div>
 
         {/* Last runs */}
-        {data.last_runs.length > 0 && (
+        {lastRuns.length > 0 && (
           <div className="mt-4 pt-3 border-t border-slate-700">
             <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Poslední běhy</div>
             <div className="space-y-1">
-              {data.last_runs.map((run, i) => (
+              {lastRuns.map((run, i) => (
                 <div key={i} className="flex items-center gap-2 text-[11px]">
                   <div className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span className="text-slate-400">{run.action === 'cron_agent' ? 'Agent' : 'RSS'}</span>

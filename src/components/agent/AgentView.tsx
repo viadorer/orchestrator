@@ -5,9 +5,10 @@ import {
   Bot, Play, Loader2, CheckCircle, XCircle, Clock, AlertTriangle,
   Sparkles, Calendar, Brain, Shield, TrendingUp, BookOpen,
   ChevronDown, ChevronUp, Zap, Activity, RotateCcw, Trash2, Map,
-  Pencil, Save, Timer,
+  Pencil, Save, Timer, Lightbulb,
 } from 'lucide-react';
 import { AgentDiagram } from './AgentDiagram';
+import { FeedbackDigestPanel } from './FeedbackDigestPanel';
 
 interface Project {
   id: string;
@@ -85,7 +86,7 @@ export function AgentView() {
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState(false);
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all');
-  const [agentTab, setAgentTab] = useState<'tasks' | 'diagram' | 'cron'>('tasks');
+  const [agentTab, setAgentTab] = useState<'tasks' | 'diagram' | 'cron' | 'feedback'>('tasks');
 
   const filteredTasks = taskFilter === 'all' ? tasks : tasks.filter(t => t.status === taskFilter);
 
@@ -259,6 +260,14 @@ export function AgentView() {
               <Timer className="w-3.5 h-3.5" /> Cron Plán
             </button>
             <button
+              onClick={() => setAgentTab('feedback')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                agentTab === 'feedback' ? 'bg-violet-600/20 text-violet-300' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Lightbulb className="w-3.5 h-3.5" /> Feedback
+            </button>
+            <button
               onClick={() => setAgentTab('diagram')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 agentTab === 'diagram' ? 'bg-violet-600/20 text-violet-300' : 'text-slate-400 hover:text-white'
@@ -297,6 +306,9 @@ export function AgentView() {
 
       {/* Cron Plan tab */}
       {agentTab === 'cron' && <CronPlanPanel />}
+
+      {/* Feedback Digest tab */}
+      {agentTab === 'feedback' && <FeedbackDigestPanel projectId={selectedProject} />}
 
       {/* Tasks tab */}
       {agentTab === 'tasks' && <>

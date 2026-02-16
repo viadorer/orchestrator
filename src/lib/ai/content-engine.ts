@@ -32,6 +32,8 @@ export interface GeneratedContent {
     original_score: number;
     editor_score: number;
   };
+  reasoning_steps?: Record<string, unknown>;
+  prompt_performance?: Record<string, unknown>;
 }
 
 export interface GenerateRequest {
@@ -152,16 +154,25 @@ async function loadProjectContext(projectId: string): Promise<{
  * Generate content for a project
  */
 export async function generateContent(req: GenerateRequest): Promise<GeneratedContent> {
+  const startTime = Date.now();
+  const reasoning: Record<string, unknown> = {};
+  const performance: Record<string, unknown> = { model: 'gemini-2.0-flash', temperature: 0.8 };
+
   const ctx = await loadProjectContext(req.projectId);
   if (!ctx) throw new Error('Project not found');
 
   const project = ctx.project;
 
   // Determine content type
-  const contentType = (req.contentType || await getNextContentType(
-    req.projectId,
-    (project.content_mix as Record<string, number>) || { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 }
-  )) as PromptContext['contentType'];
+  const contentMix = (project.content_mix as Record<string, number>) || { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 };
+  const wasExplicit = !!req.contentType;
+  const contentType = (req.contentType || await getNextContentType(req.projectId, contentMix)) as PromptContext['contentType'];
+  
+  reasoning.content_type_decision = {
+    chosen: contentType,
+    source: wasExplicit ? 'explicit' : 'auto_4-1-1',
+    target_mix: contentMix,
+  };
 
   // Load pattern if specified
   let patternTemplate: string | undefined;
@@ -176,6 +187,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
 
   // Load news context (Contextual Pulse)
   let newsContext: string | undefined;
+  let newsCount = 0;
   if (supabase) {
     try {
       const { data: news } = await supabase
@@ -186,6 +198,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         .order('published_at', { ascending: false })
         .limit(3);
       if (news && news.length > 0) {
+        newsCount = news.length;
         newsContext = news.map((n: { title: string; summary: string; source_name: string }) =>
           `- [${n.source_name}] ${n.title}: ${n.summary}`
         ).join('\n');
@@ -194,6 +207,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
       // project_news table may not exist yet
     }
   }
+  reasoning.news_context = { available: newsCount, used: newsCount > 0 };
 
   // Build feedback context from human edits
   let feedbackContext: string | undefined;
@@ -209,6 +223,9 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
     parts.push('Poučení: Přizpůsob styl a obsah podle těchto úprav. Opakuj vzory, které admin preferuje.');
     feedbackContext = parts.join('\n');
   }
+  reasoning.feedback_loop = { edits_available: ctx.feedbackHistory.length, used: ctx.feedbackHistory.length > 0 };
+  reasoning.kb_facts = { total: ctx.kbEntries.length, used_in_prompt: ctx.kbEntries.length };
+  reasoning.dedup_context = { recent_posts: ctx.recentPosts.length };
 
   // Build prompt
   const prompt = await buildContentPrompt({
@@ -305,10 +322,27 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
           ...content.scores,
           ...editorResult.editor_scores as GeneratedContent['scores'],
         };
+        reasoning.editor_review = {
+          triggered: true,
+          changes_made: editorResult.changes.length,
+          score_improvement: editorResult.editor_scores.overall - content.scores.overall,
+          accepted: true,
+        };
+      } else {
+        reasoning.editor_review = {
+          triggered: true,
+          changes_made: editorResult.changes.length,
+          score_improvement: editorResult.editor_scores.overall - content.scores.overall,
+          accepted: false,
+          reason: 'editor_score_lower',
+        };
       }
     } catch {
       // Editor failed, continue with original
+      reasoning.editor_review = { triggered: true, accepted: false, reason: 'editor_failed' };
     }
+  } else {
+    reasoning.editor_review = { triggered: false, reason: `score_too_low (${content.scores.overall} < ${MIN_QUALITY_SCORE})` };
   }
 
   // Read media_strategy from project's orchestrator_config
@@ -330,9 +364,17 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         forcePhoto: req.forcePhoto,
       });
       content.visual = visual;
+      reasoning.visual_decision = {
+        type: visual.visual_type,
+        reason: req.forcePhoto ? 'forcePhoto=true' : `media_strategy=${mediaStrategy}`,
+        generated_image: !!visual.generated_image_url,
+        chart: !!visual.chart_url,
+        card: !!visual.card_url,
+      };
     } catch {
       // Visual generation failed, continue without
       content.visual = { visual_type: 'none', chart_url: null, card_url: null, image_prompt: content.image_prompt || null };
+      reasoning.visual_decision = { type: 'none', reason: 'generation_failed' };
     }
   }
 
@@ -348,11 +390,25 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         content.matched_image_url = matches[0].public_url;
         content.matched_media_id = matches[0].id;
         await markMediaUsed(matches[0].id);
+        reasoning.media_matching = {
+          matched: true,
+          similarity: (matches[0] as { similarity?: number }).similarity || 0,
+          total_candidates: matches.length,
+        };
       }
     } catch {
       // Media matching failed (no media_assets table or no processed photos)
     }
   }
+
+  // Performance metrics
+  const duration = Date.now() - startTime;
+  performance.latency_ms = duration;
+  performance.scores = content.scores;
+
+  // Attach reasoning and performance to content
+  content.reasoning_steps = reasoning;
+  content.prompt_performance = performance;
 
   return content;
 }

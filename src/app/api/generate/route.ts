@@ -93,6 +93,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Log reasoning steps and performance to agent_log
+    try {
+      await supabase.from('agent_log').insert({
+        project_id: projectId,
+        action: 'content_generated',
+        details: {
+          platform,
+          content_type: resolvedContentType,
+          pattern_id: patternId || null,
+          visual_type: visual.visual_type || 'none',
+          source: 'manual_ui',
+        },
+        reasoning_steps: content.reasoning_steps || null,
+        prompt_performance: content.prompt_performance || null,
+        tokens_used: 0,
+        model_used: 'gemini-2.0-flash',
+      });
+    } catch {
+      // Log failed, continue
+    }
+
     return NextResponse.json({ content, saved });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

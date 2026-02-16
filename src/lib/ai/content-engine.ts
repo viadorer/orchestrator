@@ -234,24 +234,44 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
   });
 
   // Parse JSON response (strip markdown code blocks if present)
-  const cleanedResponse = rawResponse.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  const cleanedResponse = rawResponse
+    .replace(/^```(?:json)?\s*\n?/i, '')
+    .replace(/\n?\s*```\s*$/i, '')
+    .trim();
   let content: GeneratedContent;
   try {
+    // Try 1: Direct parse
     const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in response');
-    content = JSON.parse(jsonMatch[0]) as GeneratedContent;
+    const parsed = JSON.parse(jsonMatch[0]);
+    // Ensure text field exists and is a string (not nested JSON)
+    if (typeof parsed.text !== 'string') throw new Error('text field is not a string');
+    content = parsed as GeneratedContent;
   } catch {
-    // Fallback: treat entire response as text
-    content = {
-      text: rawResponse,
-      scores: {
-        creativity: 5,
-        tone_match: 5,
-        hallucination_risk: 5,
-        value_score: 5,
-        overall: 5,
-      },
-    };
+    // Try 2: Extract "text" field with regex if JSON is malformed
+    const textMatch = cleanedResponse.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (textMatch) {
+      const extractedText = textMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      // Try to get scores too
+      let scores = { creativity: 5, tone_match: 5, hallucination_risk: 5, value_score: 5, overall: 5 };
+      const scoresMatch = cleanedResponse.match(/"scores"\s*:\s*(\{[^}]+\})/);
+      if (scoresMatch) {
+        try { scores = JSON.parse(scoresMatch[1]); } catch { /* use defaults */ }
+      }
+      content = { text: extractedText, scores };
+    } else {
+      // Fallback: treat entire response as text (strip any JSON artifacts)
+      const fallbackText = rawResponse
+        .replace(/^[\s\S]*?"text"\s*:\s*"/i, '')
+        .replace(/"\s*,\s*"image_prompt[\s\S]*$/i, '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .trim();
+      content = {
+        text: fallbackText || rawResponse,
+        scores: { creativity: 5, tone_match: 5, hallucination_risk: 5, value_score: 5, overall: 5 },
+      };
+    }
   }
 
   // Sanitize text: remove hashtags, trailing emoji, URLs

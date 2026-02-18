@@ -21,11 +21,25 @@ const IMAGEN_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/
 
 /**
  * Get aspect ratio for a platform from PLATFORM_LIMITS (single source of truth).
+ * Maps custom ratios to Imagen-supported values: 1:1, 9:16, 16:9, 4:3, 3:4
  * Falls back to '4:3' if platform is unknown.
  */
 function getPlatformAspectRatio(platform: string): string {
   const spec = getDefaultImageSpec(platform);
-  return spec?.aspectRatio || '4:3';
+  const ratio = spec?.aspectRatio || '4:3';
+  
+  // Map custom aspect ratios to Imagen-supported values
+  const imagenSupportedRatios: Record<string, string> = {
+    '1.91:1': '16:9',  // LinkedIn/Facebook landscape → closest match
+    '1:1': '1:1',      // Instagram square
+    '9:16': '9:16',    // Instagram/TikTok stories
+    '16:9': '16:9',    // YouTube/landscape
+    '4:3': '4:3',      // Classic
+    '3:4': '3:4',      // Portrait
+    '4:5': '3:4',      // Instagram portrait → closest match
+  };
+  
+  return imagenSupportedRatios[ratio] || '4:3';
 }
 
 export interface ImagenResult {

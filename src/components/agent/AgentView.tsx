@@ -120,19 +120,23 @@ export function AgentView() {
 
   useEffect(() => { loadProjectData(); }, [loadProjectData]);
 
+  // Content-generation task types that need platform selection
+  const CONTENT_TASK_TYPES = ['generate_content', 'generate_ab_variants', 'react_to_news'];
+
   // Create task AND immediately execute it
   const handleCreateTask = async (taskType: string) => {
     setCreatingTask(taskType);
     const currentProject = projects.find(p => p.id === selectedProject);
+    const isContentTask = CONTENT_TASK_TYPES.includes(taskType);
     
-    // Determine which platforms to generate for
-    const platformsToGenerate = selectedPlatforms.length > 0 
-      ? selectedPlatforms 
-      : currentProject?.platforms || ['linkedin'];
+    // Determine which platforms to generate for (only relevant for content tasks)
+    const platformsToGenerate = isContentTask
+      ? (selectedPlatforms.length > 0 ? selectedPlatforms : currentProject?.platforms || ['linkedin'])
+      : ['_none'];
     
     try {
-      // If multiple platforms selected, create tasks for each
-      if (platformsToGenerate.length > 1) {
+      if (isContentTask && platformsToGenerate.length > 1) {
+        // Multi-platform content generation
         const contentGroupId = crypto.randomUUID();
         for (let i = 0; i < platformsToGenerate.length; i++) {
           const createRes = await fetch('/api/agent/tasks', {
@@ -160,26 +164,42 @@ export function AgentView() {
           }
         }
       } else {
-        // Single platform - create and execute immediately
+        // Single task (content with 1 platform, or analytical task)
+        const params: Record<string, unknown> = {};
+        if (isContentTask) {
+          params.platform = platformsToGenerate[0];
+        }
+
         const createRes = await fetch('/api/agent/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             projectId: selectedProject,
             taskType,
-            params: {
-              platform: platformsToGenerate[0],
-            },
+            params,
           }),
         });
         const { id: taskId } = await createRes.json();
 
         if (taskId) {
           await loadProjectData();
-          const execRes = await fetch(`/api/agent/tasks/${taskId}/execute`, { method: 'POST' });
-          if (!execRes.ok) {
-            const data = await execRes.json().catch(() => ({}));
-            console.error('Task execution failed:', data.error || execRes.statusText);
+
+          if (isContentTask) {
+            // Content tasks: wait for execution (user expects result)
+            const execRes = await fetch(`/api/agent/tasks/${taskId}/execute`, { method: 'POST' });
+            if (!execRes.ok) {
+              const data = await execRes.json().catch(() => ({}));
+              console.error('Task execution failed:', data.error || execRes.statusText);
+            }
+          } else {
+            // Analytical tasks: fire-and-forget execution, poll for result
+            fetch(`/api/agent/tasks/${taskId}/execute`, { method: 'POST' })
+              .then(async (res) => {
+                if (!res.ok) console.error('Background task failed:', await res.text().catch(() => ''));
+                loadProjectData();
+              })
+              .catch(() => {});
+            // Don't await — release UI immediately
           }
         }
       }
@@ -189,8 +209,10 @@ export function AgentView() {
     await loadProjectData();
     setCreatingTask(null);
     setShowPlatformSelector(false);
-    // Auto-refresh after 3s
-    setTimeout(() => loadProjectData(), 3000);
+    // Poll for completion: refresh at 3s, 8s, 15s, 30s
+    [3000, 8000, 15000, 30000].forEach(delay => {
+      setTimeout(() => loadProjectData(), delay);
+    });
   };
 
   // Execute single task

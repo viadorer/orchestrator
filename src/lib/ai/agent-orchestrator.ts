@@ -564,8 +564,10 @@ async function buildAgentPrompt(
     }
     case 'auto_enrich_kb': {
       parts.push(`\n---\nÚKOL: AUTOMATICKÉ OBOHACENÍ KNOWLEDGE BASE`);
-      parts.push(`\nNa základě KB gap analýzy a agent memory navrhni NOVÉ KB záznamy.`);
-      parts.push(`Pro každý navržený záznam:`);
+      parts.push(`\nAnalyzuj existující KB záznamy výše a identifikuj MEZERY.`);
+      parts.push(`Pokud máš v AGENT MEMORY výsledky kb_gap analýzy, využij je.`);
+      parts.push(`Pokud ne, proveď vlastní analýzu: jaké informace chybí pro kvalitní obsah?`);
+      parts.push(`\nPro každý navržený záznam:`);
       parts.push(`1. Zvol kategorii (product, audience, usp, faq, case_study, data, market, legal, process, general)`);
       parts.push(`2. Navrhni title a content (reálná, faktická data – NE generické fráze)`);
       parts.push(`3. Uveď důvod proč tento záznam chybí`);
@@ -573,9 +575,11 @@ async function buildAgentPrompt(
       parts.push(`\nPRAVIDLA:`);
       parts.push(`- Navrhuj MAX 5 záznamů najednou`);
       parts.push(`- Každý záznam musí být KONKRÉTNÍ a UŽITEČNÝ pro generování obsahu`);
-      parts.push(`- Nenavrhuj záznamy, které už v KB existují`);
+      parts.push(`- Nenavrhuj záznamy, které už v KB existují (zkontroluj výše)`);
       parts.push(`- Preferuj kategorie: faq, case_study, data, process (ty nejčastěji chybí)`);
-      parts.push(`\nVrať JSON:\n{"suggestions": [{"category": "faq", "title": "...", "content": "...", "reason": "...", "priority": "high"}], "kb_completeness_before": N, "kb_completeness_after": N}`);
+      parts.push(`- Content musí být FAKTICKÝ – konkrétní čísla, procesy, příklady`);
+      parts.push(`- VŽDY navrhni alespoň 3 záznamy, i když KB vypadá kompletní`);
+      parts.push(`\nVrať POUZE JSON:\n{"suggestions": [{"category": "faq", "title": "...", "content": "...", "reason": "...", "priority": "high"}], "kb_completeness_before": N, "kb_completeness_after": N}`);
       break;
     }
     case 'cross_project_dedup': {

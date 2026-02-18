@@ -77,8 +77,17 @@ export async function generateAndStoreImage(options: {
       return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: 'Imagen API returned no image' };
     }
 
-    // 2. Compose final image (add logo overlay if provided)
+    // 2. Enforce platform aspect ratio FIRST (crop+resize to exact platform dimensions)
+    // Must happen BEFORE logo overlay — otherwise logo gets cropped off!
+    // Imagen generates 3:4 for Instagram but we need 4:5 (1080×1350)
     let finalImageBuffer: Buffer = Buffer.from(imageBytes, 'base64') as Buffer;
+    try {
+      finalImageBuffer = await enforceAspectRatio(finalImageBuffer, platform);
+    } catch {
+      // Crop failed, continue with original
+    }
+
+    // 3. Compose final image (add logo overlay AFTER crop — logo stays intact)
     if (logoUrl) {
       try {
         finalImageBuffer = await compositeWithLogo(finalImageBuffer, logoUrl);
@@ -87,16 +96,7 @@ export async function generateAndStoreImage(options: {
       }
     }
 
-    // 2b. Enforce platform aspect ratio (crop if needed)
-    // Imagen may return slightly different ratios than requested (e.g. 3:4 instead of 4:5)
-    // Instagram requires 0.75:1 (4:5) to 1.91:1 — we must crop to fit
-    try {
-      finalImageBuffer = await enforceAspectRatio(finalImageBuffer, platform);
-    } catch {
-      // Crop failed, continue with original
-    }
-
-    // 3. Upload to Supabase Storage
+    // 4. Upload to Supabase Storage
     const timestamp = Date.now();
     const fileName = `generated_${platform}_${timestamp}.png`;
     const storagePath = `${projectId}/generated/${fileName}`;
@@ -282,18 +282,19 @@ async function callImagenAPI(prompt: string, aspectRatio: string): Promise<strin
  * Others: no strict enforcement
  */
 async function enforceAspectRatio(imageBuffer: Buffer, platform: string): Promise<Buffer> {
-  // Platform aspect ratio constraints (width/height)
-  const ASPECT_CONSTRAINTS: Record<string, { min: number; max: number; target: number }> = {
-    instagram: { min: 0.75, max: 1.91, target: 0.80 },  // min 3:4 (0.75), target 4:5 (0.80)
-    facebook:  { min: 0.50, max: 2.00, target: 1.91 },   // very permissive
-    linkedin:  { min: 0.50, max: 2.00, target: 1.91 },
-    x:         { min: 0.50, max: 3.00, target: 1.78 },
-    tiktok:    { min: 0.50, max: 1.00, target: 0.5625 }, // 9:16
-    pinterest: { min: 0.50, max: 1.00, target: 0.667 },  // 2:3
+  // Exact target dimensions per platform (width × height)
+  // These are the pixel-perfect sizes that platforms expect
+  const PLATFORM_TARGETS: Record<string, { width: number; height: number; ratio: number }> = {
+    instagram: { width: 1080, height: 1350, ratio: 0.80 },  // 4:5 portrait
+    facebook:  { width: 1200, height: 630,  ratio: 1.905 }, // 1.91:1 landscape
+    linkedin:  { width: 1200, height: 628,  ratio: 1.91 },  // 1.91:1 landscape
+    x:         { width: 1200, height: 675,  ratio: 1.78 },  // 16:9 landscape
+    tiktok:    { width: 1080, height: 1920, ratio: 0.5625 }, // 9:16 portrait
+    pinterest: { width: 1000, height: 1500, ratio: 0.667 },  // 2:3 portrait
   };
 
-  const constraints = ASPECT_CONSTRAINTS[platform];
-  if (!constraints) return imageBuffer; // no constraints for this platform
+  const target = PLATFORM_TARGETS[platform];
+  if (!target) return imageBuffer;
 
   try {
     const sharp = (await import('sharp')).default;
@@ -303,38 +304,43 @@ async function enforceAspectRatio(imageBuffer: Buffer, platform: string): Promis
     if (!w || !h) return imageBuffer;
 
     const currentRatio = w / h;
+    const targetRatio = target.ratio;
+    const ratioDiff = Math.abs(currentRatio - targetRatio);
 
-    // Already within allowed range
-    if (currentRatio >= constraints.min && currentRatio <= constraints.max) {
-      return imageBuffer;
+    // If ratio is close enough (within 2%), just resize to exact dimensions
+    if (ratioDiff < 0.02) {
+      console.log(`[imagen] Resize ${platform}: ${w}×${h} → ${target.width}×${target.height} (ratio OK: ${currentRatio.toFixed(3)})`);
+      return await sharp(imageBuffer)
+        .resize(target.width, target.height, { fit: 'fill' })
+        .png()
+        .toBuffer();
     }
 
-    // Need to crop — use center crop to target ratio
+    // Need to crop first, then resize
     let cropW = w;
     let cropH = h;
 
-    if (currentRatio < constraints.min) {
-      // Too tall (portrait) — crop height
-      cropH = Math.round(w / constraints.target);
+    if (currentRatio < targetRatio) {
+      // Too tall (portrait) — crop height to match target ratio
+      cropH = Math.round(w / targetRatio);
       cropW = w;
     } else {
-      // Too wide (landscape) — crop width
-      cropW = Math.round(h * constraints.target);
+      // Too wide (landscape) — crop width to match target ratio
+      cropW = Math.round(h * targetRatio);
       cropH = h;
     }
 
-    // Ensure we don't exceed original dimensions
     cropW = Math.min(cropW, w);
     cropH = Math.min(cropH, h);
 
-    // Center crop
     const left = Math.round((w - cropW) / 2);
     const top = Math.round((h - cropH) / 2);
 
-    console.log(`[imagen] Aspect ratio fix for ${platform}: ${w}×${h} (${currentRatio.toFixed(2)}) → ${cropW}×${cropH} (${(cropW/cropH).toFixed(2)}), crop from (${left},${top})`);
+    console.log(`[imagen] Crop+resize ${platform}: ${w}×${h} (${currentRatio.toFixed(2)}) → crop ${cropW}×${cropH} → resize ${target.width}×${target.height}`);
 
     return await sharp(imageBuffer)
       .extract({ left, top, width: cropW, height: cropH })
+      .resize(target.width, target.height)
       .png()
       .toBuffer();
   } catch {
@@ -362,9 +368,9 @@ async function compositeWithLogo(imageBuffer: Buffer, logoUrl: string): Promise<
     const imgWidth = metadata.width || 1200;
     const imgHeight = metadata.height || 900;
 
-    // Logo: max 10% of image width, positioned bottom-right with padding
-    const logoMaxWidth = Math.round(imgWidth * 0.10);
-    const padding = Math.round(imgWidth * 0.03);
+    // Logo: max 12% of image width, positioned bottom-right with safe padding (5%)
+    const logoMaxWidth = Math.round(imgWidth * 0.12);
+    const padding = Math.round(imgWidth * 0.05);
 
     const resizedLogo = await sharp(logoBuffer)
       .resize({ width: logoMaxWidth, withoutEnlargement: true })

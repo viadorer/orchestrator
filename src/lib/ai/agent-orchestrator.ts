@@ -292,6 +292,13 @@ async function buildAgentPrompt(
             case 'optimal_posting_times':
               if (content.times) parts.push(`  Optimální časy: ${JSON.stringify(content.times)}`);
               break;
+            case 'competitor_insights':
+              if (content.differentiators) parts.push(`  Diferenciátory: ${JSON.stringify(content.differentiators)}`);
+              if (content.content_opportunities) parts.push(`  Příležitosti: ${JSON.stringify(content.content_opportunities)}`);
+              break;
+            case 'dedup_report':
+              parts.push(`  Unikátnost: ${content.is_unique ? 'OK' : 'DUPLICITA'}, max similarity: ${content.max_similarity}`);
+              break;
             default:
               parts.push(`  ${JSON.stringify(content).substring(0, 200)}`);
           }
@@ -604,11 +611,40 @@ async function buildAgentPrompt(
     case 'react_to_news': {
       const newsTitle = params.news_title as string;
       const newsSummary = params.news_summary as string;
+      const platform = (params.platform as string) || (ctx.project.platforms as string[])?.[0] || 'facebook';
       parts.push(`\n---\nÚKOL: REAKCE NA NOVINKU`);
       parts.push(`Titulek: ${newsTitle}`);
       parts.push(`Shrnutí: ${newsSummary}`);
+      parts.push(`Platforma: ${platform}`);
       parts.push(`\nVytvoř post, který propojí tuto novinku s KB fakty projektu. Cituj zdroj.`);
-      parts.push('Vrať JSON: {"text": "...", "image_prompt": "...", "scores": {...}}');
+      parts.push(`Post musí být relevantní pro cílovou skupinu projektu.`);
+      parts.push('Vrať JSON: {"text": "...", "image_prompt": "...", "scores": {"creativity": N, "relevance": N, "tone_match": N, "overall": N}}');
+      break;
+    }
+    case 'dedup_check': {
+      const postText = params.post_text as string;
+      parts.push(`\n---\nÚKOL: KONTROLA DUPLICIT V RÁMCI PROJEKTU`);
+      parts.push(`\nPOST K OVĚŘENÍ:\n"${postText?.substring(0, 500)}"`);
+      parts.push(`\nPorovnej s nedávnými posty projektu (viz výše).`);
+      parts.push(`Zkontroluj:`);
+      parts.push(`1. Není text příliš podobný existujícímu postu? (>70% overlap)`);
+      parts.push(`2. Nepoužívá stejný hook/úvod?`);
+      parts.push(`3. Nepřináší stejná fakta ve stejném pořadí?`);
+      parts.push(`\nVrať JSON:\n{"is_unique": true/false, "similarity_score": 0.XX, "most_similar_post": "preview...", "issues": ["..."], "suggestions": ["Jak post odlišit"]}`);
+      break;
+    }
+    case 'competitor_brief': {
+      const competitorUrl = params.competitor_url as string;
+      const competitorName = params.competitor_name as string;
+      parts.push(`\n---\nÚKOL: ANALÝZA KONKURENCE`);
+      if (competitorName) parts.push(`Konkurent: ${competitorName}`);
+      if (competitorUrl) parts.push(`URL: ${competitorUrl}`);
+      parts.push(`\nNa základě KB a znalostí o projektu "${ctx.project.name}":`);
+      parts.push(`1. Jaké jsou hlavní DIFERENCIÁTORY oproti konkurenci?`);
+      parts.push(`2. Jaké TÉMATA by měl projekt pokrývat, aby se odlišil?`);
+      parts.push(`3. Jaké SLABINY konkurence může projekt využít v obsahu?`);
+      parts.push(`4. Navrhni 3-5 KONKRÉTNÍCH postů, které zdůrazní výhody projektu`);
+      parts.push(`\nVrať JSON:\n{"differentiators": ["..."], "content_opportunities": [{"topic": "...", "angle": "...", "content_type": "educational|soft_sell"}], "competitor_weaknesses": ["..."], "post_ideas": [{"title": "...", "hook": "...", "key_message": "..."}]}`);
       break;
     }
     case 'auto_enrich_kb': {
@@ -862,6 +898,89 @@ async function processTaskResult(
 
   try {
     switch (taskType) {
+      // ---- REACT TO NEWS → save post to content_queue ----
+      case 'react_to_news': {
+        if (result.text) {
+          const platform = (params.platform as string) || (ctx.project.platforms as string[])?.[0] || 'facebook';
+          const scores = result.scores as Record<string, number> || {};
+          await supabase.from('content_queue').insert({
+            project_id: projectId,
+            text_content: result.text as string,
+            image_prompt: (result.image_prompt as string) || null,
+            content_type: 'news_reaction',
+            platforms: [platform],
+            target_platform: platform,
+            ai_scores: scores,
+            status: 'review',
+            source: 'news_reaction',
+          });
+        }
+        break;
+      }
+
+      // ---- QUALITY REVIEW → log result, flag if unsafe ----
+      case 'quality_review': {
+        const safeToPublish = result.safe_to_publish as boolean;
+        const contentId = params.content_id as string;
+        if (contentId && safeToPublish === false && supabase) {
+          // Flag the post as needing review
+          await supabase.from('content_queue').update({
+            status: 'review',
+          }).eq('id', contentId).eq('status', 'approved');
+        }
+        await supabase.from('agent_log').insert({
+          project_id: projectId,
+          action: 'quality_reviewed',
+          details: {
+            content_id: contentId,
+            safe_to_publish: safeToPublish,
+            scores: result.scores,
+            issues: result.issues,
+          },
+        });
+        break;
+      }
+
+      // ---- DEDUP CHECK → log result ----
+      case 'dedup_check': {
+        await supabase.from('agent_log').insert({
+          project_id: projectId,
+          action: 'dedup_checked',
+          details: {
+            is_unique: result.is_unique,
+            similarity_score: result.similarity_score,
+            issues: result.issues,
+          },
+        });
+        break;
+      }
+
+      // ---- COMPETITOR BRIEF → save insights to memory + create content tasks ----
+      case 'competitor_brief': {
+        await upsertAgentMemory(projectId, 'competitor_insights', {
+          differentiators: result.differentiators || [],
+          content_opportunities: result.content_opportunities || [],
+          competitor_weaknesses: result.competitor_weaknesses || [],
+          analyzed_at: new Date().toISOString(),
+        });
+
+        // Auto-create content tasks from post ideas
+        const postIdeas = result.post_ideas as Array<Record<string, unknown>> || [];
+        if (postIdeas.length > 0) {
+          const platforms = (ctx.project.platforms as string[]) || ['facebook'];
+          for (const idea of postIdeas.slice(0, 3)) {
+            await createTask(projectId, 'generate_content', {
+              platform: platforms[0],
+              human_topic: (idea.title as string) || '',
+              human_notes: `Hook: ${idea.hook || ''}. ${idea.key_message || ''}`,
+              contentType: 'educational',
+              source: 'competitor_brief',
+            }, { priority: 4 });
+          }
+        }
+        break;
+      }
+
       // ---- SUGGEST TOPICS → create generate_content tasks ----
       case 'suggest_topics': {
         const topics = result.topics as Array<Record<string, unknown>> | undefined;

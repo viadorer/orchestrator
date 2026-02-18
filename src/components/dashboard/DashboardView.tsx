@@ -126,6 +126,7 @@ const TASK_LABELS: Record<string, string> = {
   prompt_quality_audit: 'Audit promptů',
   engagement_learning: 'Engagement learning',
   visual_consistency_audit: 'Vizuální audit',
+  competitor_brief: 'Analýza konkurence',
 };
 
 const ACTION_LABELS: Record<string, { label: string; color: string; icon: typeof Bot }> = {

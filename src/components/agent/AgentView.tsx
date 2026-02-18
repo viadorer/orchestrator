@@ -70,6 +70,7 @@ const TASK_TYPES = [
   { value: 'prompt_quality_audit', label: 'Audit promptů', icon: Shield, desc: 'Zhodnotí efektivitu prompt šablon a navrhne vylepšení' },
   { value: 'engagement_learning', label: 'Engagement learning', icon: TrendingUp, desc: 'Analyzuje engagement data a auto-upraví content mix' },
   { value: 'visual_consistency_audit', label: 'Vizuální audit', icon: Lightbulb, desc: 'Audit konzistence vizuálů a návrh visual identity' },
+  { value: 'competitor_brief', label: 'Analýza konkurence', icon: Shield, desc: 'Diferenciátory, slabiny konkurence, návrhy postů' },
 ] as const;
 
 const HEALTH_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -946,8 +947,19 @@ const TASK_TYPE_MAP: Record<string, string> = {
   suggest_topics: 'Návrh témat',
   react_to_news: 'Reakce na zprávy',
   quality_review: 'Quality review',
+  sentiment_check: 'Sentiment check',
+  dedup_check: 'Dedup check',
   kb_gap_analysis: 'KB analýza',
+  auto_enrich_kb: 'Obohacení KB',
   optimize_schedule: 'Optimalizace',
+  competitor_brief: 'Analýza konkurence',
+  performance_report: 'Report výkonu',
+  cross_project_dedup: 'Cross-project dedup',
+  generate_ab_variants: 'A/B varianty',
+  image_prompt_review: 'Review foto promptu',
+  prompt_quality_audit: 'Audit promptů',
+  engagement_learning: 'Engagement learning',
+  visual_consistency_audit: 'Vizuální audit',
 };
 
 function CronPlanPanel() {

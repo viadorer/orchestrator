@@ -122,6 +122,10 @@ const TASK_LABELS: Record<string, string> = {
   cross_project_dedup: 'Cross-project dedup',
   generate_ab_variants: 'A/B varianty',
   performance_report: 'Report výkonu',
+  image_prompt_review: 'Review foto promptu',
+  prompt_quality_audit: 'Audit promptů',
+  engagement_learning: 'Engagement learning',
+  visual_consistency_audit: 'Vizuální audit',
 };
 
 const ACTION_LABELS: Record<string, { label: string; color: string; icon: typeof Bot }> = {

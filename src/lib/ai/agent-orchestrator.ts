@@ -55,7 +55,11 @@ export type TaskType =
   | 'performance_report'
   | 'auto_enrich_kb'
   | 'cross_project_dedup'
-  | 'generate_ab_variants';
+  | 'generate_ab_variants'
+  | 'image_prompt_review'
+  | 'prompt_quality_audit'
+  | 'engagement_learning'
+  | 'visual_consistency_audit';
 
 export interface AgentTask {
   id: string;
@@ -256,6 +260,37 @@ async function buildAgentPrompt(
             }
             case 'kb_enrichment':
               if (content.inserted) parts.push(`  Naposledy přidáno ${content.inserted} KB záznamů`);
+              break;
+            case 'image_prompt_tips': {
+              const tips = content.tips as string[];
+              if (tips && tips.length > 0) {
+                parts.push(`  Tipy pro image prompty (z review):`);
+                for (const tip of tips) parts.push(`  - ${tip}`);
+                parts.push(`  Průměrné zlepšení: ${content.avg_original_score} → ${content.avg_improved_score}`);
+              }
+              break;
+            }
+            case 'prompt_audit':
+              parts.push(`  Kvalita prompt systému: ${content.overall_score}/10`);
+              if (content.recommendations) parts.push(`  Doporučení: ${JSON.stringify(content.recommendations)}`);
+              break;
+            case 'engagement_insights': {
+              const ins = content.insights as Record<string, unknown>;
+              if (ins) {
+                parts.push(`  Nejlepší typ obsahu: ${ins.best_content_type}`);
+                parts.push(`  Nejlepší hook: ${ins.best_hook_type}`);
+                parts.push(`  Nejlepší vizuál: ${ins.best_visual}`);
+                parts.push(`  Optimální délka: ${ins.optimal_length}`);
+              }
+              if (content.visual_strategy) parts.push(`  Vizuální strategie: ${content.visual_strategy}`);
+              break;
+            }
+            case 'visual_audit':
+              parts.push(`  Konzistence: ${content.consistency_score}/10, Brand fit: ${content.brand_fit_score}/10`);
+              if (content.rules) parts.push(`  Pravidla: ${JSON.stringify(content.rules)}`);
+              break;
+            case 'optimal_posting_times':
+              if (content.times) parts.push(`  Optimální časy: ${JSON.stringify(content.times)}`);
               break;
             default:
               parts.push(`  ${JSON.stringify(content).substring(0, 200)}`);
@@ -631,6 +666,158 @@ async function buildAgentPrompt(
       parts.push(`\nVrať JSON:\n{"variants": [{"label": "B", "text": "...", "hook_type": "question|statistic|story|contrast", "difference": "Popis rozdílu", "scores": {"creativity": N, "overall": N}}, {"label": "C", ...}]}`);
       break;
     }
+    case 'image_prompt_review': {
+      const imagePrompt = params.image_prompt as string;
+      const platform = (params.platform as string) || 'instagram';
+      const postText = (params.post_text as string) || '';
+      const vi = ctx.project.visual_identity as Record<string, string> || {};
+      parts.push(`\n---\nÚKOL: REVIEW A VYLEPŠENÍ IMAGE PROMPTU`);
+      parts.push(`\nPŮVODNÍ IMAGE PROMPT:\n"${imagePrompt}"`);
+      parts.push(`\nPOST TEXT (kontext):\n"${postText?.substring(0, 300)}"`);
+      parts.push(`Platforma: ${platform}`);
+      if (Object.keys(vi).length > 0) {
+        parts.push(`\nVIZUÁLNÍ IDENTITA ZNAČKY:`);
+        if (vi.photography_style) parts.push(`- Styl: ${vi.photography_style}`);
+        if (vi.photography_mood) parts.push(`- Nálada: ${vi.photography_mood}`);
+        if (vi.photography_subjects) parts.push(`- Typické subjekty: ${vi.photography_subjects}`);
+        if (vi.photography_lighting) parts.push(`- Osvětlení: ${vi.photography_lighting}`);
+        if (vi.photography_color_grade) parts.push(`- Barevný grading: ${vi.photography_color_grade}`);
+        if (vi.photography_avoid) parts.push(`- VYHNOUT SE: ${vi.photography_avoid}`);
+      }
+      parts.push(`\nANALYZUJ prompt podle těchto kritérií:`);
+      parts.push(`1. SPECIFIČNOST (1-10): Je prompt dostatečně konkrétní? Popisuje scénu, ne koncept?`);
+      parts.push(`2. EMOCE (1-10): Vyvolává prompt emoci? Je filmový/cinematic?`);
+      parts.push(`3. TECHNICKÉ DETAILY (1-10): Má osvětlení, úhel, hloubku ostrosti?`);
+      parts.push(`4. BRAND FIT (1-10): Odpovídá vizuální identitě značky?`);
+      parts.push(`5. PLATFORM FIT (1-10): Je vhodný pro ${platform}? (IG=lifestyle, LI=professional, FB=storytelling)`);
+      parts.push(`\nPRAVIDLA PRO VYLEPŠENÍ:`);
+      parts.push(`- Piš v ANGLIČTINĚ jako pokyn pro fotografa`);
+      parts.push(`- Popisuj KONKRÉTNÍ scénu: kdo, kde, co dělá, jaké prostředí`);
+      parts.push(`- Přidej TECHNICKÉ detaily: "shallow depth of field", "golden hour", "overhead shot"`);
+      parts.push(`- Přidej EMOCI: "contemplative expression", "warm smile", "determined gaze"`);
+      parts.push(`- Přidej MATERIÁLY a TEXTURY: "weathered oak desk", "crisp white shirt", "steaming coffee"`);
+      parts.push(`- NIKDY generické: "Professional photo of business" → ŠPATNĚ`);
+      parts.push(`- VŽDY specifické: "Close-up of young couple reviewing mortgage documents at kitchen table, morning light through window, shallow DOF, warm tones" → SPRÁVNĚ`);
+      parts.push(`\nVrať POUZE JSON:\n{"original_scores": {"specificity": N, "emotion": N, "technical": N, "brand_fit": N, "platform_fit": N, "overall": N}, "improved_prompt": "...", "improved_scores": {"specificity": N, "emotion": N, "technical": N, "brand_fit": N, "platform_fit": N, "overall": N}, "changes": ["Co bylo změněno a proč"], "tips": ["Obecné tipy pro zlepšení foto promptů tohoto projektu"]}`);
+      break;
+    }
+    case 'prompt_quality_audit': {
+      parts.push(`\n---\nÚKOL: AUDIT KVALITY PROMPT ŠABLON PROJEKTU`);
+      // Load project prompts
+      if (supabase) {
+        const { data: prompts } = await supabase
+          .from('project_prompt_templates')
+          .select('slug, category, content, is_active')
+          .eq('project_id', ctx.project.id)
+          .order('category');
+        if (prompts && prompts.length > 0) {
+          parts.push(`\nAKTIVNÍ PROMPT ŠABLONY (${prompts.length}):`);
+          for (const p of prompts) {
+            parts.push(`\n[${p.category}] ${p.slug} (${p.is_active ? 'aktivní' : 'neaktivní'}):`);
+            parts.push(`${(p.content as string).substring(0, 300)}`);
+          }
+        } else {
+          parts.push(`\nProjekt NEMÁ žádné custom prompt šablony.`);
+        }
+      }
+      parts.push(`\nAnalyzuj nedávné posty výše a porovnej s prompt šablonami.`);
+      parts.push(`\nHODNOŤ KAŽDOU ŠABLONU:`);
+      parts.push(`1. EFEKTIVITA: Dodržuje Hugo toto pravidlo v reálných postech? (1-10)`);
+      parts.push(`2. JASNOST: Je instrukce jasná a jednoznačná? (1-10)`);
+      parts.push(`3. RELEVANCE: Je pravidlo stále potřebné? (1-10)`);
+      parts.push(`4. KONFLIKT: Není v konfliktu s jiným pravidlem?`);
+      parts.push(`\nNAVRHNI:`);
+      parts.push(`- Které šablony SMAZAT (neefektivní, zastaralé)`);
+      parts.push(`- Které šablony UPRAVIT (nejasné, příliš obecné)`);
+      parts.push(`- Které NOVÉ šablony přidat (chybějící pravidla)`);
+      parts.push(`- Celkové skóre kvality prompt systému (1-10)`);
+      parts.push(`\nVrať POUZE JSON:\n{"overall_score": N, "templates_audit": [{"slug": "...", "effectiveness": N, "clarity": N, "relevance": N, "action": "keep|modify|delete", "suggestion": "..."}], "missing_templates": [{"category": "...", "content": "...", "reason": "..."}], "conflicts": ["..."], "recommendations": ["..."]}`);
+      break;
+    }
+    case 'engagement_learning': {
+      parts.push(`\n---\nÚKOL: ANALÝZA ENGAGEMENT DAT A UČENÍ`);
+      // Load engagement data
+      if (supabase) {
+        const { data: posts } = await supabase
+          .from('content_queue')
+          .select('text_content, content_type, target_platform, ai_scores, engagement_score, engagement_metrics, visual_type, created_at')
+          .eq('project_id', ctx.project.id)
+          .in('status', ['sent', 'published'])
+          .not('engagement_score', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(30);
+        if (posts && posts.length > 0) {
+          parts.push(`\nPOSTY S ENGAGEMENT DATY (${posts.length}):`);
+          for (const p of posts) {
+            const metrics = p.engagement_metrics as Record<string, number> || {};
+            const scores = p.ai_scores as Record<string, number> || {};
+            parts.push(`\n[${p.content_type}] ${p.target_platform} | Engagement: ${p.engagement_score} | AI score: ${scores.overall || '?'}`);
+            parts.push(`  Likes: ${metrics.likes || 0}, Comments: ${metrics.comments || 0}, Shares: ${metrics.shares || 0}`);
+            parts.push(`  Vizuál: ${p.visual_type || 'none'}`);
+            parts.push(`  Text: "${(p.text_content as string).substring(0, 150)}..."`);
+          }
+        } else {
+          parts.push(`\nŽádné posty s engagement daty. Doporuč jak začít sbírat data.`);
+        }
+      }
+      parts.push(`\nANALYZUJ:`);
+      parts.push(`1. CONTENT TYPE → ENGAGEMENT: Které typy obsahu mají nejvyšší engagement?`);
+      parts.push(`2. HOOK TYPE → ENGAGEMENT: Jaké úvody fungují nejlépe? (číslo, otázka, příběh, kontrast)`);
+      parts.push(`3. VIZUÁL → ENGAGEMENT: Foto vs karta vs žádný vizuál – co funguje?`);
+      parts.push(`4. PLATFORMA → ENGAGEMENT: Která platforma má nejlepší výsledky?`);
+      parts.push(`5. DÉLKA → ENGAGEMENT: Krátké vs dlouhé posty?`);
+      parts.push(`6. ČAS → ENGAGEMENT: V jakou dobu mají posty nejlepší výsledky?`);
+      parts.push(`7. AI SCORE vs ENGAGEMENT: Koreluje AI skóre s reálným engagementem?`);
+      parts.push(`\nNA ZÁKLADĚ ANALÝZY NAVRHNI KONKRÉTNÍ ZMĚNY:`);
+      parts.push(`- Úprava content_mix (více/méně jakého typu)`);
+      parts.push(`- Úprava posting_hours (lepší časy)`);
+      parts.push(`- Nové guardrails/communication rules`);
+      parts.push(`- Úprava vizuální strategie`);
+      parts.push(`\nVrať POUZE JSON:\n{"insights": {"best_content_type": "...", "best_hook_type": "...", "best_visual": "...", "best_platform": "...", "optimal_length": "short|medium|long", "best_posting_hour": N, "ai_score_correlation": N}, "content_mix_suggestion": {"educational": 0.X, "soft_sell": 0.X, "hard_sell": 0.X}, "posting_hours_suggestion": [9, 12, 17], "new_rules": [{"type": "guardrail|communication", "content": "..."}], "visual_strategy": "...", "recommendations": ["..."]}`);
+      break;
+    }
+    case 'visual_consistency_audit': {
+      parts.push(`\n---\nÚKOL: AUDIT VIZUÁLNÍ KONZISTENCE PROJEKTU`);
+      const vi = ctx.project.visual_identity as Record<string, string> || {};
+      if (Object.keys(vi).length > 0) {
+        parts.push(`\nNASTAVENÁ VIZUÁLNÍ IDENTITA:`);
+        for (const [key, value] of Object.entries(vi)) {
+          parts.push(`- ${key}: ${value}`);
+        }
+      } else {
+        parts.push(`\nProjekt NEMÁ nastavenou vizuální identitu. Navrhni ji.`);
+      }
+      // Load recent image prompts and visual types
+      if (supabase) {
+        const { data: posts } = await supabase
+          .from('content_queue')
+          .select('image_prompt, visual_type, image_url, card_url, target_platform, ai_scores')
+          .eq('project_id', ctx.project.id)
+          .in('status', ['review', 'approved', 'sent', 'published'])
+          .order('created_at', { ascending: false })
+          .limit(20);
+        if (posts && posts.length > 0) {
+          const withImages = posts.filter(p => p.image_prompt || p.image_url);
+          parts.push(`\nPOSLEDNÍCH ${posts.length} POSTŮ (${withImages.length} s vizuálem):`);
+          for (const p of posts) {
+            parts.push(`  [${p.target_platform}] vizuál: ${p.visual_type || 'none'}`);
+            if (p.image_prompt) parts.push(`    prompt: "${(p.image_prompt as string).substring(0, 200)}"`);
+          }
+        }
+      }
+      parts.push(`\nANALYZUJ:`);
+      parts.push(`1. KONZISTENCE: Jsou image prompty konzistentní? Opakují se motivy, barvy, styl?`);
+      parts.push(`2. BRAND FIT: Odpovídají vizuály nastavené vizuální identitě?`);
+      parts.push(`3. ROZMANITOST: Nejsou vizuály příliš monotónní? Střídají se typy?`);
+      parts.push(`4. KVALITA PROMPTŮ: Jsou prompty dostatečně specifické a filmové?`);
+      parts.push(`5. PLATFORM FIT: Jsou vizuály vhodné pro cílové platformy?`);
+      parts.push(`\nNAVRHNI:`);
+      parts.push(`- Úpravy visual_identity (photography_style, mood, subjects, lighting, color_grade, avoid)`);
+      parts.push(`- Vzorové image prompty pro tento projekt (3-5 příkladů)`);
+      parts.push(`- Pravidla pro konzistenci (co vždy zahrnout, čemu se vyhnout)`);
+      parts.push(`\nVrať POUZE JSON:\n{"consistency_score": N, "brand_fit_score": N, "diversity_score": N, "prompt_quality_score": N, "visual_identity_suggestions": {"photography_style": "...", "photography_mood": "...", "photography_subjects": "...", "photography_lighting": "...", "photography_color_grade": "...", "photography_avoid": "..."}, "example_prompts": ["...", "...", "..."], "rules": ["..."], "recommendations": ["..."]}`);
+      break;
+    }
   }
 
   return parts.join('\n');
@@ -902,6 +1089,226 @@ async function processTaskResult(
         }
         break;
       }
+
+      // ---- IMAGE PROMPT REVIEW → update image_prompt on content_queue + save tips ----
+      case 'image_prompt_review': {
+        const improvedPrompt = result.improved_prompt as string;
+        const contentId = params.content_id as string;
+        const originalScores = result.original_scores as Record<string, number> || {};
+        const improvedScores = result.improved_scores as Record<string, number> || {};
+
+        // Auto-update the content_queue record with improved prompt
+        if (improvedPrompt && contentId && supabase) {
+          await supabase.from('content_queue').update({
+            image_prompt: improvedPrompt,
+          }).eq('id', contentId);
+        }
+
+        // Save tips to agent_memory for future image prompt generation
+        const tips = result.tips as string[] || [];
+        if (tips.length > 0) {
+          await upsertAgentMemory(projectId, 'image_prompt_tips', {
+            tips,
+            avg_original_score: originalScores.overall || 0,
+            avg_improved_score: improvedScores.overall || 0,
+            improvement: (improvedScores.overall || 0) - (originalScores.overall || 0),
+            reviewed_at: new Date().toISOString(),
+          });
+        }
+
+        await supabase?.from('agent_log').insert({
+          project_id: projectId,
+          action: 'image_prompt_reviewed',
+          details: {
+            content_id: contentId,
+            original_score: originalScores.overall,
+            improved_score: improvedScores.overall,
+            changes: result.changes,
+          },
+        });
+        break;
+      }
+
+      // ---- PROMPT QUALITY AUDIT → save audit + auto-apply recommendations ----
+      case 'prompt_quality_audit': {
+        const overallScore = result.overall_score as number || 0;
+        const templatesAudit = result.templates_audit as Array<Record<string, unknown>> || [];
+        const missingTemplates = result.missing_templates as Array<Record<string, unknown>> || [];
+
+        // Save audit results to memory
+        await upsertAgentMemory(projectId, 'prompt_audit', {
+          overall_score: overallScore,
+          templates_audited: templatesAudit.length,
+          to_delete: templatesAudit.filter(t => t.action === 'delete').length,
+          to_modify: templatesAudit.filter(t => t.action === 'modify').length,
+          missing: missingTemplates.length,
+          conflicts: result.conflicts || [],
+          recommendations: result.recommendations || [],
+          audited_at: new Date().toISOString(),
+        });
+
+        // Auto-add missing templates with high confidence (admin can deactivate)
+        if (missingTemplates.length > 0 && supabase) {
+          for (const mt of missingTemplates.slice(0, 3)) {
+            const content = (mt.content as string) || '';
+            const category = (mt.category as string) || 'guardrail';
+            if (!content) continue;
+            await supabase.from('project_prompt_templates').insert({
+              project_id: projectId,
+              slug: `auto_${category}_${Date.now()}`,
+              category,
+              content,
+              is_active: false, // Admin must activate
+              sort_order: 100,
+            });
+          }
+        }
+
+        await supabase?.from('agent_log').insert({
+          project_id: projectId,
+          action: 'prompt_quality_audited',
+          details: {
+            overall_score: overallScore,
+            templates_audited: templatesAudit.length,
+            missing_added: Math.min(missingTemplates.length, 3),
+            recommendations: result.recommendations,
+          },
+        });
+        break;
+      }
+
+      // ---- ENGAGEMENT LEARNING → save insights + auto-update config ----
+      case 'engagement_learning': {
+        const insights = result.insights as Record<string, unknown> || {};
+        const contentMixSuggestion = result.content_mix_suggestion as Record<string, number> || {};
+        const postingHoursSuggestion = result.posting_hours_suggestion as number[] || [];
+        const newRules = result.new_rules as Array<Record<string, unknown>> || [];
+
+        // Save insights to memory
+        await upsertAgentMemory(projectId, 'engagement_insights', {
+          insights,
+          content_mix_suggestion: contentMixSuggestion,
+          posting_hours_suggestion: postingHoursSuggestion,
+          visual_strategy: result.visual_strategy || null,
+          recommendations: result.recommendations || [],
+          learned_at: new Date().toISOString(),
+        });
+
+        // Auto-update content_mix if suggestion differs significantly
+        if (Object.keys(contentMixSuggestion).length > 0 && supabase) {
+          const { data: proj } = await supabase.from('projects').select('content_mix').eq('id', projectId).single();
+          const currentMix = (proj?.content_mix as Record<string, number>) || {};
+          const hasDiff = Object.entries(contentMixSuggestion).some(([k, v]) => Math.abs((currentMix[k] || 0) - v) > 0.1);
+          if (hasDiff) {
+            await supabase.from('projects').update({ content_mix: contentMixSuggestion }).eq('id', projectId);
+            await supabase.from('agent_log').insert({
+              project_id: projectId,
+              action: 'content_mix_auto_updated',
+              details: { previous: currentMix, new: contentMixSuggestion, reason: 'engagement_learning' },
+            });
+          }
+        }
+
+        // Save optimal posting hours to agent_memory (admin can apply manually)
+        if (postingHoursSuggestion.length > 0) {
+          const postingTimes = postingHoursSuggestion.map(h => `${String(h).padStart(2, '0')}:00`);
+          await upsertAgentMemory(projectId, 'optimal_posting_times', {
+            hours: postingHoursSuggestion,
+            times: postingTimes,
+            updated_at: new Date().toISOString(),
+          });
+        }
+
+        // Auto-add new guardrails/communication rules (inactive, admin must activate)
+        if (newRules.length > 0 && supabase) {
+          for (const rule of newRules.slice(0, 3)) {
+            const content = (rule.content as string) || '';
+            const category = (rule.type as string) || 'guardrail';
+            if (!content) continue;
+            await supabase.from('project_prompt_templates').insert({
+              project_id: projectId,
+              slug: `engagement_${category}_${Date.now()}`,
+              category,
+              content,
+              is_active: false,
+              sort_order: 100,
+            });
+          }
+        }
+
+        await supabase?.from('agent_log').insert({
+          project_id: projectId,
+          action: 'engagement_learned',
+          details: {
+            insights,
+            mix_updated: Object.keys(contentMixSuggestion).length > 0,
+            rules_suggested: newRules.length,
+          },
+        });
+        break;
+      }
+
+      // ---- VISUAL CONSISTENCY AUDIT → save + auto-update visual_identity ----
+      case 'visual_consistency_audit': {
+        const viSuggestions = result.visual_identity_suggestions as Record<string, string> || {};
+        const examplePrompts = result.example_prompts as string[] || [];
+        const rules = result.rules as string[] || [];
+
+        // Save audit to memory
+        await upsertAgentMemory(projectId, 'visual_audit', {
+          consistency_score: result.consistency_score || 0,
+          brand_fit_score: result.brand_fit_score || 0,
+          diversity_score: result.diversity_score || 0,
+          prompt_quality_score: result.prompt_quality_score || 0,
+          example_prompts: examplePrompts,
+          rules,
+          recommendations: result.recommendations || [],
+          audited_at: new Date().toISOString(),
+        });
+
+        // Auto-update visual_identity if project has none or scores are low
+        if (Object.keys(viSuggestions).length > 0 && supabase) {
+          const { data: proj } = await supabase.from('projects').select('visual_identity').eq('id', projectId).single();
+          const currentVi = (proj?.visual_identity as Record<string, string>) || {};
+          const hasVi = Object.keys(currentVi).length > 0;
+          const lowScore = ((result.brand_fit_score as number) || 0) < 6;
+
+          if (!hasVi || lowScore) {
+            // Merge: keep existing values, add missing ones from suggestions
+            const merged = { ...viSuggestions, ...currentVi };
+            await supabase.from('projects').update({ visual_identity: merged }).eq('id', projectId);
+            await supabase.from('agent_log').insert({
+              project_id: projectId,
+              action: 'visual_identity_auto_updated',
+              details: { previous: currentVi, merged, reason: hasVi ? 'low_brand_fit_score' : 'no_visual_identity' },
+            });
+          }
+        }
+
+        // Save example prompts as visual_style prompt templates (inactive)
+        if (examplePrompts.length > 0 && supabase) {
+          await supabase.from('project_prompt_templates').insert({
+            project_id: projectId,
+            slug: `visual_examples_${Date.now()}`,
+            category: 'visual_style',
+            content: `VZOROVÉ IMAGE PROMPTY PRO TENTO PROJEKT:\n${examplePrompts.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n\nPRAVIDLA:\n${rules.join('\n')}`,
+            is_active: false,
+            sort_order: 100,
+          });
+        }
+
+        await supabase?.from('agent_log').insert({
+          project_id: projectId,
+          action: 'visual_consistency_audited',
+          details: {
+            consistency_score: result.consistency_score,
+            brand_fit_score: result.brand_fit_score,
+            vi_updated: Object.keys(viSuggestions).length > 0,
+            example_prompts_count: examplePrompts.length,
+          },
+        });
+        break;
+      }
     }
   } catch (err) {
     // Post-processing failure should not fail the task
@@ -1029,6 +1436,35 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
       const mediaStrategy = (task.params?.media_strategy as string)
         || (orchConfig.media_strategy as string)
         || 'auto';
+
+      // ---- Image Prompt Review: 2nd AI pass to improve photo prompts ----
+      if (result.image_prompt && typeof result.image_prompt === 'string') {
+        try {
+          const reviewPrompt = await buildAgentPrompt('image_prompt_review', ctx, {
+            image_prompt: result.image_prompt,
+            platform,
+            post_text: (result.text as string)?.substring(0, 300),
+          });
+          const { text: reviewRaw } = await generateText({
+            model: google('gemini-2.0-flash'),
+            prompt: reviewPrompt,
+            temperature: 0.3,
+          });
+          const reviewResult = parseAIResponse(reviewRaw);
+          if (reviewResult.improved_prompt && typeof reviewResult.improved_prompt === 'string') {
+            const origScore = (reviewResult.original_scores as Record<string, number>)?.overall || 0;
+            const newScore = (reviewResult.improved_scores as Record<string, number>)?.overall || 0;
+            if (newScore >= origScore) {
+              result.image_prompt = reviewResult.improved_prompt;
+              result._image_prompt_improved = true;
+              result._image_prompt_scores = { original: origScore, improved: newScore };
+            }
+          }
+          totalTokens += 300;
+        } catch {
+          // Image prompt review failed, continue with original
+        }
+      }
 
       // Generate visual assets (chart/card/photo)
       let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null; generated_image_url?: string | null; media_asset_id?: string | null } = {
@@ -1730,7 +2166,22 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
       }
     }
 
-    // Friday: Feedback Digest + Performance Report
+    // Tuesday: Prompt Quality Audit (bi-weekly, 1st and 15th)
+    if (localDay === 2) {
+      const dayOfMonth = new Date().getDate();
+      if (dayOfMonth <= 2 || (dayOfMonth >= 15 && dayOfMonth <= 16)) {
+        const hasAudit = await hasRecentAnalyticsTask(project.id, 'prompt_quality_audit', 168); // 7 days
+        if (!hasAudit) {
+          await createTask(project.id, 'prompt_quality_audit', {
+            auto_scheduled: true,
+            reason: 'biweekly_prompt_audit',
+          }, { priority: 2 });
+          scheduled++;
+        }
+      }
+    }
+
+    // Friday: Feedback Digest + Performance Report + Engagement Learning
     if (localDay === 5) {
       // Feedback Digest: analyze admin edits and generate prompt suggestions
       // Check agent_log (not agent_tasks) since digest is a direct API call
@@ -1759,6 +2210,29 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
         await createTask(project.id, 'performance_report', {
           auto_scheduled: true,
           reason: 'weekly_friday_report',
+        }, { priority: 2 });
+        scheduled++;
+      }
+
+      // Engagement Learning (weekly)
+      const hasEngagement = await hasRecentAnalyticsTask(project.id, 'engagement_learning', 48);
+      if (!hasEngagement) {
+        await createTask(project.id, 'engagement_learning', {
+          auto_scheduled: true,
+          reason: 'weekly_friday_engagement_learning',
+        }, { priority: 2 });
+        scheduled++;
+      }
+    }
+
+    // 1st of month: Visual Consistency Audit
+    const dayOfMonth = new Date().getDate();
+    if (dayOfMonth === 1 && localHour >= 8 && localHour <= 10) {
+      const hasVisualAudit = await hasRecentAnalyticsTask(project.id, 'visual_consistency_audit', 168 * 3); // 21 days
+      if (!hasVisualAudit) {
+        await createTask(project.id, 'visual_consistency_audit', {
+          auto_scheduled: true,
+          reason: 'monthly_visual_audit',
         }, { priority: 2 });
         scheduled++;
       }

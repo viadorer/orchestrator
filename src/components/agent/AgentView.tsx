@@ -67,6 +67,9 @@ const TASK_TYPES = [
   { value: 'performance_report', label: 'Report výkonu', icon: Activity, desc: 'Shrnutí výkonu obsahu' },
   { value: 'sentiment_check', label: 'Sentiment check', icon: Shield, desc: 'Kontrola bezpečnosti textu' },
   { value: 'optimize_schedule', label: 'Optimalizace časů', icon: Clock, desc: 'Navrhne nejlepší časy publikace' },
+  { value: 'prompt_quality_audit', label: 'Audit promptů', icon: Shield, desc: 'Zhodnotí efektivitu prompt šablon a navrhne vylepšení' },
+  { value: 'engagement_learning', label: 'Engagement learning', icon: TrendingUp, desc: 'Analyzuje engagement data a auto-upraví content mix' },
+  { value: 'visual_consistency_audit', label: 'Vizuální audit', icon: Lightbulb, desc: 'Audit konzistence vizuálů a návrh visual identity' },
 ] as const;
 
 const HEALTH_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -1053,10 +1056,10 @@ function CronPlanPanel() {
         <div className="grid grid-cols-5 gap-2">
           {[
             { day: 'Po', label: 'Pondělí', task: 'Content Mix analýza', color: 'text-blue-400', bg: 'bg-blue-500/10' },
-            { day: 'Út', label: 'Úterý', task: '—', color: 'text-slate-600', bg: 'bg-slate-800/50' },
+            { day: 'Út', label: 'Úterý', task: 'Audit promptů (1. a 15.)', color: 'text-orange-400', bg: 'bg-orange-500/10' },
             { day: 'St', label: 'Středa', task: 'KB Gap analýza', color: 'text-amber-400', bg: 'bg-amber-500/10' },
             { day: 'Čt', label: 'Čtvrtek', task: 'Auto-enrich KB', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-            { day: 'Pá', label: 'Pátek', task: 'Feedback Digest + Performance Report', color: 'text-violet-400', bg: 'bg-violet-500/10' },
+            { day: 'Pá', label: 'Pátek', task: 'Feedback Digest + Performance + Engagement Learning', color: 'text-violet-400', bg: 'bg-violet-500/10' },
           ].map(({ day, label, task, color, bg }) => {
             const today = new Date().getDay();
             const dayMap: Record<string, number> = { 'Po': 1, 'Út': 2, 'St': 3, 'Čt': 4, 'Pá': 5 };
@@ -1071,8 +1074,9 @@ function CronPlanPanel() {
             );
           })}
         </div>
-        <div className="mt-3 text-[10px] text-slate-600">
-          + Denně: generování obsahu dle posting_frequency · Auto-publish (pokud zapnuto) · RSS fetch (každých 6h)
+        <div className="mt-3 text-[10px] text-slate-600 space-y-0.5">
+          <div>+ Denně: generování obsahu · Auto-publish · RSS fetch (6h) · Image prompt review (auto 2. průchod)</div>
+          <div>+ Měsíčně (1.): Vizuální konzistence audit · Neděle: Performance optimization z engagement dat</div>
         </div>
       </div>
 

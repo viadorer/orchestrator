@@ -52,7 +52,10 @@ export type TaskType =
   | 'optimize_schedule'
   | 'kb_gap_analysis'
   | 'competitor_brief'
-  | 'performance_report';
+  | 'performance_report'
+  | 'auto_enrich_kb'
+  | 'cross_project_dedup'
+  | 'generate_ab_variants';
 
 export interface AgentTask {
   id: string;
@@ -559,6 +562,57 @@ async function buildAgentPrompt(
       parts.push('Vrať JSON: {"text": "...", "image_prompt": "...", "scores": {...}}');
       break;
     }
+    case 'auto_enrich_kb': {
+      parts.push(`\n---\nÚKOL: AUTOMATICKÉ OBOHACENÍ KNOWLEDGE BASE`);
+      parts.push(`\nNa základě KB gap analýzy a agent memory navrhni NOVÉ KB záznamy.`);
+      parts.push(`Pro každý navržený záznam:`);
+      parts.push(`1. Zvol kategorii (product, audience, usp, faq, case_study, data, market, legal, process, general)`);
+      parts.push(`2. Navrhni title a content (reálná, faktická data – NE generické fráze)`);
+      parts.push(`3. Uveď důvod proč tento záznam chybí`);
+      parts.push(`4. Prioritu (high/medium/low)`);
+      parts.push(`\nPRAVIDLA:`);
+      parts.push(`- Navrhuj MAX 5 záznamů najednou`);
+      parts.push(`- Každý záznam musí být KONKRÉTNÍ a UŽITEČNÝ pro generování obsahu`);
+      parts.push(`- Nenavrhuj záznamy, které už v KB existují`);
+      parts.push(`- Preferuj kategorie: faq, case_study, data, process (ty nejčastěji chybí)`);
+      parts.push(`\nVrať JSON:\n{"suggestions": [{"category": "faq", "title": "...", "content": "...", "reason": "...", "priority": "high"}], "kb_completeness_before": N, "kb_completeness_after": N}`);
+      break;
+    }
+    case 'cross_project_dedup': {
+      const postText = params.post_text as string;
+      const postProjectId = params.post_project_id as string;
+      parts.push(`\n---\nÚKOL: CROSS-PROJECT DEDUP CHECK`);
+      parts.push(`\nZkontroluj, zda tento post není příliš podobný postům z JINÝCH projektů.`);
+      parts.push(`\nPOST K OVĚŘENÍ:\n"${postText?.substring(0, 500)}"`);
+      parts.push(`Projekt: ${postProjectId}`);
+      if (params.similar_posts) {
+        parts.push(`\nPODOBNÉ POSTY Z JINÝCH PROJEKTŮ:`);
+        const similar = params.similar_posts as Array<{ text: string; project: string; similarity: number }>;
+        for (const s of similar) {
+          parts.push(`- [${s.project}] (similarity: ${s.similarity.toFixed(2)}): "${s.text.substring(0, 200)}..."`);
+        }
+      }
+      parts.push(`\nHodnoť:`);
+      parts.push(`1. Je post dostatečně unikátní? (similarity < 0.85 = OK)`);
+      parts.push(`2. Pokud je příliš podobný, navrhni úpravy pro diferenciaci`);
+      parts.push(`\nVrať JSON:\n{"is_unique": true/false, "max_similarity": 0.XX, "most_similar_project": "...", "suggestions": ["..."]}`);
+      break;
+    }
+    case 'generate_ab_variants': {
+      const originalText = params.original_text as string;
+      const platform = (params.platform as string) || 'facebook';
+      parts.push(`\n---\nÚKOL: GENERUJ A/B VARIANTY POSTU`);
+      parts.push(`\nPŮVODNÍ POST (varianta A):\n"${originalText}"`);
+      parts.push(`Platforma: ${platform}`);
+      parts.push(`\nVytvoř 2 alternativní varianty (B a C), které:`);
+      parts.push(`1. Zachovají STEJNÉ téma a KB fakta`);
+      parts.push(`2. Použijí JINÝ hook (jiný typ úvodu)`);
+      parts.push(`3. Mají JINOU strukturu (jiné formátování, jiný flow)`);
+      parts.push(`4. Zachovají stejný tón a guardrails`);
+      parts.push(`\nPro každou variantu uveď skóre a popis rozdílu.`);
+      parts.push(`\nVrať JSON:\n{"variants": [{"label": "B", "text": "...", "hook_type": "question|statistic|story|contrast", "difference": "Popis rozdílu", "scores": {"creativity": N, "overall": N}}, {"label": "C", ...}]}`);
+      break;
+    }
   }
 
   return parts.join('\n');
@@ -734,6 +788,100 @@ async function processTaskResult(
           issues: result.issues || result.flags || [],
           analyzed_at: new Date().toISOString(),
         });
+        break;
+      }
+
+      // ---- AUTO ENRICH KB → insert suggested entries (status: pending_review) ----
+      case 'auto_enrich_kb': {
+        const suggestions = result.suggestions as Array<Record<string, unknown>> | undefined;
+        if (suggestions && suggestions.length > 0 && supabase) {
+          let inserted = 0;
+          for (const s of suggestions.slice(0, 5)) {
+            const title = (s.title as string) || '';
+            const content = (s.content as string) || '';
+            const category = (s.category as string) || 'general';
+            if (!title || !content) continue;
+
+            // Insert as inactive (pending admin review)
+            await supabase.from('knowledge_base').insert({
+              project_id: projectId,
+              category,
+              title: `[AI NÁVRH] ${title}`,
+              content,
+              is_active: false, // Admin must activate
+            });
+            inserted++;
+          }
+
+          await upsertAgentMemory(projectId, 'kb_enrichment', {
+            suggested: suggestions.length,
+            inserted,
+            completeness_before: result.kb_completeness_before || null,
+            completeness_after: result.kb_completeness_after || null,
+            enriched_at: new Date().toISOString(),
+          });
+
+          await supabase.from('agent_log').insert({
+            project_id: projectId,
+            action: 'auto_enrich_kb',
+            details: { suggested: suggestions.length, inserted, categories: suggestions.map(s => s.category) },
+          });
+        }
+        break;
+      }
+
+      // ---- CROSS PROJECT DEDUP → log result ----
+      case 'cross_project_dedup': {
+        await upsertAgentMemory(projectId, 'dedup_report', {
+          is_unique: result.is_unique ?? true,
+          max_similarity: result.max_similarity || 0,
+          most_similar_project: result.most_similar_project || null,
+          suggestions: result.suggestions || [],
+          checked_at: new Date().toISOString(),
+        });
+        break;
+      }
+
+      // ---- A/B VARIANTS → save variants to content_queue ----
+      case 'generate_ab_variants': {
+        const variants = result.variants as Array<Record<string, unknown>> | undefined;
+        if (variants && variants.length > 0 && supabase) {
+          const sourcePostId = params.source_post_id as string;
+          const platform = (params.platform as string) || 'facebook';
+
+          for (const variant of variants.slice(0, 2)) {
+            const variantText = (variant.text as string) || '';
+            if (!variantText) continue;
+
+            const scores = variant.scores as Record<string, number> | undefined;
+            await supabase.from('content_queue').insert({
+              project_id: projectId,
+              text_content: variantText,
+              content_type: (params.content_type as string) || 'educational',
+              platforms: [platform],
+              target_platform: platform,
+              ai_scores: scores || {},
+              status: 'review',
+              source: 'ab_variant',
+              generation_context: {
+                variant_label: variant.label,
+                hook_type: variant.hook_type,
+                difference: variant.difference,
+                source_post_id: sourcePostId,
+              },
+            });
+          }
+
+          await supabase.from('agent_log').insert({
+            project_id: projectId,
+            action: 'ab_variants_generated',
+            details: {
+              source_post_id: sourcePostId,
+              variants_count: variants.length,
+              labels: variants.map(v => v.label),
+            },
+          });
+        }
         break;
       }
     }
@@ -1551,6 +1699,18 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
         scheduled++;
       }
     }
+
+    // Thursday: Auto-enrich KB (based on Wednesday's gap analysis)
+    if (localDay === 4) {
+      const hasPending = await hasRecentAnalyticsTask(project.id, 'auto_enrich_kb', 48);
+      if (!hasPending) {
+        await createTask(project.id, 'auto_enrich_kb', {
+          auto_scheduled: true,
+          reason: 'weekly_thursday_enrichment',
+        }, { priority: 2 });
+        scheduled++;
+      }
+    }
   }
 
   // Log
@@ -1790,4 +1950,469 @@ function getNextDayOfWeek(dayOfWeek: number): Date {
   result.setDate(now.getDate() + ((dayOfWeek + 7 - now.getDay()) % 7 || 7));
   result.setHours(9, 0, 0, 0);
   return result;
+}
+
+// ============================================
+// Auto-Publish: Send approved posts via getLate.dev
+// ============================================
+
+export async function publishApprovedPosts(): Promise<{
+  published: number;
+  failed: number;
+  skipped: number;
+}> {
+  if (!supabase) return { published: 0, failed: 0, skipped: 0 };
+
+  // Only auto-publish posts from projects with auto_publish enabled
+  const { data: posts } = await supabase
+    .from('content_queue')
+    .select('*, projects(id, name, late_accounts, orchestrator_config)')
+    .eq('status', 'approved')
+    .order('created_at', { ascending: true })
+    .limit(20);
+
+  if (!posts || posts.length === 0) return { published: 0, failed: 0, skipped: 0 };
+
+  // Lazy import to avoid circular deps
+  const { publishPost, buildPlatformsArray } = await import('@/lib/getlate');
+  const { validatePostMultiPlatform } = await import('@/lib/platforms');
+
+  let published = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const post of posts) {
+    const project = post.projects as {
+      id: string;
+      name: string;
+      late_accounts: Record<string, string> | null;
+      orchestrator_config: Record<string, unknown> | null;
+    };
+
+    if (!project) { skipped++; continue; }
+
+    const config = project.orchestrator_config || {};
+    // Only auto-publish if project has auto_publish enabled
+    if (!config.auto_publish) { skipped++; continue; }
+
+    const lateAccounts = project.late_accounts || {};
+    const targetPlatforms: string[] = post.target_platform
+      ? [post.target_platform]
+      : (post.platforms || []);
+
+    const platformEntries = buildPlatformsArray(lateAccounts, targetPlatforms);
+    if (platformEntries.length === 0) { skipped++; continue; }
+
+    // Validate content
+    const validations = validatePostMultiPlatform(post.text_content || '', targetPlatforms);
+    const hasErrors = Object.values(validations).some(v => !v.valid);
+    if (hasErrors) { skipped++; continue; }
+
+    try {
+      // Build media items
+      const mediaItems: Array<{ type: 'image' | 'video' | 'document'; url: string }> = [];
+      if (post.chart_url) mediaItems.push({ type: 'image', url: post.chart_url });
+      if (post.card_url && post.card_url.startsWith('http')) mediaItems.push({ type: 'image', url: post.card_url });
+      if (post.image_url) mediaItems.push({ type: 'image', url: post.image_url });
+
+      const lateResult = await publishPost({
+        content: post.text_content,
+        platforms: platformEntries,
+        mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
+        timezone: 'Europe/Prague',
+      });
+
+      // Update status
+      await supabase.from('content_queue').update({
+        status: 'sent',
+        sent_at: new Date().toISOString(),
+        late_post_id: lateResult._id,
+      }).eq('id', post.id);
+
+      // Record in post_history
+      await supabase.from('post_history').insert({
+        project_id: post.project_id,
+        content_type: post.content_type,
+        pattern_id: post.pattern_id || null,
+        platform: post.target_platform || targetPlatforms[0] || null,
+      });
+
+      published++;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown';
+      await supabase.from('content_queue').update({ status: 'failed' }).eq('id', post.id);
+      await supabase.from('agent_log').insert({
+        project_id: post.project_id,
+        action: 'auto_publish_failed',
+        details: { post_id: post.id, error: msg },
+      });
+      failed++;
+    }
+  }
+
+  if (published > 0 || failed > 0) {
+    await supabase.from('agent_log').insert({
+      action: 'auto_publish',
+      details: { published, failed, skipped, timestamp: new Date().toISOString() },
+    });
+  }
+
+  return { published, failed, skipped };
+}
+
+// ============================================
+// Friday Topic Suggestions: Auto-schedule for next week
+// ============================================
+
+export async function scheduleFridayTopicSuggestions(): Promise<number> {
+  if (!supabase) return 0;
+
+  const { data: projects } = await supabase
+    .from('projects')
+    .select('id, orchestrator_config')
+    .eq('is_active', true);
+
+  if (!projects) return 0;
+
+  let scheduled = 0;
+
+  for (const project of projects) {
+    const config = getConfig(project);
+    if (!config.enabled) continue;
+
+    // Check KB exists
+    const { count: kbCount } = await supabase
+      .from('knowledge_base')
+      .select('id', { count: 'exact' })
+      .eq('project_id', project.id)
+      .eq('is_active', true);
+    if ((kbCount || 0) === 0) continue;
+
+    // Check not already scheduled recently
+    const hasPending = await hasRecentAnalyticsTask(project.id, 'suggest_topics', 48);
+    if (hasPending) continue;
+
+    await createTask(project.id, 'suggest_topics', {
+      auto_scheduled: true,
+      reason: 'friday_weekly_topics',
+    }, { priority: 2 });
+    scheduled++;
+  }
+
+  if (scheduled > 0) {
+    await supabase.from('agent_log').insert({
+      action: 'friday_topic_suggestions',
+      details: { scheduled, timestamp: new Date().toISOString() },
+    });
+  }
+
+  return scheduled;
+}
+
+// ============================================
+// Cross-Project Dedup: pgvector similarity check
+// ============================================
+
+export async function crossProjectDedupCheck(
+  projectId: string,
+  postText: string,
+  options: { threshold?: number; limit?: number } = {},
+): Promise<{
+  is_unique: boolean;
+  max_similarity: number;
+  similar_posts: Array<{ project_id: string; project_name: string; text_preview: string; similarity: number }>;
+}> {
+  if (!supabase) return { is_unique: true, max_similarity: 0, similar_posts: [] };
+
+  const threshold = options.threshold || 0.85;
+  const limit = options.limit || 5;
+
+  try {
+    // Generate embedding for the post text
+    const { embed } = await import('ai');
+    const { google } = await import('@ai-sdk/google');
+    const { embedding } = await embed({
+      model: google.textEmbeddingModel('text-embedding-004'),
+      value: postText.substring(0, 2000),
+    });
+
+    // Search across ALL projects (excluding current)
+    const { data: similar } = await supabase.rpc('match_posts_cross_project', {
+      query_embedding: JSON.stringify(embedding),
+      exclude_project_id: projectId,
+      match_threshold: threshold - 0.15, // Lower threshold to catch near-duplicates
+      match_count: limit,
+    });
+
+    if (!similar || similar.length === 0) {
+      return { is_unique: true, max_similarity: 0, similar_posts: [] };
+    }
+
+    const maxSim = Math.max(...similar.map((s: { similarity: number }) => s.similarity));
+
+    return {
+      is_unique: maxSim < threshold,
+      max_similarity: maxSim,
+      similar_posts: similar.map((s: { project_id: string; project_name: string; text_content: string; similarity: number }) => ({
+        project_id: s.project_id,
+        project_name: s.project_name || 'Unknown',
+        text_preview: (s.text_content || '').substring(0, 200),
+        similarity: s.similarity,
+      })),
+    };
+  } catch {
+    // pgvector RPC may not exist yet – fail open
+    return { is_unique: true, max_similarity: 0, similar_posts: [] };
+  }
+}
+
+// ============================================
+// A/B Variants: Trigger variant generation for a post
+// ============================================
+
+export async function triggerABVariants(
+  postId: string,
+): Promise<string | null> {
+  if (!supabase) return null;
+
+  const { data: post } = await supabase
+    .from('content_queue')
+    .select('id, project_id, text_content, content_type, target_platform')
+    .eq('id', postId)
+    .single();
+
+  if (!post) return null;
+
+  return createTask(post.project_id, 'generate_ab_variants', {
+    original_text: post.text_content,
+    platform: post.target_platform || 'facebook',
+    content_type: post.content_type,
+    source_post_id: postId,
+  }, { priority: 4 });
+}
+
+// ============================================
+// Engagement Metrics: Fetch & store from getLate.dev
+// ============================================
+
+export async function fetchEngagementMetrics(): Promise<{
+  posts_checked: number;
+  metrics_updated: number;
+}> {
+  if (!supabase) return { posts_checked: 0, metrics_updated: 0 };
+
+  // Get recently sent posts that don't have engagement data yet
+  const { data: posts } = await supabase
+    .from('content_queue')
+    .select('id, project_id, late_post_id, sent_at')
+    .eq('status', 'sent')
+    .not('late_post_id', 'is', null)
+    .is('engagement_metrics', null)
+    .order('sent_at', { ascending: false })
+    .limit(50);
+
+  if (!posts || posts.length === 0) return { posts_checked: 0, metrics_updated: 0 };
+
+  let metricsUpdated = 0;
+
+  try {
+    const { lateRequest } = await import('@/lib/getlate');
+
+    for (const post of posts) {
+      // Only check posts older than 24h (give time for engagement)
+      const sentAt = new Date(post.sent_at);
+      if (Date.now() - sentAt.getTime() < 24 * 60 * 60 * 1000) continue;
+
+      try {
+        const latePost = await lateRequest<{
+          post: {
+            _id: string;
+            platforms: Array<{
+              platform: string;
+              metrics?: {
+                likes?: number;
+                comments?: number;
+                shares?: number;
+                impressions?: number;
+                clicks?: number;
+                reach?: number;
+              };
+            }>;
+          };
+        }>(`/posts/${post.late_post_id}`);
+
+        if (latePost?.post?.platforms) {
+          const metrics: Record<string, unknown> = {};
+          let totalEngagement = 0;
+
+          for (const p of latePost.post.platforms) {
+            if (p.metrics) {
+              metrics[p.platform] = p.metrics;
+              totalEngagement += (p.metrics.likes || 0) + (p.metrics.comments || 0) * 3 + (p.metrics.shares || 0) * 5;
+            }
+          }
+
+          if (Object.keys(metrics).length > 0) {
+            await supabase.from('content_queue').update({
+              engagement_metrics: metrics,
+              engagement_score: totalEngagement,
+            }).eq('id', post.id);
+            metricsUpdated++;
+          }
+        }
+      } catch {
+        // Individual post fetch failed, continue
+      }
+    }
+  } catch {
+    // getLate import or API failed
+  }
+
+  if (metricsUpdated > 0) {
+    await supabase.from('agent_log').insert({
+      action: 'fetch_engagement_metrics',
+      details: { posts_checked: posts.length, metrics_updated: metricsUpdated, timestamp: new Date().toISOString() },
+    });
+  }
+
+  return { posts_checked: posts.length, metrics_updated: metricsUpdated };
+}
+
+// ============================================
+// Performance Optimization: Learn from engagement data
+// ============================================
+
+export async function optimizeFromEngagement(projectId: string): Promise<void> {
+  if (!supabase) return;
+
+  // Get posts with engagement data
+  const { data: posts } = await supabase
+    .from('content_queue')
+    .select('content_type, target_platform, ai_scores, engagement_metrics, engagement_score, generation_context')
+    .eq('project_id', projectId)
+    .not('engagement_score', 'is', null)
+    .order('sent_at', { ascending: false })
+    .limit(30);
+
+  if (!posts || posts.length < 5) return; // Need enough data
+
+  // Analyze: which content types / platforms / hooks perform best?
+  const analysis: Record<string, { total_engagement: number; count: number; avg_score: number }> = {};
+
+  for (const post of posts) {
+    const key = `${post.content_type}_${post.target_platform}`;
+    if (!analysis[key]) analysis[key] = { total_engagement: 0, count: 0, avg_score: 0 };
+    analysis[key].total_engagement += (post.engagement_score as number) || 0;
+    analysis[key].count++;
+    analysis[key].avg_score += ((post.ai_scores as Record<string, number>)?.overall || 0);
+  }
+
+  // Calculate averages
+  for (const key of Object.keys(analysis)) {
+    analysis[key].avg_score = analysis[key].avg_score / analysis[key].count;
+  }
+
+  // Find best and worst performers
+  const sorted = Object.entries(analysis).sort((a, b) =>
+    (b[1].total_engagement / b[1].count) - (a[1].total_engagement / a[1].count)
+  );
+
+  const bestPerformers = sorted.slice(0, 3).map(([key, data]) => ({
+    type_platform: key,
+    avg_engagement: Math.round(data.total_engagement / data.count),
+    count: data.count,
+    avg_ai_score: Math.round(data.avg_score * 10) / 10,
+  }));
+
+  const worstPerformers = sorted.slice(-3).map(([key, data]) => ({
+    type_platform: key,
+    avg_engagement: Math.round(data.total_engagement / data.count),
+    count: data.count,
+    avg_ai_score: Math.round(data.avg_score * 10) / 10,
+  }));
+
+  // AI score vs engagement correlation
+  const scores = posts.map(p => ({
+    ai: (p.ai_scores as Record<string, number>)?.overall || 0,
+    eng: (p.engagement_score as number) || 0,
+  }));
+  const avgAI = scores.reduce((s, p) => s + p.ai, 0) / scores.length;
+  const avgEng = scores.reduce((s, p) => s + p.eng, 0) / scores.length;
+  let correlation = 0;
+  let varAI = 0;
+  let varEng = 0;
+  for (const s of scores) {
+    correlation += (s.ai - avgAI) * (s.eng - avgEng);
+    varAI += (s.ai - avgAI) ** 2;
+    varEng += (s.eng - avgEng) ** 2;
+  }
+  const r = varAI > 0 && varEng > 0 ? correlation / Math.sqrt(varAI * varEng) : 0;
+
+  await upsertAgentMemory(projectId, 'performance_insights', {
+    best_performers: bestPerformers,
+    worst_performers: worstPerformers,
+    ai_engagement_correlation: Math.round(r * 100) / 100,
+    total_posts_analyzed: posts.length,
+    recommendations: [
+      bestPerformers[0] ? `Nejlepší: ${bestPerformers[0].type_platform} (avg engagement: ${bestPerformers[0].avg_engagement})` : null,
+      worstPerformers[0] ? `Nejhorší: ${worstPerformers[0].type_platform} (avg engagement: ${worstPerformers[0].avg_engagement})` : null,
+      r > 0.5 ? 'AI skóre dobře koreluje s engagementem – scoring funguje.' : 'AI skóre špatně koreluje s engagementem – potřeba rekalibrovat scoring.',
+    ].filter(Boolean),
+    analyzed_at: new Date().toISOString(),
+  });
+}
+
+// ============================================
+// Embed Posts: Generate embeddings for cross-project dedup
+// ============================================
+
+export async function embedPostsForDedup(limit: number = 20): Promise<{
+  embedded: number;
+  failed: number;
+}> {
+  if (!supabase) return { embedded: 0, failed: 0 };
+
+  // Get posts that need embedding
+  const { data: posts } = await supabase
+    .from('content_queue')
+    .select('id, text_content')
+    .eq('needs_embedding', true)
+    .is('embedding', null)
+    .not('text_content', 'is', null)
+    .limit(limit);
+
+  if (!posts || posts.length === 0) return { embedded: 0, failed: 0 };
+
+  let embedded = 0;
+  let failed = 0;
+
+  try {
+    const { embed } = await import('ai');
+    const { google } = await import('@ai-sdk/google');
+
+    for (const post of posts) {
+      try {
+        const { embedding } = await embed({
+          model: google.textEmbeddingModel('text-embedding-004'),
+          value: (post.text_content as string).substring(0, 2000),
+        });
+
+        await supabase.from('content_queue').update({
+          embedding: JSON.stringify(embedding),
+          needs_embedding: false,
+        }).eq('id', post.id);
+
+        embedded++;
+      } catch {
+        await supabase.from('content_queue').update({
+          needs_embedding: false, // Don't retry failed ones
+        }).eq('id', post.id);
+        failed++;
+      }
+    }
+  } catch {
+    // Import failed
+  }
+
+  return { embedded, failed };
 }

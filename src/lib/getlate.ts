@@ -63,7 +63,7 @@ export interface LateAccount {
 // API Client
 // ============================================
 
-async function lateRequest<T>(path: string, options?: RequestInit): Promise<T> {
+export async function lateRequest<T>(path: string, options?: RequestInit): Promise<T> {
   if (!GETLATE_API_KEY) {
     throw new Error('GETLATE_API_KEY is not configured. Set it in .env');
   }

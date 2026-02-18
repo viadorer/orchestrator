@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Save, Trash2, X, Copy, ChevronDown, ChevronUp, FileText, Loader2, Download } from 'lucide-react';
+import { Plus, Save, Trash2, X, Copy, ChevronDown, ChevronUp, FileText, Loader2, Download, ToggleLeft, ToggleRight, Bot } from 'lucide-react';
 
 interface PromptTemplate {
   id: string;
@@ -31,6 +31,7 @@ const CATEGORIES = [
   { value: 'competitor', label: 'Konkurence', desc: 'Pravidla ohledně konkurence' },
   { value: 'legal', label: 'Právní', desc: 'Disclaimery, právní omezení' },
   { value: 'editor_rules', label: 'Editor Rules', desc: 'Instrukce pro Hugo-Editora (2nd pass)' },
+  { value: 'visual_style', label: 'Vizuální styl', desc: 'Pravidla pro image prompty a vizuály' },
 ] as const;
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -49,12 +50,14 @@ const CATEGORY_COLORS: Record<string, string> = {
   competitor: 'bg-slate-500/20 text-slate-400',
   legal: 'bg-gray-500/20 text-gray-400',
   editor_rules: 'bg-yellow-500/20 text-yellow-400',
+  visual_style: 'bg-fuchsia-500/20 text-fuchsia-400',
 };
 
 export function ProjectPrompts({ projectId }: { projectId: string }) {
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterCat, setFilterCat] = useState<string>('all');
+  const [showInactive, setShowInactive] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [editDesc, setEditDesc] = useState('');
@@ -110,7 +113,24 @@ export function ProjectPrompts({ projectId }: { projectId: string }) {
     setPrompts(prev => prev.filter(p => p.id !== id));
   };
 
-  const filtered = filterCat === 'all' ? prompts : prompts.filter(p => p.category === filterCat);
+  const toggleActive = async (prompt: PromptTemplate) => {
+    const newActive = !prompt.is_active;
+    await fetch(`/api/projects/${projectId}/prompts/${prompt.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: newActive }),
+    });
+    setPrompts(prev => prev.map(p =>
+      p.id === prompt.id ? { ...p, is_active: newActive } : p
+    ));
+  };
+
+  const activeCount = prompts.filter(p => p.is_active).length;
+  const inactiveCount = prompts.filter(p => !p.is_active).length;
+  const isAiGenerated = (slug: string) => slug.startsWith('auto_') || slug.startsWith('engagement_') || slug.startsWith('visual_examples_') || slug.startsWith('guardrail_feedback_') || slug.startsWith('communication_feedback_') || slug.startsWith('topic_boundaries_feedback_') || slug.startsWith('quality_criteria_feedback_');
+
+  let filtered = filterCat === 'all' ? prompts : prompts.filter(p => p.category === filterCat);
+  if (!showInactive) filtered = filtered.filter(p => p.is_active);
   const catCounts = prompts.reduce((acc, p) => {
     acc[p.category] = (acc[p.category] || 0) + 1;
     return acc;
@@ -129,7 +149,7 @@ export function ProjectPrompts({ projectId }: { projectId: string }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-white">Prompt šablony ({prompts.length})</h3>
+          <h3 className="text-sm font-medium text-white">Prompt šablony ({activeCount} aktivních{inactiveCount > 0 ? ` + ${inactiveCount} neaktivních` : ''})</h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Detailní instrukce pro Huga – co dělat, co nedělat, jak komunikovat.
           </p>
@@ -195,6 +215,16 @@ export function ProjectPrompts({ projectId }: { projectId: string }) {
               {c.label} ({catCounts[c.value]})
             </button>
           ))}
+          {inactiveCount > 0 && (
+            <button
+              onClick={() => setShowInactive(!showInactive)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ml-2 ${
+                showInactive ? 'bg-amber-600/20 text-amber-400' : 'bg-slate-800 text-slate-500'
+              }`}
+            >
+              {showInactive ? `Skrýt neaktivní (${inactiveCount})` : `Zobrazit neaktivní (${inactiveCount})`}
+            </button>
+          )}
         </div>
       )}
 
@@ -212,16 +242,35 @@ export function ProjectPrompts({ projectId }: { projectId: string }) {
 
       <div className="space-y-2">
         {filtered.map(prompt => (
-          <div key={prompt.id} className="bg-slate-800 rounded-lg overflow-hidden">
+          <div key={prompt.id} className={`rounded-lg overflow-hidden ${prompt.is_active ? 'bg-slate-800' : 'bg-slate-800/50 border border-dashed border-slate-700'}`}>
             {/* Header */}
             <div className="flex items-center gap-3 p-3">
+              <button
+                onClick={() => toggleActive(prompt)}
+                title={prompt.is_active ? 'Klikni pro deaktivaci' : 'Klikni pro aktivaci'}
+                className="flex-shrink-0"
+              >
+                {prompt.is_active ? (
+                  <ToggleRight className="w-5 h-5 text-emerald-400" />
+                ) : (
+                  <ToggleLeft className="w-5 h-5 text-slate-600" />
+                )}
+              </button>
               <span className={`px-2 py-0.5 rounded text-xs font-medium ${CATEGORY_COLORS[prompt.category] || 'bg-slate-700 text-slate-400'}`}>
                 {CATEGORIES.find(c => c.value === prompt.category)?.label || prompt.category}
               </span>
+              {isAiGenerated(prompt.slug) && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-500/15 text-violet-400">
+                  <Bot className="w-3 h-3" /> AI
+                </span>
+              )}
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium text-white">{prompt.slug}</span>
+                <span className={`text-sm font-medium ${prompt.is_active ? 'text-white' : 'text-slate-500'}`}>{prompt.slug}</span>
                 {prompt.description && (
                   <span className="text-xs text-slate-500 ml-2">{prompt.description}</span>
+                )}
+                {!prompt.is_active && (
+                  <span className="text-[10px] text-amber-500 ml-2">neaktivní</span>
                 )}
               </div>
               <div className="flex items-center gap-1">

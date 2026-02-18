@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .from('project_prompt_templates')
     .select('*')
     .eq('project_id', id)
-    .eq('is_active', true)
+    .order('is_active', { ascending: false })
     .order('sort_order');
 
   if (error) {

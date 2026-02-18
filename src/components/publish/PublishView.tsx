@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Send, Calendar, Loader2, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Send, Calendar, Loader2, CheckCircle, XCircle, Clock, Pencil, Trash2, Save, X } from 'lucide-react';
 
 interface QueueItem {
   id: string;
@@ -25,6 +25,10 @@ export function PublishView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [scheduleDate, setScheduleDate] = useState('');
   const [publishResult, setPublishResult] = useState<Array<{ id: string; status: string; error?: string }>>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -73,6 +77,67 @@ export function PublishView() {
     setPublishing(false);
   };
 
+  const handleEdit = (item: QueueItem) => {
+    setEditingId(item.id);
+    setEditText(item.text_content);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId || !editText.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/queue', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingId, text_content: editText }),
+      });
+      if (res.ok) {
+        setEditingId(null);
+        setEditText('');
+        loadData();
+      }
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditText('');
+  };
+
+  const handleDelete = async (id: string) => {
+    setDeleting(prev => new Set(prev).add(id));
+    try {
+      const res = await fetch('/api/queue', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [id] }),
+      });
+      if (res.ok) {
+        setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+        loadData();
+      }
+    } catch { /* ignore */ }
+    setDeleting(prev => { const next = new Set(prev); next.delete(id); return next; });
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    setDeleting(new Set(selectedIds));
+    try {
+      const res = await fetch('/api/queue', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (res.ok) {
+        setSelectedIds(new Set());
+        loadData();
+      }
+    } catch { /* ignore */ }
+    setDeleting(new Set());
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -118,6 +183,15 @@ export function PublishView() {
               )}
               {scheduleDate ? 'Naplánovat' : 'Odeslat nyní'}
             </button>
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleDeleteSelected}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-600/20 border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-600/30 transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+                Smazat ({selectedIds.size})
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -150,6 +224,16 @@ export function PublishView() {
             selected={selectedIds.has(item.id)}
             onToggle={() => toggleSelect(item.id)}
             selectable
+            editable
+            isEditing={editingId === item.id}
+            editText={editText}
+            saving={saving}
+            isDeleting={deleting.has(item.id)}
+            onEdit={() => handleEdit(item)}
+            onSaveEdit={handleSaveEdit}
+            onCancelEdit={handleCancelEdit}
+            onEditTextChange={setEditText}
+            onDelete={() => handleDelete(item.id)}
           />
         ))}
       </Section>
@@ -157,7 +241,20 @@ export function PublishView() {
       {/* Scheduled */}
       <Section title="Naplánováno" count={scheduled.length} icon={<Clock className="w-4 h-4 text-blue-400" />}>
         {scheduled.map(item => (
-          <PostCard key={item.id} item={item} />
+          <PostCard
+            key={item.id}
+            item={item}
+            editable
+            isEditing={editingId === item.id}
+            editText={editText}
+            saving={saving}
+            isDeleting={deleting.has(item.id)}
+            onEdit={() => handleEdit(item)}
+            onSaveEdit={handleSaveEdit}
+            onCancelEdit={handleCancelEdit}
+            onEditTextChange={setEditText}
+            onDelete={() => handleDelete(item.id)}
+          />
         ))}
       </Section>
 
@@ -190,16 +287,36 @@ function PostCard({
   selected,
   onToggle,
   selectable,
+  editable,
+  isEditing,
+  editText,
+  saving,
+  isDeleting,
+  onEdit,
+  onSaveEdit,
+  onCancelEdit,
+  onEditTextChange,
+  onDelete,
 }: {
   item: QueueItem;
   selected?: boolean;
   onToggle?: () => void;
   selectable?: boolean;
+  editable?: boolean;
+  isEditing?: boolean;
+  editText?: string;
+  saving?: boolean;
+  isDeleting?: boolean;
+  onEdit?: () => void;
+  onSaveEdit?: () => void;
+  onCancelEdit?: () => void;
+  onEditTextChange?: (text: string) => void;
+  onDelete?: () => void;
 }) {
   return (
     <div
       className={`bg-slate-900 border rounded-lg p-4 transition-colors ${
-        selected ? 'border-emerald-500/50' : 'border-slate-800'
+        selected ? 'border-emerald-500/50' : isEditing ? 'border-violet-500/50' : 'border-slate-800'
       }`}
     >
       <div className="flex items-start gap-3">
@@ -230,8 +347,58 @@ function PostCard({
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-300 line-clamp-2">{item.text_content}</p>
+
+          {isEditing ? (
+            <div className="mt-2">
+              <textarea
+                value={editText}
+                onChange={(e) => onEditTextChange?.(e.target.value)}
+                rows={6}
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y"
+              />
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={onSaveEdit}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+                >
+                  {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                  Uložit
+                </button>
+                <button
+                  onClick={onCancelEdit}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-xs font-medium hover:bg-slate-600 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  Zrušit
+                </button>
+                <span className="text-xs text-slate-500 ml-auto">{editText?.length || 0} znaků</span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-300 whitespace-pre-line">{item.text_content}</p>
+          )}
         </div>
+
+        {editable && !isEditing && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={onEdit}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-violet-400 hover:bg-slate-800 transition-colors"
+              title="Upravit"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={onDelete}
+              disabled={isDeleting}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors disabled:opacity-50"
+              title="Smazat"
+            >
+              {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -46,6 +46,8 @@ export function FeedbackDigestPanel({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(7);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
+  const [applyingId, setApplyingId] = useState<string | null>(null);
 
   const loadDigest = async () => {
     setLoading(true);
@@ -234,15 +236,43 @@ export function FeedbackDigestPanel({ projectId }: { projectId: string }) {
 
                 {/* Actions */}
                 <div className="p-3 bg-slate-800/50 border-t border-slate-800 flex justify-end gap-2">
-                  <button
-                    onClick={() => {
-                      // TODO: Implement "Apply to project" - create new prompt template
-                      alert('Funkce "Aplikovat" bude implementována - vytvoří nový prompt template');
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-500 transition-colors"
-                  >
-                    Aplikovat na projekt
-                  </button>
+                  {appliedIds.has(suggestionId) ? (
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-emerald-400 font-medium">
+                      <Check className="w-3.5 h-3.5" /> Aplikováno do promptů
+                    </span>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        setApplyingId(suggestionId);
+                        try {
+                          const res = await fetch('/api/agent/feedback-digest', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ projectId, suggestion }),
+                          });
+                          if (res.ok) {
+                            setAppliedIds(prev => new Set([...prev, suggestionId]));
+                          } else {
+                            const err = await res.json().catch(() => ({}));
+                            console.error('Apply failed:', err);
+                          }
+                        } catch (err) {
+                          console.error('Apply error:', err);
+                        }
+                        setApplyingId(null);
+                      }}
+                      disabled={applyingId === suggestionId}
+                      className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-500 transition-colors disabled:opacity-50"
+                    >
+                      {applyingId === suggestionId ? (
+                        <span className="flex items-center gap-1.5">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Ukládám...
+                        </span>
+                      ) : (
+                        'Aplikovat na projekt'
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             );

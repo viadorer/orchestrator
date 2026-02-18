@@ -1042,6 +1042,40 @@ function CronPlanPanel() {
         )}
       </div>
 
+      {/* Weekly Analytics Schedule */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-violet-400" /> Týdenní rozvrh analytických úkolů
+        </h2>
+        <div className="text-[10px] text-slate-500 mb-3">
+          Automaticky se spouští pro všechny aktivní projekty s KB (8:00-10:00 CET)
+        </div>
+        <div className="grid grid-cols-5 gap-2">
+          {[
+            { day: 'Po', label: 'Pondělí', task: 'Content Mix analýza', color: 'text-blue-400', bg: 'bg-blue-500/10' },
+            { day: 'Út', label: 'Úterý', task: '—', color: 'text-slate-600', bg: 'bg-slate-800/50' },
+            { day: 'St', label: 'Středa', task: 'KB Gap analýza', color: 'text-amber-400', bg: 'bg-amber-500/10' },
+            { day: 'Čt', label: 'Čtvrtek', task: 'Auto-enrich KB', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+            { day: 'Pá', label: 'Pátek', task: 'Feedback Digest + Performance Report', color: 'text-violet-400', bg: 'bg-violet-500/10' },
+          ].map(({ day, label, task, color, bg }) => {
+            const today = new Date().getDay();
+            const dayMap: Record<string, number> = { 'Po': 1, 'Út': 2, 'St': 3, 'Čt': 4, 'Pá': 5 };
+            const isToday = dayMap[day] === today;
+            return (
+              <div key={day} className={`p-2.5 rounded-lg border ${isToday ? 'border-violet-500/50 ring-1 ring-violet-500/20' : 'border-slate-700'} ${bg}`}>
+                <div className={`text-xs font-bold ${isToday ? 'text-violet-300' : 'text-white'}`}>
+                  {day} {isToday && <span className="text-[9px] font-normal text-violet-400">· dnes</span>}
+                </div>
+                <div className={`text-[10px] mt-1 leading-tight ${color}`}>{task}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-3 text-[10px] text-slate-600">
+          + Denně: generování obsahu dle posting_frequency · Auto-publish (pokud zapnuto) · RSS fetch (každých 6h)
+        </div>
+      </div>
+
       {/* Active Projects */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl">
         <div className="flex items-center justify-between p-4 border-b border-slate-800">

@@ -104,6 +104,26 @@ export async function GET(request: Request) {
       model_used: 'gemini-2.0-flash',
     });
 
+    // 5. Save digest to agent_memory for future content generation context
+    if (suggestions.length > 0) {
+      await supabase.from('agent_memory').upsert({
+        project_id: projectId,
+        memory_type: 'feedback_digest',
+        content: {
+          suggestions: suggestions.map(s => ({
+            type: s.type,
+            title: s.title,
+            content: s.content,
+            confidence: s.confidence,
+          })),
+          total_edits: edits.length,
+          period_days: days,
+          generated_at: new Date().toISOString(),
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'project_id,memory_type' });
+    }
+
     return NextResponse.json({
       project_name: project.name,
       period_days: days,
@@ -114,6 +134,67 @@ export async function GET(request: Request) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+/**
+ * POST /api/agent/feedback-digest
+ * Apply a digest suggestion as a project prompt template
+ * Body: { projectId, suggestion: DigestSuggestion }
+ */
+export async function POST(request: Request) {
+  if (!supabase) {
+    return NextResponse.json({ error: 'Not configured' }, { status: 500 });
+  }
+
+  const { projectId, suggestion } = await request.json();
+
+  if (!projectId || !suggestion?.type || !suggestion?.content) {
+    return NextResponse.json({ error: 'projectId and suggestion required' }, { status: 400 });
+  }
+
+  // Map digest type to prompt category
+  const categoryMap: Record<string, string> = {
+    guardrail: 'guardrail',
+    communication: 'communication',
+    topic_boundary: 'topic_boundaries',
+    quality_criteria: 'quality_criteria',
+  };
+  const category = categoryMap[suggestion.type] || 'guardrail';
+  const slug = `${category}_feedback_${Date.now()}`;
+
+  // Insert as project_prompt_template
+  const { error: insertError } = await supabase
+    .from('project_prompt_templates')
+    .insert({
+      project_id: projectId,
+      slug,
+      category,
+      content: suggestion.content,
+      is_active: true,
+      sort_order: 100, // append at end
+    });
+
+  if (insertError) {
+    return NextResponse.json({ error: insertError.message }, { status: 500 });
+  }
+
+  // Log
+  await supabase.from('agent_log').insert({
+    project_id: projectId,
+    action: 'feedback_suggestion_applied',
+    details: {
+      type: suggestion.type,
+      title: suggestion.title,
+      slug,
+      confidence: suggestion.confidence,
+    },
+  });
+
+  return NextResponse.json({
+    success: true,
+    slug,
+    message: `Pravidlo "${suggestion.title}" bylo přidáno do promptů projektu.`,
+  });
 }
 
 /**

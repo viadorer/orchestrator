@@ -243,6 +243,20 @@ async function buildAgentPrompt(
             case 'sentiment_report':
               if (content.issues) parts.push(`  Problémy: ${JSON.stringify(content.issues)}`);
               break;
+            case 'feedback_digest': {
+              const suggestions = content.suggestions as Array<Record<string, unknown>>;
+              if (suggestions && suggestions.length > 0) {
+                parts.push(`  Feedback vzory (z admin editů):`);
+                for (const s of suggestions) {
+                  parts.push(`  - [${s.type}] ${s.title}: ${s.content}`);
+                }
+                parts.push(`  POVINNĚ dodržuj tato pravidla z feedback digestu!`);
+              }
+              break;
+            }
+            case 'kb_enrichment':
+              if (content.inserted) parts.push(`  Naposledy přidáno ${content.inserted} KB záznamů`);
+              break;
             default:
               parts.push(`  ${JSON.stringify(content).substring(0, 200)}`);
           }
@@ -1711,6 +1725,40 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
         await createTask(project.id, 'auto_enrich_kb', {
           auto_scheduled: true,
           reason: 'weekly_thursday_enrichment',
+        }, { priority: 2 });
+        scheduled++;
+      }
+    }
+
+    // Friday: Feedback Digest + Performance Report
+    if (localDay === 5) {
+      // Feedback Digest: analyze admin edits and generate prompt suggestions
+      // Check agent_log (not agent_tasks) since digest is a direct API call
+      const digestSince = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const { count: digestCount } = await supabase
+        .from('agent_log')
+        .select('id', { count: 'exact' })
+        .eq('project_id', project.id)
+        .eq('action', 'feedback_digest_generated')
+        .gte('created_at', digestSince);
+      const hasDigest = (digestCount || 0) > 0;
+      if (!hasDigest) {
+        // Trigger feedback digest via API (not a task, but a direct call)
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+          await fetch(`${baseUrl}/api/agent/feedback-digest?projectId=${project.id}&days=7`);
+        } catch {
+          // Feedback digest fetch failed, continue
+        }
+      }
+
+      // Performance Report
+      const hasReport = await hasRecentAnalyticsTask(project.id, 'performance_report', 48);
+      if (!hasReport) {
+        await createTask(project.id, 'performance_report', {
+          auto_scheduled: true,
+          reason: 'weekly_friday_report',
         }, { priority: 2 });
         scheduled++;
       }

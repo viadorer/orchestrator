@@ -87,6 +87,8 @@ export function AgentView() {
   const [runningAll, setRunningAll] = useState(false);
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all');
   const [agentTab, setAgentTab] = useState<'tasks' | 'diagram' | 'cron' | 'feedback'>('tasks');
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [showPlatformSelector, setShowPlatformSelector] = useState(false);
 
   const filteredTasks = taskFilter === 'all' ? tasks : tasks.filter(t => t.status === taskFilter);
 
@@ -119,28 +121,63 @@ export function AgentView() {
   const handleCreateTask = async (taskType: string) => {
     setCreatingTask(taskType);
     const currentProject = projects.find(p => p.id === selectedProject);
+    
+    // Determine which platforms to generate for
+    const platformsToGenerate = selectedPlatforms.length > 0 
+      ? selectedPlatforms 
+      : currentProject?.platforms || ['linkedin'];
+    
     try {
-      // 1. Create task
-      const createRes = await fetch('/api/agent/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: selectedProject,
-          taskType,
-          params: {
-            platform: currentProject?.platforms?.[0] || 'linkedin',
-          },
-        }),
-      });
-      const { id: taskId } = await createRes.json();
+      // If multiple platforms selected, create tasks for each
+      if (platformsToGenerate.length > 1) {
+        const contentGroupId = crypto.randomUUID();
+        for (let i = 0; i < platformsToGenerate.length; i++) {
+          const createRes = await fetch('/api/agent/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: selectedProject,
+              taskType,
+              params: {
+                platform: platformsToGenerate[i],
+                content_group_id: contentGroupId,
+              },
+            }),
+          });
+          const { id: taskId } = await createRes.json();
+          
+          // Execute first task immediately, others will be picked up by cron
+          if (taskId && i === 0) {
+            await loadProjectData();
+            const execRes = await fetch(`/api/agent/tasks/${taskId}/execute`, { method: 'POST' });
+            if (!execRes.ok) {
+              const data = await execRes.json().catch(() => ({}));
+              console.error('Task execution failed:', data.error || execRes.statusText);
+            }
+          }
+        }
+      } else {
+        // Single platform - create and execute immediately
+        const createRes = await fetch('/api/agent/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: selectedProject,
+            taskType,
+            params: {
+              platform: platformsToGenerate[0],
+            },
+          }),
+        });
+        const { id: taskId } = await createRes.json();
 
-      // 2. Immediately execute it
-      if (taskId) {
-        await loadProjectData(); // Show task as "running"
-        const execRes = await fetch(`/api/agent/tasks/${taskId}/execute`, { method: 'POST' });
-        if (!execRes.ok) {
-          const data = await execRes.json().catch(() => ({}));
-          console.error('Task execution failed:', data.error || execRes.statusText);
+        if (taskId) {
+          await loadProjectData();
+          const execRes = await fetch(`/api/agent/tasks/${taskId}/execute`, { method: 'POST' });
+          if (!execRes.ok) {
+            const data = await execRes.json().catch(() => ({}));
+            console.error('Task execution failed:', data.error || execRes.statusText);
+          }
         }
       }
     } catch (err) {
@@ -148,6 +185,7 @@ export function AgentView() {
     }
     await loadProjectData();
     setCreatingTask(null);
+    setShowPlatformSelector(false);
     // Auto-refresh after 3s
     setTimeout(() => loadProjectData(), 3000);
   };
@@ -344,24 +382,82 @@ export function AgentView() {
           <h2 className="text-sm font-medium text-white mb-3">Služby agenta</h2>
           <div className="space-y-2">
             {TASK_TYPES.map(({ value, label, icon: Icon, desc }) => (
-              <button
-                key={value}
-                onClick={() => handleCreateTask(value)}
-                disabled={creatingTask === value}
-                className="w-full flex items-start gap-3 p-3 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-left transition-colors group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-slate-800 group-hover:bg-violet-600/20 flex items-center justify-center flex-shrink-0 transition-colors">
-                  {creatingTask === value ? (
-                    <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
-                  ) : (
-                    <Icon className="w-4 h-4 text-slate-400 group-hover:text-violet-400 transition-colors" />
+              <div key={value}>
+                <button
+                  onClick={() => {
+                    if (value === 'generate_content') {
+                      setShowPlatformSelector(!showPlatformSelector);
+                    } else {
+                      handleCreateTask(value);
+                    }
+                  }}
+                  disabled={creatingTask === value}
+                  className="w-full flex items-start gap-3 p-3 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-left transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-slate-800 group-hover:bg-violet-600/20 flex items-center justify-center flex-shrink-0 transition-colors">
+                    {creatingTask === value ? (
+                      <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
+                    ) : (
+                      <Icon className="w-4 h-4 text-slate-400 group-hover:text-violet-400 transition-colors" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-white">{label}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{desc}</div>
+                  </div>
+                  {value === 'generate_content' && (
+                    <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${showPlatformSelector ? 'rotate-180' : ''}`} />
                   )}
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-white">{label}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{desc}</div>
-                </div>
-              </button>
+                </button>
+                
+                {/* Platform selector for generate_content */}
+                {value === 'generate_content' && showPlatformSelector && (
+                  <div className="mt-2 p-3 rounded-lg bg-slate-800/50 border border-slate-700 space-y-2">
+                    <div className="text-xs font-medium text-slate-400 mb-2">Vyberte platformy:</div>
+                    {projects.find(p => p.id === selectedProject)?.platforms.map((platform) => (
+                      <label key={platform} className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={selectedPlatforms.includes(platform)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPlatforms([...selectedPlatforms, platform]);
+                            } else {
+                              setSelectedPlatforms(selectedPlatforms.filter(p => p !== platform));
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-slate-600 bg-slate-900 text-violet-600 focus:ring-2 focus:ring-violet-500"
+                        />
+                        <span className="text-sm text-slate-300 group-hover:text-white transition-colors capitalize">{platform}</span>
+                      </label>
+                    ))}
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-700">
+                      <button
+                        onClick={() => {
+                          const allPlatforms = projects.find(p => p.id === selectedProject)?.platforms || [];
+                          setSelectedPlatforms(allPlatforms);
+                        }}
+                        className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                      >
+                        Vybrat vše
+                      </button>
+                      <button
+                        onClick={() => setSelectedPlatforms([])}
+                        className="text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                      >
+                        Zrušit výběr
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => handleCreateTask('generate_content')}
+                      disabled={creatingTask === 'generate_content'}
+                      className="w-full mt-2 px-3 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      {creatingTask === 'generate_content' ? 'Generuji...' : `Generovat (${selectedPlatforms.length || 'všechny'} ${selectedPlatforms.length === 1 ? 'platforma' : 'platformy'})`}
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>

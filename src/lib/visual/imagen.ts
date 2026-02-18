@@ -233,11 +233,20 @@ async function callImagenAPI(prompt: string, aspectRatio: string): Promise<strin
   }
 
   const data = await response.json();
+  console.log('[imagen] API response structure:', JSON.stringify(data).substring(0, 500));
+  
   const predictions = data.predictions;
-  if (!predictions || predictions.length === 0) return null;
+  if (!predictions || predictions.length === 0) {
+    console.error('[imagen] No predictions in response:', data);
+    return null;
+  }
 
   // Imagen returns base64 encoded image in bytesBase64Encoded field
-  return predictions[0].bytesBase64Encoded || null;
+  const imageBytes = predictions[0].bytesBase64Encoded || null;
+  if (!imageBytes) {
+    console.error('[imagen] No bytesBase64Encoded in prediction:', predictions[0]);
+  }
+  return imageBytes;
 }
 
 /**

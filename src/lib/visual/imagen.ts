@@ -199,6 +199,7 @@ export async function generateAndStoreImage(options: {
     };
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[imagen] Generation failed:', errorMsg, err);
     await logImagenEvent(projectId, 'imagen_error', { error: errorMsg, platform });
     return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: errorMsg };
   }
@@ -227,6 +228,7 @@ async function callImagenAPI(prompt: string, aspectRatio: string): Promise<strin
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => 'Unknown');
+    console.error(`[imagen] API error ${response.status}:`, errorBody);
     throw new Error(`Imagen API error ${response.status}: ${errorBody}`);
   }
 

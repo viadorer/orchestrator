@@ -372,10 +372,11 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         chart: !!visual.chart_url,
         card: !!visual.card_url,
       };
-    } catch {
+    } catch (err) {
       // Visual generation failed, continue without
+      console.error('[content-engine] Visual generation error:', err instanceof Error ? err.message : err);
       content.visual = { visual_type: 'none', chart_url: null, card_url: null, image_prompt: content.image_prompt || null };
-      reasoning.visual_decision = { type: 'none', reason: 'generation_failed' };
+      reasoning.visual_decision = { type: 'none', reason: 'generation_failed', error: err instanceof Error ? err.message : String(err) };
     }
   }
 

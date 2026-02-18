@@ -450,6 +450,147 @@ Témata:
 - Co zkontrolovat před koupí nemovitosti
 - Jak připravit nemovitost na prohlídky', true);
 
+-- ---- USP ----
+
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('879f733f-8dcc-48ca-a42b-808234821365', 'usp', 'Proč Odhad.online',
+'Hlavní výhody oproti konkurenci:
+1. ZDARMA: Orientační odhad bez poplatků a závazků
+2. AI CHATBOT: Konverzační přístup - Hugo se zeptá na detaily a zpřesní odhad
+3. RYCHLOST: Odhad do 2 minut, ne dní
+4. NEZÁVISLOST: Nejsme realitní kancelář, nemáme zájem na ceně
+5. DATA: Odhad z reálných transakcí, ne z inzerátů
+6. DOSTUPNOST: 24/7, bez registrace, bez čekání na operátora
+7. SOUKROMÍ: Minimální sběr dat, žádné volání od realitky', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'usp', 'Rozdíl oproti konkurenci',
+'Realitní kanceláře: Odhad zdarma jako lead magnet, ale subjektivní a vyžaduje schůzku. Mají zájem na co nejvyšší ceně (vyšší provize).
+Znalci a odhadci: Placené (3-8 tis. Kč), právně závazné, trvá dny. Nutné pro banku/soud.
+Online kalkulačky (Sreality, Bezrealitky): Zjednodušené, zadáte adresu a plochu, dostanete číslo. Bez kontextu, bez vysvětlení.
+Odhad.online (Hugo): AI chatbot, který se ptá na detaily, vysvětluje faktory ceny, dává kontext. Jako konzultace s odhadcem, ale zdarma a okamžitě.', true);
+
+-- ---- FAQ ----
+
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('879f733f-8dcc-48ca-a42b-808234821365', 'faq', 'Jak přesný je odhad?',
+'Orientační odhad na odhad.online je založen na reálných transakcích v okolí. Přesnost závisí na dostupnosti dat v dané lokalitě. V Praze a krajských městech je přesnost vysoká (±5-10 %). V menších obcích může být rozmezí širší (±10-20 %). Hugo vždy uvede rozmezí min-max a vysvětlí faktory, které cenu ovlivňují. Pro právní účely (hypotéka, soud) je nutný znalecký posudek.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'faq', 'Je odhad zdarma?',
+'Ano, orientační odhad na odhad.online je zcela zdarma. Žádné poplatky, žádné skryté náklady, žádná registrace. Stačí napsat Hugovi a popsat nemovitost. Pokud budete potřebovat znalecký posudek pro banku nebo soud, ten stojí 3 000-8 000 Kč a zpracovává ho certifikovaný soudní znalec.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'faq', 'Jaká data Hugo používá?',
+'Hugo pracuje s daty z reálných prodejů a pronájmů nemovitostí v ČR. Zdroje zahrnují katastr nemovitostí, statistiky ČSÚ, data z realitních portálů a historické transakce. Algoritmus porovnává parametry vaší nemovitosti (typ, plocha, stav, lokalita, dispozice) se srovnatelnými transakcemi v okolí a vypočítá orientační tržní hodnotu.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'faq', 'Můžu odhad použít pro hypotéku?',
+'Orientační odhad z odhad.online není znaleckým posudkem a nelze ho použít pro banku. Pro hypotéku potřebujete znalecký posudek od certifikovaného soudního znalce (cena 3 000-8 000 Kč). Náš odhad je ale ideální první krok - zjistíte orientační hodnotu a můžete se lépe rozhodnout, zda má smysl investovat do znaleckého posudku.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'faq', 'Jak dlouho trvá odhad?',
+'Konverzace s Hugem trvá 1-3 minuty. Hugo se zeptá na základní parametry nemovitosti (typ, adresa, plocha, stav, dispozice) a během chvíle poskytne orientační odhad s vysvětlením. Žádné čekání, žádné telefonáty, žádné schůzky. Dostupný 24/7.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'faq', 'Budete mě kontaktovat po odhadu?',
+'NE. Odhad.online je plně automatizovaná služba. Hugo je AI chatbot, ne obchodník. Po odhadu vás nikdo nekontaktuje, nevolá, neposílá nabídky. Pokud budete chtít další služby, můžete nás kontaktovat vy. Ale my vás nekontaktujeme.', true);
+
+-- ---- CASE_STUDY ----
+
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('879f733f-8dcc-48ca-a42b-808234821365', 'case_study', 'Příběh: Prodej bytu v Praze za správnou cenu',
+'Situace: Majitel 3+1 na Praze 6 chtěl prodat. Realitka navrhla 8,5 mil. Kč. Odhad.online ukázal rozmezí 7,2-7,8 mil. Kč na základě srovnatelných prodejů v okolí. Majitel se rozhodl pro kompromis 7,9 mil. Kč. Výsledek: Byt se prodal za 3 týdny za 7,7 mil. Kč. Kdyby šel za 8,5 mil., čekal by měsíce a nakonec by musel snižovat. Poučení: Správné nacenění = rychlý prodej.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'case_study', 'Příběh: Kupující ušetřil 400 tis. Kč',
+'Situace: Kupující našel byt 2+kk v Brně za 4,2 mil. Kč. Před koupí si nechal udělat odhad na odhad.online. Hugo ukázal rozmezí 3,6-3,9 mil. Kč. Kupující vyjednal slevu na 3,8 mil. Kč s odkazem na srovnatelné prodeje v okolí. Výsledek: Ušetřil 400 tis. Kč. Poučení: Nezávislý odhad je nejlepší vyjednávací nástroj.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'case_study', 'Příběh: Dědictví a spravedlivé rozdělení',
+'Situace: Tři sourozenci zdědili rodinný dům v Olomouci. Potřebovali orientační hodnotu pro spravedlivé rozdělení. Jeden chtěl dům, ostatní podíl v penězích. Hugo odhadl hodnotu na 4,8-5,2 mil. Kč. Sourozenci se dohodli na 5 mil. Kč. Ten, kdo si dům nechal, vyplatil ostatním po 1,67 mil. Kč. Poučení: Nezávislý odhad pomáhá při rodinných dohodách.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'case_study', 'Příběh: Investor a výnosnost nájmu',
+'Situace: Investor zvažoval koupi 1+kk v Ostravě za 1,8 mil. Kč. Hugo odhadl tržní hodnotu na 1,6-1,9 mil. Kč a orientační nájem na 9-11 tis. Kč/měsíc. Hrubá výnosnost: 6-7 % ročně. Investor koupil za 1,75 mil. Kč, pronajímá za 10 500 Kč. Výnosnost 7,2 %. Poučení: Odhad nájmu pomáhá investorům spočítat návratnost.', true);
+
+-- ---- DATA ----
+
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('879f733f-8dcc-48ca-a42b-808234821365', 'data', 'Průměrné ceny bytů v ČR 2026',
+'Orientační průměrné ceny bytů (únor 2026):
+- Praha: 120-140 tis. Kč/m²
+- Brno: 80-100 tis. Kč/m²
+- Plzeň: 60-75 tis. Kč/m²
+- Ostrava: 35-50 tis. Kč/m²
+- Olomouc: 55-70 tis. Kč/m²
+- České Budějovice: 55-65 tis. Kč/m²
+- Liberec: 45-60 tis. Kč/m²
+Ceny se liší podle lokality, stavu a dispozice. Novostavby jsou o 15-30 % dražší než starší byty.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'data', 'Průměrné nájmy v ČR 2026',
+'Orientační průměrné nájmy bytů 2+kk (únor 2026):
+- Praha: 22-30 tis. Kč/měsíc
+- Brno: 16-22 tis. Kč/měsíc
+- Plzeň: 13-17 tis. Kč/měsíc
+- Ostrava: 10-14 tis. Kč/měsíc
+- Olomouc: 12-16 tis. Kč/měsíc
+Nájmy rostou meziročně o 3-8 %. Největší poptávka: 1+kk a 2+kk v krajských městech.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'data', 'Faktory ovlivňující cenu nemovitosti',
+'Hlavní faktory a jejich vliv na cenu:
+1. Lokalita (město, čtvrť, ulice) - až 40 % vlivu
+2. Velikost (užitná plocha) - až 25 % vlivu
+3. Stav (novostavba, po rekonstrukci, původní) - až 15 % vlivu
+4. Typ (byt, rodinný dům, pozemek) - 10 %
+5. Dispozice, patro, výtah, orientace - 5 %
+6. Konstrukce (cihla vs panel) - 3 %
+7. Energetická náročnost - 2 %
+Rozdíl mezi lokalitami ve stejném městě může být 20-40 %.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'data', 'Hypoteční sazby a jejich vliv',
+'Aktuální hypoteční sazby (únor 2026): 4,5-5,5 % p.a.
+Vliv na ceny nemovitostí: Pokles sazby o 1 p.b. = nárůst kupní síly o cca 10 %. Při sazení 5 % si na splátku 15 000 Kč/měsíc půjčíte 2,8 mil. Kč. Při 4 % to je 3,1 mil. Kč. Rozdíl 300 tis. Kč.
+LTV limit: 80 % (90 % pro mladé do 36 let). DSTI limit: 45 %.
+Trend: Postupné snižování sazeb ČNB → očekávaný růst poptávky a cen.', true);
+
+-- ---- PROCESS ----
+
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('879f733f-8dcc-48ca-a42b-808234821365', 'process', 'Jak funguje odhad s Hugem',
+'Proces odhadu na odhad.online:
+1. Otevřete chat na odhad.online
+2. Hugo se představí a zeptá se, co potřebujete (odhad prodejní ceny nebo nájmu)
+3. Hugo se zeptá na parametry: typ nemovitosti, adresa, plocha, stav, dispozice
+4. Na základě dat z reálných transakcí Hugo vypočítá orientační cenu
+5. Hugo vysvětlí faktory, které cenu ovlivňují
+6. Pokud chcete, Hugo zpřesní odhad na základě dalších detailů
+Celý proces trvá 1-3 minuty. Bez registrace, bez závazků.', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'process', 'Co dělat po obdržení odhadu',
+'Máte odhad z odhad.online. Co dál?
+
+PRODÁVAJÍCÍ:
+1. Porovnejte odhad s aktuálními inzeráty v okolí
+2. Rozhodněte o prodejní ceně (odhad + 5-10 % pro vyjednávání)
+3. Připravte nemovitost k prodeji (úklid, drobné opravy, fotky)
+4. Zvažte realitní kancelář nebo prodej sami
+
+KUPUJÍCÍ:
+1. Porovnejte odhad s nabídkovou cenou
+2. Pokud je nabídka výrazně nad odhadem, vyjednávejte
+3. Nechte si zpracovat znalecký posudek před podpisem smlouvy
+
+INVESTOR:
+1. Spočítejte výnosnost (roční nájem / kupní cena × 100)
+2. Porovnejte s alternativami (spořicí účet, fondy)
+3. Zohledněte náklady (údržba, pojištění, daně, správa)', true),
+
+('879f733f-8dcc-48ca-a42b-808234821365', 'process', 'Kdy potřebujete znalecký posudek',
+'Orientační odhad z odhad.online stačí pro:
+- Rozhodování o prodeji/koupi
+- Vyjednávání o ceně
+- Orientační srovnání nemovitostí
+- Rodinné dohody (dědictví, dar)
+
+Znalecký posudek potřebujete pro:
+- Hypotéku (banka vyžaduje)
+- Soud (rozvod, dědické řízení, exekuce)
+- Daňové účely (daň z nabytí, odpisy)
+- Pojištění (stanovení pojistné hodnoty)
+Cena znaleckého posudku: 3 000-8 000 Kč. Doba zpracování: 3-10 dní.', true);
+
 -- ===========================================
 -- 3. PROMPT TEMPLATES
 -- ===========================================

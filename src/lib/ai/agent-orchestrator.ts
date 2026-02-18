@@ -17,6 +17,7 @@
 
 import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
+import { randomUUID } from 'crypto';
 import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, getPromptTemplate, getProjectPrompts, type PromptContext } from './prompt-builder';
 import { generateVisualAssets } from '@/lib/visual/visual-agent';
@@ -24,6 +25,7 @@ import { findMatchingMedia, markMediaUsed } from '@/lib/ai/vision-engine';
 import { getRelevantNews } from '@/lib/rss/fetcher';
 import { getNextContentType } from './content-engine';
 import { hugoEditorReview } from './hugo-editor';
+import { getDefaultImageSpec } from '@/lib/platforms';
 
 // ============================================
 // Constants
@@ -977,6 +979,14 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         timestamp: new Date().toISOString(),
       };
 
+      // Resolve image spec for this platform
+      const platformImageSpec = getDefaultImageSpec(platform);
+      const imageSpec = (result.image_spec as Record<string, unknown>) || (platformImageSpec ? {
+        width: platformImageSpec.width,
+        height: platformImageSpec.height,
+        aspectRatio: platformImageSpec.aspectRatio,
+      } : null);
+
       // Save to content_queue – use only core columns first, add optional ones if available
       const coreInsert: Record<string, unknown> = {
         project_id: task.project_id,
@@ -984,6 +994,9 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         image_prompt: (result.image_prompt as string) || null,
         content_type: resolvedContentType,
         platforms: [platform],
+        target_platform: platform,
+        content_group_id: (task.params?.content_group_id as string) || null,
+        image_spec: imageSpec,
         ai_scores: scores || {},
         status: postStatus,
         source: task.params?.human_topic ? 'human_priority' : 'ai_generated',
@@ -1229,17 +1242,51 @@ export async function createHumanPriorityTask(
   platform?: string,
   contentType?: string,
 ): Promise<string | null> {
-  return createTask(
-    projectId,
-    'generate_content',
-    {
-      human_topic: topic,
-      human_notes: notes || null,
-      platform: platform || 'linkedin',
-      contentType: contentType || 'educational',
-    },
-    { priority: HUMAN_PRIORITY }
-  );
+  // If a specific platform is given, create a single task
+  if (platform) {
+    return createTask(
+      projectId,
+      'generate_content',
+      {
+        human_topic: topic,
+        human_notes: notes || null,
+        platform,
+        contentType: contentType || 'educational',
+      },
+      { priority: HUMAN_PRIORITY }
+    );
+  }
+
+  // No specific platform → create tasks for ALL project platforms (multi-platform)
+  if (!supabase) return null;
+  const { data: project } = await supabase
+    .from('projects')
+    .select('platforms')
+    .eq('id', projectId)
+    .single();
+
+  const platforms = (project?.platforms as string[]) || ['linkedin'];
+  const contentGroupId = randomUUID();
+  let firstTaskId: string | null = null;
+
+  for (let i = 0; i < platforms.length; i++) {
+    const scheduledFor = new Date(Date.now() + i * 2 * 60 * 1000); // stagger 2 min apart
+    const taskId = await createTask(
+      projectId,
+      'generate_content',
+      {
+        human_topic: topic,
+        human_notes: notes || null,
+        platform: platforms[i],
+        content_group_id: contentGroupId,
+        contentType: contentType || 'educational',
+      },
+      { priority: HUMAN_PRIORITY, scheduledFor: scheduledFor.toISOString() }
+    );
+    if (i === 0) firstTaskId = taskId;
+  }
+
+  return firstTaskId;
 }
 
 // ============================================
@@ -1430,24 +1477,27 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
 
     if ((todayCount || 0) >= config.max_posts_per_day) { skip('daily_limit_reached'); continue; }
 
-    // 8. Schedule content generation!
+    // 8. Schedule content generation – one task per platform, linked by content_group_id
     const platforms = config.platforms_priority.length > 0
       ? config.platforms_priority
       : (project.platforms as string[]) || ['facebook'];
 
-    const postsToGenerate = Math.min(
-      config.max_posts_per_day - (todayCount || 0),
-      platforms.length,
-      2, // max 2 per cron cycle
-    );
+    // Check if we can generate at least one content group today
+    const remainingSlots = config.max_posts_per_day - (todayCount || 0);
+    if (remainingSlots <= 0) { skip('daily_limit_reached'); continue; }
 
-    for (let i = 0; i < postsToGenerate; i++) {
-      const platform = platforms[i % platforms.length];
-      // Stagger tasks: spread across time (2-15 min delay per project + post index)
-      const staggerMinutes = Math.floor(Math.random() * 13) + 2 + (scheduled * 5);
+    // Generate one content group (= one topic, N platform variants)
+    const contentGroupId = randomUUID();
+    const staggerBase = Math.floor(Math.random() * 13) + 2 + (scheduled * 5);
+
+    for (let i = 0; i < platforms.length; i++) {
+      const platform = platforms[i];
+      // Stagger tasks: spread across time so they don't all hit AI at once
+      const staggerMinutes = staggerBase + (i * 2);
       const scheduledFor = new Date(Date.now() + staggerMinutes * 60 * 1000);
       await createTask(project.id, 'generate_content', {
         platform,
+        content_group_id: contentGroupId,
         auto_scheduled: true,
         media_strategy: config.media_strategy,
         auto_publish: config.auto_publish,

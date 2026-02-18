@@ -16,6 +16,7 @@ import { hugoEditorReview, type EditorContext } from './hugo-editor';
 export interface GeneratedContent {
   text: string;
   image_prompt?: string;
+  image_spec?: { width: number; height: number; aspectRatio: string };
   alt_text?: string;
   matched_image_url?: string | null;
   matched_media_id?: string | null;

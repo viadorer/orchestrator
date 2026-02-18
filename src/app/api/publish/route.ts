@@ -31,20 +31,25 @@ export async function POST(request: Request) {
     const project = post.projects as { name: string; late_accounts: Record<string, string> | null; late_social_set_id: string | null };
     const lateAccounts = project?.late_accounts || {};
 
+    // Use target_platform (single platform variant) or fall back to platforms[] array
+    const targetPlatforms: string[] = post.target_platform
+      ? [post.target_platform]
+      : (post.platforms || []);
+
     // Build platforms array: [{platform: "facebook", accountId: "698f7c19..."}]
-    const platformEntries = buildPlatformsArray(lateAccounts, post.platforms || []);
+    const platformEntries = buildPlatformsArray(lateAccounts, targetPlatforms);
 
     if (platformEntries.length === 0) {
       results.push({
         id: post.id,
         status: 'failed',
-        error: `No getLate account IDs configured for platforms: ${(post.platforms || []).join(', ')}. Set late_accounts in project settings.`,
+        error: `No getLate account IDs configured for platforms: ${targetPlatforms.join(', ')}. Set late_accounts in project settings.`,
       });
       continue;
     }
 
     // Validate content against platform limits before sending
-    const validations = validatePostMultiPlatform(post.text_content || '', post.platforms || []);
+    const validations = validatePostMultiPlatform(post.text_content || '', targetPlatforms);
     const failedPlatforms = Object.entries(validations)
       .filter(([, v]) => !v.valid)
       .map(([p, v]) => `${p}: ${v.errors.join('; ')}`);
@@ -97,6 +102,7 @@ export async function POST(request: Request) {
           project_id: post.project_id,
           content_type: post.content_type,
           pattern_id: post.pattern_id,
+          platform: post.target_platform || targetPlatforms[0] || null,
         });
 
       // Update media_assets: mark which post used this photo

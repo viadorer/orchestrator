@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import { generateContent } from '@/lib/ai/content-engine';
 import { type VisualAssets } from '@/lib/visual/visual-agent';
+import { getDefaultImageSpec } from '@/lib/platforms';
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
@@ -34,6 +35,14 @@ export async function POST(request: Request) {
     const imageUrl = visual.generated_image_url || content.matched_image_url || null;
     const mediaId = visual.media_asset_id || content.matched_media_id || null;
 
+    // Resolve image spec for this platform
+    const platformImgSpec = getDefaultImageSpec(platform);
+    const imageSpec = (content as unknown as Record<string, unknown>).image_spec || (platformImgSpec ? {
+      width: platformImgSpec.width,
+      height: platformImgSpec.height,
+      aspectRatio: platformImgSpec.aspectRatio,
+    } : null);
+
     // Save to content_queue as review
     const insertData: Record<string, unknown> = {
       project_id: projectId,
@@ -43,6 +52,8 @@ export async function POST(request: Request) {
       pattern_id: patternId || null,
       content_type: resolvedContentType,
       platforms: [platform],
+      target_platform: platform,
+      image_spec: imageSpec,
       ai_scores: content.scores,
       status: 'review',
       source: 'ai_generated',

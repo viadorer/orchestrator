@@ -13,27 +13,20 @@
 
 import { supabase } from '@/lib/supabase/client';
 import { analyzeImage, generateMediaEmbedding } from '@/lib/ai/vision-engine';
+import { getDefaultImageSpec } from '@/lib/platforms';
 
 const GEMINI_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY || '';
 const IMAGEN_MODEL = 'imagen-4.0-generate-001';
 const IMAGEN_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${IMAGEN_MODEL}:predict`;
 
-// Platform → aspect ratio mapping
-const PLATFORM_ASPECT_RATIOS: Record<string, string> = {
-  instagram: '1:1',      // 1080×1080
-  facebook: '4:3',       // 1200×900
-  linkedin: '4:3',       // 1200×900
-  x: '16:9',             // 1200×675
-  tiktok: '9:16',        // 1080×1920
-  youtube: '16:9',       // 1280×720
-  pinterest: '9:16',     // 1000×1500
-  threads: '1:1',        // 1080×1080
-  bluesky: '16:9',       // 1200×675
-  reddit: '4:3',         // 1200×900
-  'google-business': '4:3',
-  telegram: '4:3',
-  snapchat: '9:16',
-};
+/**
+ * Get aspect ratio for a platform from PLATFORM_LIMITS (single source of truth).
+ * Falls back to '4:3' if platform is unknown.
+ */
+function getPlatformAspectRatio(platform: string): string {
+  const spec = getDefaultImageSpec(platform);
+  return spec?.aspectRatio || '4:3';
+}
 
 export interface ImagenResult {
   success: boolean;
@@ -64,7 +57,7 @@ export async function generateAndStoreImage(options: {
 
   try {
     // 1. Generate image via Imagen API
-    const aspectRatio = PLATFORM_ASPECT_RATIOS[platform] || '4:3';
+    const aspectRatio = getPlatformAspectRatio(platform);
     const imageBytes = await callImagenAPI(imagePrompt, aspectRatio);
     if (!imageBytes) {
       return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: 'Imagen API returned no image' };

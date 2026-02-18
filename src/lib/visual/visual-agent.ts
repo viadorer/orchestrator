@@ -16,6 +16,7 @@ import { generateChartUrl, CHART_TEMPLATES, type ChartData, type VisualIdentity 
 import { generateAndStoreImage, buildCleanImagePrompt } from './imagen';
 import { generateMediaEmbedding } from '@/lib/ai/vision-engine';
 import { supabase } from '@/lib/supabase/client';
+import { getDefaultImageSpec, PLATFORM_LIMITS } from '@/lib/platforms';
 
 export interface VisualAssets {
   visual_type: 'chart' | 'card' | 'photo' | 'generated_photo' | 'matched_photo' | 'none';
@@ -183,15 +184,11 @@ function generateCardVisual(
     text: (vi.text_color || '#ffffff').replace('#', ''),
   });
 
-  // Platform-specific dimensions
-  const dimensions: Record<string, { w: number; h: number }> = {
-    linkedin: { w: 1200, h: 630 },
-    instagram: { w: 1080, h: 1080 },
-    facebook: { w: 1200, h: 630 },
-    x: { w: 1200, h: 675 },
-  };
-
-  const dim = dimensions[ctx.platform] || dimensions.linkedin;
+  // Platform-specific dimensions from PLATFORM_LIMITS
+  const imgSpec = getDefaultImageSpec(ctx.platform);
+  const dim = imgSpec
+    ? { w: imgSpec.width, h: imgSpec.height }
+    : { w: 1200, h: 630 }; // fallback
   params.set('w', String(dim.w));
   params.set('h', String(dim.h));
 

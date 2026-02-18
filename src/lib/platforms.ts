@@ -5,6 +5,32 @@
  * Zdroj: Brandwatch, Buffer, oficiální docs.
  */
 
+export interface ImageSpec {
+  width: number;
+  height: number;
+  aspectRatio: string;
+  label: string; // e.g. 'landscape', 'square', 'portrait'
+}
+
+export interface VideoSpec {
+  width: number;
+  height: number;
+  aspectRatio: string;
+  maxDurationSec: number;
+  optimalDurationSec: number;
+  maxSizeMB: number;
+  format: string; // e.g. 'MP4'
+}
+
+export interface ContentSpec {
+  tone: string;           // e.g. 'professional', 'casual', 'playful'
+  hookStrategy: string;   // how to start the post
+  structureHint: string;  // formatting guidance
+  ctaStyle: string;       // CTA approach
+  hashtagPlacement: string; // 'end', 'inline', 'none'
+  emojiPolicy: string;    // 'none', 'minimal', 'moderate'
+}
+
 export interface PlatformLimits {
   name: string;
   maxChars: number;
@@ -19,6 +45,12 @@ export interface PlatformLimits {
   previewBg: string;
   previewAccent: string;
   previewFont: string;
+  // Content generation specs
+  imageSpecs: ImageSpec[];       // recommended image dimensions (first = default)
+  videoSpec: VideoSpec | null;   // video specs (null = no video)
+  maxImages: number;             // max images per post
+  contentSpec: ContentSpec;      // AI generation guidance
+  aiPromptHint: string;          // concise instruction injected into AI prompt
 }
 
 export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
@@ -35,6 +67,21 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#ffffff',
     previewAccent: '#1877F2',
     previewFont: 'system-ui, -apple-system, Helvetica, Arial, sans-serif',
+    imageSpecs: [
+      { width: 1200, height: 630, aspectRatio: '1.91:1', label: 'landscape' },
+      { width: 1080, height: 1080, aspectRatio: '1:1', label: 'square' },
+    ],
+    videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 90, optimalDurationSec: 30, maxSizeMB: 4096, format: 'MP4' },
+    maxImages: 10,
+    contentSpec: {
+      tone: 'storytelling, emocionální, přátelský',
+      hookStrategy: 'Silný emocionální hook v prvních 477 znacích. Příběh nebo otázka.',
+      structureHint: 'Krátký a punchy (80 znaků ideál) NEBO delší storytelling. Krátké odstavce.',
+      ctaStyle: 'Otázka k diskuzi, sdílení, nebo odkaz',
+      hashtagPlacement: 'end',
+      emojiPolicy: 'minimal',
+    },
+    aiPromptHint: 'Facebook: Krátký storytelling (ideál 80 znaků, max 477 viditelných). Emocionální hook. Obrázek 1200×630px landscape.',
   },
   instagram: {
     name: 'Instagram',
@@ -49,6 +96,22 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#000000',
     previewAccent: '#E1306C',
     previewFont: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, sans-serif',
+    imageSpecs: [
+      { width: 1080, height: 1350, aspectRatio: '4:5', label: 'portrait' },
+      { width: 1080, height: 1080, aspectRatio: '1:1', label: 'square' },
+      { width: 1080, height: 566, aspectRatio: '16:9', label: 'landscape' },
+    ],
+    videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 90, optimalDurationSec: 20, maxSizeMB: 4096, format: 'MP4' },
+    maxImages: 10,
+    contentSpec: {
+      tone: 'vizuální, casual, authentic, inspirativní',
+      hookStrategy: 'Prvních 125 znaků = vše co uživatel vidí. Silný vizuální hook.',
+      structureHint: 'Krátký caption (150 znaků). Vizuál je hlavní obsah. Hashtagy na konci.',
+      ctaStyle: 'Otázka, "uložte si", "sdílejte"',
+      hashtagPlacement: 'end',
+      emojiPolicy: 'moderate',
+    },
+    aiPromptHint: 'Instagram: Vizuál je král. Caption max 150 znaků, hook v prvních 125. Obrázek 1080×1350px portrait (4:5). 15-20 hashtagů na konci.',
   },
   linkedin: {
     name: 'LinkedIn',
@@ -63,6 +126,22 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#ffffff',
     previewAccent: '#0A66C2',
     previewFont: '-apple-system, system-ui, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    imageSpecs: [
+      { width: 1200, height: 627, aspectRatio: '1.91:1', label: 'landscape' },
+      { width: 1080, height: 1080, aspectRatio: '1:1', label: 'square' },
+      { width: 1080, height: 1350, aspectRatio: '4:5', label: 'portrait' },
+    ],
+    videoSpec: { width: 1920, height: 1080, aspectRatio: '16:9', maxDurationSec: 600, optimalDurationSec: 60, maxSizeMB: 200, format: 'MP4' },
+    maxImages: 20,
+    contentSpec: {
+      tone: 'profesionální, data-driven, expertní',
+      hookStrategy: 'Prvních 210 znaků = hook. Začni faktem, číslem nebo provokativní otázkou.',
+      structureHint: 'Dlouhý formát (1200-1300 znaků). Krátké odstavce (1-2 věty). Prázdné řádky mezi nimi.',
+      ctaStyle: 'Otázka na konci k diskuzi',
+      hashtagPlacement: 'end',
+      emojiPolicy: 'none',
+    },
+    aiPromptHint: 'LinkedIn: Profesionální long-form (1200-1300 znaků). Hook v prvních 210 znacích. Krátké odstavce. 3-5 hashtagů na konci. Obrázek 1200×627px landscape.',
   },
   x: {
     name: 'X (Twitter)',
@@ -77,6 +156,21 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#000000',
     previewAccent: '#1DA1F2',
     previewFont: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, sans-serif',
+    imageSpecs: [
+      { width: 1200, height: 675, aspectRatio: '16:9', label: 'landscape' },
+      { width: 1200, height: 1200, aspectRatio: '1:1', label: 'square' },
+    ],
+    videoSpec: { width: 1280, height: 720, aspectRatio: '16:9', maxDurationSec: 140, optimalDurationSec: 30, maxSizeMB: 512, format: 'MP4' },
+    maxImages: 4,
+    contentSpec: {
+      tone: 'punchy, direct, conversational, witty',
+      hookStrategy: 'Celý post = hook. Max 280 znaků. Každé slovo musí mít váhu.',
+      structureHint: 'Jedna myšlenka. Žádné odstavce. Přímý a úderný.',
+      ctaStyle: 'Retweet bait, otázka, kontroverzní take',
+      hashtagPlacement: 'inline',
+      emojiPolicy: 'minimal',
+    },
+    aiPromptHint: 'X/Twitter: HARD LIMIT 280 znaků. Punchy, direct. Jedna myšlenka. Max 2 hashtagy inline. Obrázek 1200×675px.',
   },
   tiktok: {
     name: 'TikTok',
@@ -91,6 +185,20 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#000000',
     previewAccent: '#FE2C55',
     previewFont: 'Proxima Nova, -apple-system, sans-serif',
+    imageSpecs: [
+      { width: 1080, height: 1920, aspectRatio: '9:16', label: 'vertical' },
+    ],
+    videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 600, optimalDurationSec: 25, maxSizeMB: 2048, format: 'MP4' },
+    maxImages: 35,
+    contentSpec: {
+      tone: 'casual, playful, authentic, gen-z friendly',
+      hookStrategy: 'Hook v prvních 3 sekundách videa / prvních 150 znacích caption.',
+      structureHint: 'Krátký caption (100-150 znaků). Video je hlavní obsah. Trending audio.',
+      ctaStyle: 'Follow, like, komentuj, duet',
+      hashtagPlacement: 'end',
+      emojiPolicy: 'moderate',
+    },
+    aiPromptHint: 'TikTok: Caption max 150 znaků viditelných. Casual a playful tón. Video 1080×1920 vertical (9:16). 3-5 hashtagů.',
   },
   youtube: {
     name: 'YouTube',
@@ -105,6 +213,20 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#0f0f0f',
     previewAccent: '#FF0000',
     previewFont: 'Roboto, Arial, sans-serif',
+    imageSpecs: [
+      { width: 1280, height: 720, aspectRatio: '16:9', label: 'thumbnail' },
+    ],
+    videoSpec: { width: 1920, height: 1080, aspectRatio: '16:9', maxDurationSec: 43200, optimalDurationSec: 480, maxSizeMB: 262144, format: 'MP4' },
+    maxImages: 0,
+    contentSpec: {
+      tone: 'informativní, expertní, edukační',
+      hookStrategy: 'Prvních 200 znaků popisu = hook. Klíčová slova pro SEO.',
+      structureHint: 'Popis videa: 300 znaků. Timestamps. Klíčová slova.',
+      ctaStyle: 'Subscribe, like, komentuj, odkaz v popisu',
+      hashtagPlacement: 'end',
+      emojiPolicy: 'none',
+    },
+    aiPromptHint: 'YouTube: Popis videa (300 znaků). SEO klíčová slova. Thumbnail 1280×720px. Video 1920×1080.',
   },
   threads: {
     name: 'Threads',
@@ -119,6 +241,20 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#101010',
     previewAccent: '#ffffff',
     previewFont: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    imageSpecs: [
+      { width: 1080, height: 1080, aspectRatio: '1:1', label: 'square' },
+    ],
+    videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 300, optimalDurationSec: 30, maxSizeMB: 100, format: 'MP4' },
+    maxImages: 10,
+    contentSpec: {
+      tone: 'conversational, authentic, casual',
+      hookStrategy: 'Celý post viditelný (500 znaků). Conversational opener.',
+      structureHint: 'Krátký a přímý (300 znaků). Konverzační tón.',
+      ctaStyle: 'Otázka, diskuze, share',
+      hashtagPlacement: 'none',
+      emojiPolicy: 'minimal',
+    },
+    aiPromptHint: 'Threads: Max 500 znaků, ideál 300. Konverzační tón. Bez hashtagů. Obrázek 1080×1080.',
   },
   bluesky: {
     name: 'Bluesky',
@@ -133,6 +269,20 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#ffffff',
     previewAccent: '#0085FF',
     previewFont: '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+    imageSpecs: [
+      { width: 1200, height: 675, aspectRatio: '16:9', label: 'landscape' },
+    ],
+    videoSpec: { width: 1920, height: 1080, aspectRatio: '16:9', maxDurationSec: 60, optimalDurationSec: 30, maxSizeMB: 50, format: 'MP4' },
+    maxImages: 4,
+    contentSpec: {
+      tone: 'conversational, thoughtful, community-driven',
+      hookStrategy: 'Celý post viditelný (300 znaků). Přímý a thoughtful.',
+      structureHint: 'Krátký (250 znaků). Jedna myšlenka. Přátelský tón.',
+      ctaStyle: 'Diskuze, repost',
+      hashtagPlacement: 'none',
+      emojiPolicy: 'minimal',
+    },
+    aiPromptHint: 'Bluesky: Max 300 znaků, ideál 250. Thoughtful a přátelský. Obrázek max ~1MB (auto-compressed).',
   },
   pinterest: {
     name: 'Pinterest',
@@ -147,6 +297,21 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#ffffff',
     previewAccent: '#E60023',
     previewFont: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    imageSpecs: [
+      { width: 1000, height: 1500, aspectRatio: '2:3', label: 'pin' },
+      { width: 1000, height: 1000, aspectRatio: '1:1', label: 'square' },
+    ],
+    videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 900, optimalDurationSec: 30, maxSizeMB: 2048, format: 'MP4' },
+    maxImages: 1,
+    contentSpec: {
+      tone: 'inspirativní, vizuální, SEO-friendly',
+      hookStrategy: 'Prvních 100 znaků viditelných. Popisný a SEO-optimalizovaný.',
+      structureHint: 'Popis pinu (200 znaků). Klíčová slova pro vyhledávání.',
+      ctaStyle: 'Uložit, kliknout na odkaz',
+      hashtagPlacement: 'end',
+      emojiPolicy: 'none',
+    },
+    aiPromptHint: 'Pinterest: Popis 200 znaků, SEO klíčová slova. Obrázek 1000×1500px (2:3 portrait). Inspirativní tón.',
   },
   reddit: {
     name: 'Reddit',
@@ -161,6 +326,20 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#1a1a1b',
     previewAccent: '#FF4500',
     previewFont: '-apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, sans-serif',
+    imageSpecs: [
+      { width: 1200, height: 1200, aspectRatio: '1:1', label: 'square' },
+    ],
+    videoSpec: { width: 1280, height: 720, aspectRatio: '16:9', maxDurationSec: 900, optimalDurationSec: 60, maxSizeMB: 1024, format: 'MP4' },
+    maxImages: 1,
+    contentSpec: {
+      tone: 'informativní, community-driven, autentický',
+      hookStrategy: 'Silný title (300 znaků max). Prvních 300 znaků body = hook.',
+      structureHint: 'Delší formát (500 znaků). Informativní. Žádné hashtagy.',
+      ctaStyle: 'Diskuze, AMA, feedback',
+      hashtagPlacement: 'none',
+      emojiPolicy: 'none',
+    },
+    aiPromptHint: 'Reddit: Title + body (500 znaků). Informativní, autentický. ŽÁDNÉ hashtagy. ŽÁDNÉ emoji.',
   },
   'google-business': {
     name: 'Google Business',
@@ -175,6 +354,20 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#ffffff',
     previewAccent: '#4285F4',
     previewFont: 'Google Sans, Roboto, Arial, sans-serif',
+    imageSpecs: [
+      { width: 1200, height: 900, aspectRatio: '4:3', label: 'landscape' },
+    ],
+    videoSpec: null,
+    maxImages: 1,
+    contentSpec: {
+      tone: 'profesionální, lokální, informativní',
+      hookStrategy: 'Prvních 200 znaků = hook. Lokální relevance.',
+      structureHint: 'Krátký (300 znaků). Informace o firmě, akce, novinky.',
+      ctaStyle: 'Navštivte nás, zavolejte, objednejte',
+      hashtagPlacement: 'none',
+      emojiPolicy: 'none',
+    },
+    aiPromptHint: 'Google Business: Max 300 znaků. Lokální a profesionální. Obrázek 1200×900px (4:3). ŽÁDNÉ hashtagy.',
   },
   telegram: {
     name: 'Telegram',
@@ -189,6 +382,20 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#17212b',
     previewAccent: '#5288c1',
     previewFont: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    imageSpecs: [
+      { width: 1280, height: 720, aspectRatio: '16:9', label: 'landscape' },
+    ],
+    videoSpec: { width: 1920, height: 1080, aspectRatio: '16:9', maxDurationSec: 3600, optimalDurationSec: 60, maxSizeMB: 2048, format: 'MP4' },
+    maxImages: 10,
+    contentSpec: {
+      tone: 'informativní, přímý, newsletter-style',
+      hookStrategy: 'Celý text viditelný. Silný opener.',
+      structureHint: 'Delší formát (500 znaků). Strukturovaný. Markdown formatting.',
+      ctaStyle: 'Odkaz, forward, diskuze',
+      hashtagPlacement: 'end',
+      emojiPolicy: 'minimal',
+    },
+    aiPromptHint: 'Telegram: Newsletter styl (500 znaků). Strukturovaný text. Markdown OK. Obrázek 1280×720.',
   },
   snapchat: {
     name: 'Snapchat',
@@ -203,6 +410,20 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewBg: '#FFFC00',
     previewAccent: '#000000',
     previewFont: '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+    imageSpecs: [
+      { width: 1080, height: 1920, aspectRatio: '9:16', label: 'vertical' },
+    ],
+    videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 60, optimalDurationSec: 10, maxSizeMB: 1024, format: 'MP4' },
+    maxImages: 1,
+    contentSpec: {
+      tone: 'casual, fun, ephemeral',
+      hookStrategy: 'Vizuál je vše. Text jen jako overlay (100 znaků).',
+      structureHint: 'Ultra krátký (100 znaků). Vizuál-first.',
+      ctaStyle: 'Swipe up, screenshot',
+      hashtagPlacement: 'none',
+      emojiPolicy: 'moderate',
+    },
+    aiPromptHint: 'Snapchat: Max 100 znaků. Vizuál je hlavní. 1080×1920 vertical. VYŽADUJE media.',
   },
 };
 
@@ -315,4 +536,83 @@ export function validatePostMultiPlatform(text: string, platforms: string[]): Re
  */
 export function isPostValidForAllPlatforms(text: string, platforms: string[]): boolean {
   return platforms.every(p => validatePost(text, p).valid);
+}
+
+// ============================================
+// Multi-Platform Content Generation Helpers
+// ============================================
+
+/**
+ * Build detailed platform-specific prompt block for AI content generation.
+ * Injected into the prompt so Hugo knows exactly how to write for each platform.
+ */
+export function buildPlatformPromptBlock(platform: string): string {
+  const limits = PLATFORM_LIMITS[platform];
+  if (!limits) return `Platforma: ${platform} (neznámá – piš obecný post)`;
+
+  const spec = limits.contentSpec;
+  const img = limits.imageSpecs[0];
+  const lines: string[] = [];
+
+  lines.push(`\n--- PRAVIDLA PRO ${limits.name.toUpperCase()} ---`);
+  lines.push(limits.aiPromptHint);
+  lines.push(`\nSPECIFIKACE:`);
+  lines.push(`- Délka textu: optimální ${limits.optimalChars} znaků, max ${limits.maxChars} znaků`);
+  lines.push(`- Viditelných znaků před oříznutím: ${limits.visibleChars}`);
+  lines.push(`- Hashtagy: max ${limits.maxHashtags}, umístění: ${spec.hashtagPlacement}`);
+  lines.push(`- Emoji: ${spec.emojiPolicy}`);
+  lines.push(`\nTÓN A STYL:`);
+  lines.push(`- Tón: ${spec.tone}`);
+  lines.push(`- Hook strategie: ${spec.hookStrategy}`);
+  lines.push(`- Struktura: ${spec.structureHint}`);
+  lines.push(`- CTA styl: ${spec.ctaStyle}`);
+
+  if (img) {
+    lines.push(`\nOBRÁZEK:`);
+    lines.push(`- Rozměry: ${img.width}×${img.height}px (${img.aspectRatio}, ${img.label})`);
+    lines.push(`- V image_prompt uveď aspect ratio: ${img.aspectRatio}`);
+  }
+
+  if (limits.videoSpec) {
+    lines.push(`\nVIDEO (pokud relevantní):`);
+    lines.push(`- Rozměry: ${limits.videoSpec.width}×${limits.videoSpec.height}px (${limits.videoSpec.aspectRatio})`);
+    lines.push(`- Optimální délka: ${limits.videoSpec.optimalDurationSec}s`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Get the default (first/recommended) image spec for a platform.
+ */
+export function getDefaultImageSpec(platform: string): ImageSpec | null {
+  const limits = PLATFORM_LIMITS[platform];
+  if (!limits || limits.imageSpecs.length === 0) return null;
+  return limits.imageSpecs[0];
+}
+
+/**
+ * Build a compact multi-platform generation instruction.
+ * Used when Hugo generates variants for multiple platforms in one AI call.
+ */
+export function buildMultiPlatformPromptBlock(platforms: string[]): string {
+  const lines: string[] = [];
+  lines.push('\n=== MULTI-PLATFORM GENEROVÁNÍ ===');
+  lines.push('Vytvoř SAMOSTATNOU variantu příspěvku pro KAŽDOU platformu.');
+  lines.push('Každá varianta musí být optimalizovaná pro danou síť – jiná délka, jiný tón, jiný formát.');
+  lines.push('');
+
+  for (const platform of platforms) {
+    const limits = PLATFORM_LIMITS[platform];
+    if (!limits) continue;
+    const img = limits.imageSpecs[0];
+    const imgStr = img ? `${img.width}×${img.height}px ${img.aspectRatio}` : 'žádný';
+    lines.push(`[${limits.name}] ${limits.optimalChars} znaků | tón: ${limits.contentSpec.tone} | obrázek: ${imgStr} | hashtagy: ${limits.maxHashtags > 0 ? `max ${limits.maxHashtags} (${limits.contentSpec.hashtagPlacement})` : 'žádné'}`);
+  }
+
+  lines.push('');
+  lines.push('VÝSTUP: JSON objekt s klíčem "variants" – pole objektů, každý s:');
+  lines.push('  { "platform": "...", "text": "...", "image_prompt": "...", "image_spec": { "width": N, "height": N, "aspectRatio": "..." }, "scores": {...} }');
+
+  return lines.join('\n');
 }

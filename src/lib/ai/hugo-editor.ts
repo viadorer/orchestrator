@@ -12,6 +12,7 @@ import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
 import { getProjectPrompts } from './prompt-builder';
+import { PLATFORM_LIMITS } from '@/lib/platforms';
 
 // Shared context interface for Hugo-Editor
 export interface EditorContext {
@@ -46,6 +47,19 @@ Jsi PŘÍSNÝ. Jsi NESMLOUVAVÝ. Kvalita je vše.`);
 
   parts.push(`\nPLATFORMA: ${platform}`);
   parts.push(`TÓN: ${mood?.tone || 'professional'} | ENERGIE: ${mood?.energy || 'medium'} | STYL: ${mood?.style || 'informative'}`);
+
+  // Platform-specific limits for the editor to validate against
+  const platformLimits = PLATFORM_LIMITS[platform];
+  if (platformLimits) {
+    parts.push(`\nLIMITY PLATFORMY ${platformLimits.name.toUpperCase()}:`);
+    parts.push(`- Max délka: ${platformLimits.maxChars} znaků, optimální: ${platformLimits.optimalChars} znaků`);
+    parts.push(`- Viditelných před oříznutím: ${platformLimits.visibleChars} znaků`);
+    parts.push(`- Hashtagy: max ${platformLimits.maxHashtags}, umístění: ${platformLimits.contentSpec.hashtagPlacement}`);
+    parts.push(`- Emoji: ${platformLimits.contentSpec.emojiPolicy}`);
+    parts.push(`- Tón: ${platformLimits.contentSpec.tone}`);
+    parts.push(`- Hook: ${platformLimits.contentSpec.hookStrategy}`);
+    parts.push(`KONTROLUJ: Je text v rámci limitu ${platformLimits.optimalChars} znaků? Je hook v prvních ${platformLimits.visibleChars} znacích?`);
+  }
 
   parts.push(`\n---\nPŮVODNÍ POST K REVIEW:\n"""\n${text}\n"""`);
 

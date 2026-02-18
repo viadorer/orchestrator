@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '@/lib/supabase/client';
+import { buildPlatformPromptBlock, PLATFORM_LIMITS, getDefaultImageSpec } from '@/lib/platforms';
 
 export interface PromptContext {
   projectId: string;
@@ -215,6 +216,9 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
   parts.push(`\n---\nÚKOL: Vytvoř příspěvek pro ${ctx.platform}.`);
   parts.push(`Typ: ${ctx.contentType}`);
 
+  // Platform-specific content generation specs
+  parts.push(buildPlatformPromptBlock(ctx.platform));
+
   // News Context
   if (ctx.newsContext) {
     parts.push(`\n---\nAKTUÁLNÍ KONTEXT:\n${ctx.newsContext}`);
@@ -250,11 +254,30 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
     parts.push(`\n---\n${qualityCheck}`);
   }
 
-  // Output format
+  // Output format – include image_spec from platform
+  const defaultImg = getDefaultImageSpec(ctx.platform);
+  const imgSpecExample = defaultImg
+    ? `{ "width": ${defaultImg.width}, "height": ${defaultImg.height}, "aspectRatio": "${defaultImg.aspectRatio}" }`
+    : '{ "width": 1200, "height": 630, "aspectRatio": "1.91:1" }';
+
+  const platformLimits = PLATFORM_LIMITS[ctx.platform];
+  const emojiRule = platformLimits?.contentSpec.emojiPolicy === 'none'
+    ? '- ŽÁDNÉ emotikony/emoji'
+    : platformLimits?.contentSpec.emojiPolicy === 'minimal'
+      ? '- Emoji: maximálně 1-2, pouze pokud přidávají hodnotu'
+      : '- Emoji: povoleny střídmě, max 3-4';
+
+  const hashtagRule = platformLimits?.contentSpec.hashtagPlacement === 'none'
+    ? '- ŽÁDNÉ hashtagy (#) v textu'
+    : platformLimits?.contentSpec.hashtagPlacement === 'inline'
+      ? `- Hashtagy: max ${platformLimits.maxHashtags} INLINE v textu (ne na konci)`
+      : `- Hashtagy: max ${platformLimits?.maxHashtags || 5} na KONCI textu (ne v textu)`;
+
   parts.push(`\n---\nVÝSTUP: Vrať POUZE JSON objekt (žádný další text, žádný markdown, žádný \`\`\`json wrapper):
 {
-  "text": "Čistý text příspěvku BEZ hashtagů, BEZ emotikonů na konci, BEZ odkazů na web. Pouze samotný text postu.",
-  "image_prompt": "Short English description of the image to generate. Must be in ENGLISH. Example: Professional woman signing mortgage documents in modern office, warm lighting",
+  "text": "Čistý text příspěvku optimalizovaný pro ${ctx.platform}. Délka: ${platformLimits?.optimalChars || 500} znaků.",
+  "image_prompt": "Short English description of the image to generate. Must be in ENGLISH. Include aspect ratio ${defaultImg?.aspectRatio || '1.91:1'}. Example: Professional woman signing mortgage documents in modern office, warm lighting, ${defaultImg?.aspectRatio || '1.91:1'} aspect ratio",
+  "image_spec": ${imgSpecExample},
   "alt_text": "Alt text pro obrázek v češtině (volitelné)",
   "scores": {
     "creativity": 1-10,
@@ -266,11 +289,13 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
 }
 
 DŮLEŽITÉ PRAVIDLO PRO TEXT:
-- ŽÁDNÉ hashtagy (#) v textu
-- ŽÁDNÉ emotikony/emoji
+${hashtagRule}
+${emojiRule}
 - ŽÁDNÉ URL odkazy
 - Text musí fungovat sám o sobě jako čistý příspěvek
-- image_prompt MUSÍ být v angličtině (pro AI generátor obrázků)`);
+- Text MUSÍ mít délku kolem ${platformLimits?.optimalChars || 500} znaků (max ${platformLimits?.maxChars || 2200})
+- image_prompt MUSÍ být v angličtině (pro AI generátor obrázků)
+- image_prompt MUSÍ obsahovat aspect ratio ${defaultImg?.aspectRatio || '1.91:1'}`);
 
   // Strip markdown code blocks from response (Gemini sometimes wraps in ```json)
 

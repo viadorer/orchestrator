@@ -273,10 +273,19 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
       ? `- Hashtagy: max ${platformLimits.maxHashtags} INLINE v textu (ne na konci)`
       : `- Hashtagy: max ${platformLimits?.maxHashtags || 5} na KONCI textu (ne v textu)`;
 
+  // Load per-project visual style templates (if any)
+  const visualStylePrompts = await getProjectPrompts(ctx.projectId, 'visual_style');
+  if (visualStylePrompts.length > 0) {
+    parts.push('\n---\nVIZUÁLNÍ STYL ZNAČKY (dodržuj při tvorbě image_prompt):');
+    for (const vsp of visualStylePrompts) {
+      parts.push(substituteVariables(vsp.content, ctx));
+    }
+  }
+
   parts.push(`\n---\nVÝSTUP: Vrať POUZE JSON objekt (žádný další text, žádný markdown, žádný \`\`\`json wrapper):
 {
   "text": "Čistý text příspěvku optimalizovaný pro ${ctx.platform}. Délka: ${platformLimits?.optimalChars || 500} znaků.",
-  "image_prompt": "Short English description of the image to generate. Must be in ENGLISH. Include aspect ratio ${defaultImg?.aspectRatio || '1.91:1'}. Example: Professional woman signing mortgage documents in modern office, warm lighting, ${defaultImg?.aspectRatio || '1.91:1'} aspect ratio",
+  "image_prompt": "DETAILED English scene description – see rules below",
   "image_spec": ${imgSpecExample},
   "alt_text": "Alt text pro obrázek v češtině (volitelné)",
   "scores": {
@@ -294,8 +303,20 @@ ${emojiRule}
 - ŽÁDNÉ URL odkazy
 - Text musí fungovat sám o sobě jako čistý příspěvek
 - Text MUSÍ mít délku kolem ${platformLimits?.optimalChars || 500} znaků (max ${platformLimits?.maxChars || 2200})
-- image_prompt MUSÍ být v angličtině (pro AI generátor obrázků)
-- image_prompt MUSÍ obsahovat aspect ratio ${defaultImg?.aspectRatio || '1.91:1'}`);
+
+PRAVIDLA PRO image_prompt (KRITICKÉ – čti pozorně):
+- MUSÍ být v angličtině
+- Piš jako FILMOVÝ REŽISÉR popisující záběr pro kameramana:
+  ✅ "Close-up of a young Czech couple reviewing mortgage papers at a kitchen table, morning sunlight streaming through window, coffee cups, shallow depth of field, warm tones"
+  ✅ "Aerial view of Prague residential neighborhood at golden hour, mix of old and new buildings, warm autumn light, slight haze"
+  ✅ "Weathered hands of elderly man holding a savings book, soft window light, bokeh background of family photos on shelf"
+  ❌ "Professional photo of happy family" (příliš generické)
+  ❌ "Business meeting in office" (stock photo klišé)
+  ❌ "Financial planning concept" (abstraktní, ne vizuální)
+- Popisuj KONKRÉTNÍ scénu: KDO (věk, vzhled, co dělá), KDE (místo, prostředí, detaily), JAK (osvětlení, nálada, úhel záběru)
+- Zaměř se na EMOCI a AUTENTICITU – reální lidé v reálných situacích
+- Přidej technické detaily: typ záběru (close-up, wide, aerial), hloubka ostrosti, osvětlení
+- Aspect ratio: ${defaultImg?.aspectRatio || '1.91:1'}`);
 
   // Strip markdown code blocks from response (Gemini sometimes wraps in ```json)
 

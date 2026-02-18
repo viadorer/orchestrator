@@ -78,6 +78,20 @@ async function decideVisualType(ctx: VisualContext): Promise<{
   image_prompt?: string;
   template_key?: string;
 }> {
+  // Build brand context for visual decision
+  const vi = ctx.visualIdentity as Record<string, string>;
+  const brandContext: string[] = [];
+  if (vi?.photography_style) brandContext.push(`Photography style: ${vi.photography_style}`);
+  if (vi?.photography_mood) brandContext.push(`Mood: ${vi.photography_mood}`);
+  if (vi?.photography_subjects) brandContext.push(`Typical subjects: ${vi.photography_subjects}`);
+  if (vi?.photography_lighting) brandContext.push(`Lighting: ${vi.photography_lighting}`);
+  if (vi?.photography_color_grade) brandContext.push(`Color grade: ${vi.photography_color_grade}`);
+  if (vi?.photography_avoid) brandContext.push(`AVOID: ${vi.photography_avoid}`);
+  if (vi?.brand_visual_keywords) brandContext.push(`Brand keywords: ${vi.brand_visual_keywords}`);
+  const brandBlock = brandContext.length > 0
+    ? `\nVIZUÁLNÍ IDENTITA ZNAČKY:\n${brandContext.join('\n')}`
+    : '';
+
   const prompt = `Analyzuj tento post a rozhodni, jaký vizuál potřebuje.
 
 POST:
@@ -87,6 +101,7 @@ ${ctx.text}
 
 PROJEKT: ${ctx.projectName}
 PLATFORMA: ${ctx.platform}
+${brandBlock}
 
 PRAVIDLA:
 - LinkedIn: Preferuj "card" (textová karta s velkým číslem) nebo "photo".
@@ -99,13 +114,22 @@ TYPY VIZUÁLŮ:
 2. "photo" – pokud post potřebuje realistickou fotku (lifestyle, architektura, lidi).
 3. "none" – pokud text funguje sám o sobě.
 
+PRAVIDLA PRO image_prompt (KRITICKÉ):
+- Piš v ANGLIČTINĚ, jako pokyn pro fotografa na place
+- Popisuj KONKRÉTNÍ scénu: kdo, kde, co dělá, jaké prostředí
+- Uveď KONKRÉTNÍ detaily: materiály, barvy, textury, počasí, denní dobu
+- Piš jako filmový režisér: "Close-up of weathered hands signing a document on oak desk, morning light through window, shallow depth of field"
+- NIKDY nepiš genericky: "Professional photo of business" nebo "Happy people in office"
+- Zaměř se na EMOCI a PŘÍBĚH, ne na popis produktu
+- Pokud post mluví o konkrétním tématu (hypotéka, investice, rodina), popisuj REÁLNOU situaci
+
 Vrať POUZE JSON:
 {
   "visual_type": "card|photo|none",
   "card_hook": "1,37" | null,
   "card_body": "dětí na ženu v ČR" | null,
   "card_subtitle": "Pro udržení populace je potřeba 2,1" | null,
-  "image_prompt": "popis fotky v angličtině" | null
+  "image_prompt": "Detailed English scene description for photographer – specific, cinematic, emotional" | null
 }`;
 
   const { text: rawResponse } = await generateText({

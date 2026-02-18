@@ -26,6 +26,15 @@ export interface VisualIdentity {
   font: string;
   logo_url: string | null;
   style: string;
+  // Photography & AI image generation settings
+  photography_style?: string;       // e.g. 'documentary', 'editorial', 'lifestyle', 'minimal', 'corporate'
+  photography_mood?: string;        // e.g. 'warm and authentic', 'cool and professional', 'energetic'
+  photography_subjects?: string;    // e.g. 'real Czech people, families, urban settings'
+  photography_avoid?: string;       // negative prompt: e.g. 'no stock photo poses, no fake smiles, no clipart'
+  photography_lighting?: string;    // e.g. 'natural daylight', 'golden hour', 'studio soft light'
+  photography_color_grade?: string; // e.g. 'warm tones, slight film grain', 'desaturated, muted palette'
+  photography_reference?: string;   // e.g. 'Similar to Apple product photography' or 'Czech street photography'
+  brand_visual_keywords?: string;   // e.g. 'trust, stability, modern Czech family, home ownership'
 }
 
 const DEFAULT_IDENTITY: VisualIdentity = {

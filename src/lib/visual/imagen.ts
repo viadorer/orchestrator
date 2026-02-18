@@ -287,37 +287,111 @@ async function compositeWithLogo(imageBuffer: Buffer, logoUrl: string): Promise<
 }
 
 /**
- * Build a clean English image prompt from Hugo's decision
- * Strips any marketing/MLM language, ensures professional quality
+ * Build a rich, brand-aware image prompt from Hugo's decision.
+ * 
+ * Uses the full visual identity (photography style, mood, subjects, lighting,
+ * color grading, negative prompts) to produce images that look like they belong
+ * to the brand — not generic AI stock photos.
  */
 export function buildCleanImagePrompt(options: {
   rawPrompt: string;
   projectName: string;
   platform: string;
-  visualIdentity?: Partial<{ primary_color: string; style: string }>;
+  visualIdentity?: Partial<{
+    primary_color: string;
+    style: string;
+    photography_style: string;
+    photography_mood: string;
+    photography_subjects: string;
+    photography_avoid: string;
+    photography_lighting: string;
+    photography_color_grade: string;
+    photography_reference: string;
+    brand_visual_keywords: string;
+  }>;
 }): string {
-  const { rawPrompt, projectName, platform, visualIdentity } = options;
+  const { rawPrompt, projectName, platform, visualIdentity: vi } = options;
 
-  // Base style based on platform
-  const platformStyle: Record<string, string> = {
-    instagram: 'Square format, social media optimized, high contrast, eye-catching.',
-    linkedin: 'Professional, clean, corporate-friendly, subtle colors.',
-    facebook: 'Engaging, warm, community-oriented, bright colors.',
-    x: 'Bold, minimal, high impact, dark background preferred.',
-  };
-
-  const style = platformStyle[platform] || platformStyle.linkedin;
-  const colorHint = visualIdentity?.primary_color
-    ? `Color palette hint: use ${visualIdentity.primary_color} as accent.`
-    : '';
-
-  // Clean prompt: remove any Czech text, marketing buzzwords
+  // 1. Clean the raw prompt from AI
   const cleanedPrompt = rawPrompt
-    .replace(/[!]{2,}/g, '.')  // Multiple exclamation marks
-    .replace(/\b(amazing|incredible|revolutionary|life-changing|guaranteed|passive income|financial freedom)\b/gi, '')
+    .replace(/[!]{2,}/g, '.')
+    .replace(/\b(amazing|incredible|revolutionary|life-changing|guaranteed|passive income|financial freedom|best ever|number one|world class)\b/gi, '')
+    .replace(/\b(stock photo|generic|placeholder|sample|example image)\b/gi, '')
     .trim();
 
-  return `Professional photograph for ${projectName} social media post. ${cleanedPrompt} ${style} ${colorHint} No text overlays. No watermarks. Photorealistic, high quality, 4K.`.trim();
+  // 2. Build prompt layers
+  const parts: string[] = [];
+
+  // Core scene description from AI
+  parts.push(cleanedPrompt);
+
+  // Photography style (documentary > editorial > lifestyle > corporate)
+  if (vi?.photography_style) {
+    parts.push(`Photography style: ${vi.photography_style}.`);
+  } else {
+    parts.push('Candid documentary-style photography, not posed.');
+  }
+
+  // Mood & atmosphere
+  if (vi?.photography_mood) {
+    parts.push(`Mood: ${vi.photography_mood}.`);
+  }
+
+  // Lighting
+  if (vi?.photography_lighting) {
+    parts.push(`Lighting: ${vi.photography_lighting}.`);
+  } else {
+    parts.push('Natural ambient lighting.');
+  }
+
+  // Color grading
+  if (vi?.photography_color_grade) {
+    parts.push(`Color grade: ${vi.photography_color_grade}.`);
+  } else if (vi?.primary_color) {
+    parts.push(`Subtle color accent: ${vi.primary_color}.`);
+  }
+
+  // Subject guidance
+  if (vi?.photography_subjects) {
+    parts.push(`Subjects: ${vi.photography_subjects}.`);
+  }
+
+  // Brand keywords for visual coherence
+  if (vi?.brand_visual_keywords) {
+    parts.push(`Visual themes: ${vi.brand_visual_keywords}.`);
+  }
+
+  // Reference style
+  if (vi?.photography_reference) {
+    parts.push(`Reference: ${vi.photography_reference}.`);
+  }
+
+  // Platform-specific composition hints (minimal, not overriding brand)
+  const platformHint: Record<string, string> = {
+    instagram: 'Composed for square crop, strong visual center.',
+    linkedin: 'Clean composition, professional context.',
+    facebook: 'Warm, inviting composition, community feel.',
+    x: 'High contrast, bold framing, minimal background.',
+    tiktok: 'Vertical framing, dynamic energy.',
+    pinterest: 'Vertical composition, aspirational aesthetic.',
+  };
+  if (platformHint[platform]) {
+    parts.push(platformHint[platform]);
+  }
+
+  // Anti-AI / anti-stock quality directives
+  const avoidParts: string[] = [];
+  if (vi?.photography_avoid) {
+    avoidParts.push(vi.photography_avoid);
+  }
+  avoidParts.push('No text overlays, no watermarks, no logos in the image');
+  avoidParts.push('Avoid: overly saturated colors, plastic skin, symmetrical stock poses, fake smiles, AI artifacts, extra fingers');
+  parts.push(avoidParts.join('. ') + '.');
+
+  // Technical quality
+  parts.push('Shot on high-end mirrorless camera, shallow depth of field where appropriate, photorealistic, 4K resolution.');
+
+  return parts.join(' ').replace(/\s{2,}/g, ' ').trim();
 }
 
 /**

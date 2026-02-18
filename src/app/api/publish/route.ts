@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import { publishPost, buildPlatformsArray, type LateMediaItem } from '@/lib/getlate';
 import { validatePostMultiPlatform } from '@/lib/platforms';
+import { ensureImageAspectRatio } from '@/lib/visual/image-resize';
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
@@ -74,6 +75,21 @@ export async function POST(request: Request) {
       }
       if (post.image_url) {
         mediaItems.push({ type: 'image', url: post.image_url });
+      }
+
+      // Enforce aspect ratio for platform compliance (Instagram: 0.75-1.91)
+      for (let i = 0; i < mediaItems.length; i++) {
+        if (mediaItems[i].type === 'image') {
+          try {
+            mediaItems[i].url = await ensureImageAspectRatio(
+              mediaItems[i].url,
+              targetPlatforms,
+              post.project_id,
+            );
+          } catch {
+            // Continue with original URL if resize fails
+          }
+        }
       }
 
       const lateResult = await publishPost({

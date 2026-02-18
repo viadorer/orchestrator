@@ -87,6 +87,15 @@ export async function generateAndStoreImage(options: {
       }
     }
 
+    // 2b. Enforce platform aspect ratio (crop if needed)
+    // Imagen may return slightly different ratios than requested (e.g. 3:4 instead of 4:5)
+    // Instagram requires 0.75:1 (4:5) to 1.91:1 — we must crop to fit
+    try {
+      finalImageBuffer = await enforceAspectRatio(finalImageBuffer, platform);
+    } catch {
+      // Crop failed, continue with original
+    }
+
     // 3. Upload to Supabase Storage
     const timestamp = Date.now();
     const fileName = `generated_${platform}_${timestamp}.png`;
@@ -261,6 +270,77 @@ async function callImagenAPI(prompt: string, aspectRatio: string): Promise<strin
     console.error('[imagen] No bytesBase64Encoded in prediction:', predictions[0]);
   }
   return imageBytes;
+}
+
+/**
+ * Enforce platform-specific aspect ratio constraints.
+ * Crops the image (center crop) if it exceeds the platform's allowed range.
+ * 
+ * Instagram: min 4:5 (0.80), max 1.91:1 — we target 4:5 for portrait
+ * Facebook: 1.91:1 landscape or 1:1 square
+ * LinkedIn: 1.91:1 landscape
+ * Others: no strict enforcement
+ */
+async function enforceAspectRatio(imageBuffer: Buffer, platform: string): Promise<Buffer> {
+  // Platform aspect ratio constraints (width/height)
+  const ASPECT_CONSTRAINTS: Record<string, { min: number; max: number; target: number }> = {
+    instagram: { min: 0.75, max: 1.91, target: 0.80 },  // min 3:4 (0.75), target 4:5 (0.80)
+    facebook:  { min: 0.50, max: 2.00, target: 1.91 },   // very permissive
+    linkedin:  { min: 0.50, max: 2.00, target: 1.91 },
+    x:         { min: 0.50, max: 3.00, target: 1.78 },
+    tiktok:    { min: 0.50, max: 1.00, target: 0.5625 }, // 9:16
+    pinterest: { min: 0.50, max: 1.00, target: 0.667 },  // 2:3
+  };
+
+  const constraints = ASPECT_CONSTRAINTS[platform];
+  if (!constraints) return imageBuffer; // no constraints for this platform
+
+  try {
+    const sharp = (await import('sharp')).default;
+    const metadata = await sharp(imageBuffer).metadata();
+    const w = metadata.width;
+    const h = metadata.height;
+    if (!w || !h) return imageBuffer;
+
+    const currentRatio = w / h;
+
+    // Already within allowed range
+    if (currentRatio >= constraints.min && currentRatio <= constraints.max) {
+      return imageBuffer;
+    }
+
+    // Need to crop — use center crop to target ratio
+    let cropW = w;
+    let cropH = h;
+
+    if (currentRatio < constraints.min) {
+      // Too tall (portrait) — crop height
+      cropH = Math.round(w / constraints.target);
+      cropW = w;
+    } else {
+      // Too wide (landscape) — crop width
+      cropW = Math.round(h * constraints.target);
+      cropH = h;
+    }
+
+    // Ensure we don't exceed original dimensions
+    cropW = Math.min(cropW, w);
+    cropH = Math.min(cropH, h);
+
+    // Center crop
+    const left = Math.round((w - cropW) / 2);
+    const top = Math.round((h - cropH) / 2);
+
+    console.log(`[imagen] Aspect ratio fix for ${platform}: ${w}×${h} (${currentRatio.toFixed(2)}) → ${cropW}×${cropH} (${(cropW/cropH).toFixed(2)}), crop from (${left},${top})`);
+
+    return await sharp(imageBuffer)
+      .extract({ left, top, width: cropW, height: cropH })
+      .png()
+      .toBuffer();
+  } catch {
+    // sharp not available or crop failed
+    return imageBuffer;
+  }
 }
 
 /**

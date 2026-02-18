@@ -2015,6 +2015,22 @@ export async function publishApprovedPosts(): Promise<{
       if (post.card_url && post.card_url.startsWith('http')) mediaItems.push({ type: 'image', url: post.card_url });
       if (post.image_url) mediaItems.push({ type: 'image', url: post.image_url });
 
+      // Enforce aspect ratio for platform compliance (Instagram: 0.75-1.91)
+      const { ensureImageAspectRatio } = await import('@/lib/visual/image-resize');
+      for (let i = 0; i < mediaItems.length; i++) {
+        if (mediaItems[i].type === 'image') {
+          try {
+            mediaItems[i].url = await ensureImageAspectRatio(
+              mediaItems[i].url,
+              targetPlatforms,
+              post.project_id,
+            );
+          } catch {
+            // Continue with original URL if resize fails
+          }
+        }
+      }
+
       const lateResult = await publishPost({
         content: post.text_content,
         platforms: platformEntries,

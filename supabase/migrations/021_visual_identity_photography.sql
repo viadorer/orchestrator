@@ -30,13 +30,24 @@ Visual identity JSONB. Keys:
   brand_visual_keywords   TEXT  e.g. "trust, stability, modern Czech family, home ownership"
 ';
 
--- Add project_prompt_templates category for visual style
--- (no schema change needed, just a new category value)
-COMMENT ON TABLE project_prompt_templates IS '
-Per-project prompt templates. Categories:
-  identity, communication, guardrail, business_rules,
-  content_strategy, topic_boundaries, cta_rules,
-  quality_criteria, personalization, examples,
-  seasonal, competitor, legal, platform_rules,
-  visual_style (NEW - photography/image generation instructions)
-';
+-- Add visual_style to the category check constraint
+ALTER TABLE project_prompt_templates DROP CONSTRAINT IF EXISTS project_prompt_templates_category_check;
+ALTER TABLE project_prompt_templates ADD CONSTRAINT project_prompt_templates_category_check
+  CHECK (category IN (
+    'identity',
+    'communication',
+    'guardrail',
+    'business_rules',
+    'content_strategy',
+    'platform_rules',
+    'cta_rules',
+    'topic_boundaries',
+    'personalization',
+    'quality_criteria',
+    'examples',
+    'seasonal',
+    'competitor',
+    'legal',
+    'editor_rules',
+    'visual_style'
+  ));

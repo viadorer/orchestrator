@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  Plus, Search, ExternalLink, Pencil, BookOpen, Trash2, X, Save, Upload,
+  Plus, Search, ExternalLink, Pencil, BookOpen, Trash2, X, Save, Upload, Check, Sparkles,
   ArrowLeft, Share2, Palette, BarChart3, ShieldAlert, Type, Sliders, FileText, Image, Rss, MessageCircle, Bot,
 } from 'lucide-react';
 import { ProjectPrompts } from './ProjectPrompts';
@@ -852,6 +852,8 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [filterCat, setFilterCat] = useState<string>('all');
+  const [showAiSuggestions, setShowAiSuggestions] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<KBEntry[]>([]);
 
   const handleAdd = async () => {
     setSaving(true);
@@ -866,14 +868,51 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
     onReload();
   };
 
+  const handleDelete = async (kbId: string) => {
+    if (!confirm('Smazat tento KB záznam?')) return;
+    await fetch(`/api/projects/${projectId}/kb?kbId=${kbId}`, { method: 'DELETE' });
+    onReload();
+  };
+
+  const handleActivate = async (kbId: string) => {
+    await fetch(`/api/projects/${projectId}/kb`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kbId, is_active: true, title: aiSuggestions.find(s => s.id === kbId)?.title.replace('[AI NÁVRH] ', '') }),
+    });
+    setAiSuggestions(prev => prev.filter(s => s.id !== kbId));
+    onReload();
+  };
+
+  const loadAiSuggestions = async () => {
+    setShowAiSuggestions(!showAiSuggestions);
+    if (!showAiSuggestions) {
+      const res = await fetch(`/api/projects/${projectId}`);
+      const data = await res.json();
+      // AI suggestions are KB entries with is_active=false — they come from the full project load
+      // We need a separate query for inactive entries
+      const allRes = await fetch(`/api/projects/${projectId}/kb?inactive=true`);
+      const allData = await allRes.json();
+      setAiSuggestions(Array.isArray(allData) ? allData : []);
+    }
+  };
+
   const filtered = filterCat === 'all' ? entries : entries.filter(e => e.category === filterCat);
   const catCounts = entries.reduce((acc, e) => { acc[e.category] = (acc[e.category] || 0) + 1; return acc; }, {} as Record<string, number>);
 
   return (
     <div className="space-y-6">
-      {/* Header with export */}
-      {entries.length > 0 && (
-        <div className="flex justify-end">
+      {/* Header with export + AI suggestions */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={loadAiSuggestions}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            showAiSuggestions ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" /> AI návrhy
+        </button>
+        {entries.length > 0 && (
           <div className="relative group">
             <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700 transition-colors">
               <Share2 className="w-3.5 h-3.5" /> Export KB
@@ -891,6 +930,36 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
               ))}
             </div>
           </div>
+        )}
+      </div>
+
+      {/* AI Suggestions panel */}
+      {showAiSuggestions && (
+        <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-3">
+          <h3 className="text-sm font-medium text-amber-400">AI návrhy KB záznamů</h3>
+          <p className="text-xs text-slate-500">Hugo navrhl tyto záznamy na základě gap analýzy. Aktivujte je nebo smažte.</p>
+          {aiSuggestions.length === 0 && (
+            <p className="text-xs text-slate-500 text-center py-3">Žádné AI návrhy. Hugo je vytvoří ve čtvrtek automaticky.</p>
+          )}
+          {aiSuggestions.map((s) => (
+            <div key={s.id} className="bg-slate-800/50 rounded-lg p-3 flex items-start gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-xs text-amber-400">{CATEGORY_LABELS[s.category] || s.category}</span>
+                  <span className="text-sm font-medium text-white">{s.title}</span>
+                </div>
+                <p className="text-xs text-slate-400">{s.content}</p>
+              </div>
+              <div className="flex gap-1.5 flex-shrink-0">
+                <button onClick={() => handleActivate(s.id)} className="p-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors" title="Aktivovat">
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded-lg bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors" title="Smazat">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -917,11 +986,22 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
         )}
         {filtered.map((entry) => (
           <div key={entry.id} className="bg-slate-800 rounded-lg p-3 group">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2 py-0.5 rounded-full bg-slate-700 text-xs text-slate-300">{CATEGORY_LABELS[entry.category] || entry.category}</span>
-              <span className="text-sm font-medium text-white">{entry.title}</span>
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-700 text-xs text-slate-300">{CATEGORY_LABELS[entry.category] || entry.category}</span>
+                  <span className="text-sm font-medium text-white">{entry.title}</span>
+                </div>
+                <p className="text-sm text-slate-400">{entry.content}</p>
+              </div>
+              <button
+                onClick={() => handleDelete(entry.id)}
+                className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-all flex-shrink-0"
+                title="Smazat"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <p className="text-sm text-slate-400">{entry.content}</p>
           </div>
         ))}
       </div>

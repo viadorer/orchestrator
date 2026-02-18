@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info, Share2, Pencil, Save } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info, Share2, Pencil, Save, Sparkles, TrendingUp, Copy } from 'lucide-react';
 import { PostPreview } from './PostPreview';
 
 interface QueueItem {
@@ -28,6 +28,8 @@ interface QueueItem {
   editor_review?: Record<string, unknown> | null;
   image_url?: string | null;
   generation_context?: Record<string, unknown> | null;
+  engagement_score?: number | null;
+  engagement_metrics?: Record<string, unknown> | null;
 }
 
 type SortBy = 'overall_asc' | 'overall_desc' | 'date_desc' | 'date_asc';
@@ -178,6 +180,18 @@ export function ReviewView() {
         feedback_note: feedbackNote || null,
       }),
     });
+    // Save feedback for Hugo's learning loop
+    if (editText !== item.text_content) {
+      await fetch('/api/agent/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contentId: item.id,
+          editedText: editText,
+          feedbackNote: feedbackNote || null,
+        }),
+      }).catch(() => {}); // Don't block on feedback failure
+    }
     setSaving(false);
     setEditingPost(null);
     setEditText('');
@@ -329,6 +343,14 @@ export function ReviewView() {
                   {!item.image_url && !item.chart_url && !item.card_url && item.image_prompt && (
                     <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-xs text-amber-400">🎨 prompt</span>
                   )}
+                  {item.source === 'ab_variant' && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-xs text-amber-400 font-medium">A/B</span>
+                  )}
+                  {item.engagement_score != null && item.engagement_score > 0 && (
+                    <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/20 text-xs text-emerald-400" title={`Engagement score: ${item.engagement_score}`}>
+                      <TrendingUp className="w-3 h-3" /> {item.engagement_score}
+                    </span>
+                  )}
                 </div>
 
                 {editingPost === item.id ? (
@@ -460,6 +482,24 @@ export function ReviewView() {
                       title="Schválit + vybrat sítě"
                     >
                       <Check className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await fetch('/api/agent/tasks', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            projectId: item.project_id,
+                            taskType: 'generate_ab_variants',
+                            params: { original_text: item.text_content, platform: item.platforms[0] || 'facebook', content_type: item.content_type, source_post_id: item.id },
+                          }),
+                        });
+                        alert('A/B varianty se generují. Najdete je v review za chvíli.');
+                      }}
+                      className="p-2 rounded-lg bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 transition-colors"
+                      title="Generovat A/B varianty"
+                    >
+                      <Copy className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => rejectOne(item.id)}

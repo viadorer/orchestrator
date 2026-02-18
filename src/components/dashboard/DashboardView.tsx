@@ -118,6 +118,10 @@ const TASK_LABELS: Record<string, string> = {
   dedup_check: 'Dedup check',
   optimize_schedule: 'Optimalizace plánu',
   kb_gap_analysis: 'KB gap analýza',
+  auto_enrich_kb: 'Obohacení KB',
+  cross_project_dedup: 'Cross-project dedup',
+  generate_ab_variants: 'A/B varianty',
+  performance_report: 'Report výkonu',
 };
 
 const ACTION_LABELS: Record<string, { label: string; color: string; icon: typeof Bot }> = {

@@ -54,6 +54,7 @@ export async function POST(request: Request) {
 
   // Primary image URL (first media item)
   const imageUrl = media_urls?.[0] || null;
+  console.log('[manual-post] media_urls:', media_urls, 'imageUrl:', imageUrl);
 
   for (const proj of projects) {
     if (!proj.platforms || proj.platforms.length === 0) continue;

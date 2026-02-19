@@ -148,12 +148,28 @@ export function ManualPostView() {
       const res = await fetch('/api/media/upload', { method: 'POST', body: formData });
       const data = await res.json();
 
-      if (data.results?.[0]?.success && data.results[0].public_url) {
-        const publicUrl = data.results[0].public_url;
-        setMedia(prev => prev.map((m, i) => i === index ? { ...m, uploading: false, uploaded: true, public_url: publicUrl } : m));
-        return publicUrl;
-      } else {
-        const errMsg = data.results?.[0]?.error || 'Upload failed';
+      if (data.results?.[0]?.success) {
+        let publicUrl = data.results[0].public_url || '';
+
+        // Fallback: if upload API didn't return public_url, fetch it from media asset
+        if (!publicUrl && data.results[0].asset_id) {
+          try {
+            const assetRes = await fetch(`/api/media/${data.results[0].asset_id}`);
+            if (assetRes.ok) {
+              const assetData = await assetRes.json();
+              publicUrl = assetData.asset?.public_url || '';
+            }
+          } catch { /* ignore */ }
+        }
+
+        if (publicUrl) {
+          setMedia(prev => prev.map((m, i) => i === index ? { ...m, uploading: false, uploaded: true, public_url: publicUrl } : m));
+          return publicUrl;
+        }
+      }
+
+      {
+        const errMsg = data.results?.[0]?.error || 'Upload OK ale URL chybí';
         setMedia(prev => prev.map((m, i) => i === index ? { ...m, uploading: false, error: errMsg } : m));
         return null;
       }

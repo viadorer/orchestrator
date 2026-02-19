@@ -1,0 +1,164 @@
+import { supabase } from '@/lib/supabase/client';
+import { NextResponse } from 'next/server';
+
+/**
+ * getLate.dev Webhook Handler
+ * POST /api/webhooks/getlate
+ * 
+ * Receives real-time notifications from getLate.dev about post status changes.
+ * 
+ * Events:
+ * - post.scheduled: Post successfully scheduled
+ * - post.published: Post successfully published to platform
+ * - post.failed: Post failed to publish on all platforms
+ * - account.disconnected: Social account disconnected
+ * 
+ * Payload structure:
+ * {
+ *   "event": "post.published",
+ *   "timestamp": "2024-01-15T10:30:00Z",
+ *   "data": {
+ *     "postId": "507f1f77bcf86cd799439011",
+ *     "platform": "instagram",
+ *     "accountId": "698f7c19fd3d49fbfa3e3835",
+ *     "status": "published",
+ *     "publishedAt": "2024-01-15T10:30:00Z",
+ *     "error": null
+ *   }
+ * }
+ */
+export async function POST(request: Request) {
+  if (!supabase) {
+    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
+  }
+
+  try {
+    const payload = await request.json();
+    const { event, timestamp, data } = payload;
+
+    console.log('[webhook-getlate] Received:', event, data);
+
+    // Validate payload
+    if (!event || !data) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+    }
+
+    // Find content_queue entry by late_post_id
+    const { data: queueItems } = await supabase
+      .from('content_queue')
+      .select('id, project_id, status, text_content')
+      .eq('late_post_id', data.postId);
+
+    if (!queueItems || queueItems.length === 0) {
+      console.log('[webhook-getlate] No queue item found for late_post_id:', data.postId);
+      // Not an error — might be a post created outside Orchestrator
+      return NextResponse.json({ received: true, matched: false });
+    }
+
+    const queueItem = queueItems[0];
+
+    // Process event
+    switch (event) {
+      case 'post.published': {
+        // Update status to published (new status, not 'sent')
+        await supabase
+          .from('content_queue')
+          .update({
+            status: 'published',
+            sent_at: data.publishedAt || new Date().toISOString(),
+          })
+          .eq('id', queueItem.id);
+
+        // Log success
+        await supabase.from('agent_log').insert({
+          project_id: queueItem.project_id,
+          action: 'post_published_webhook',
+          details: {
+            late_post_id: data.postId,
+            platform: data.platform,
+            published_at: data.publishedAt,
+            queue_id: queueItem.id,
+          },
+        });
+
+        console.log('[webhook-getlate] Post published:', data.postId);
+        break;
+      }
+
+      case 'post.failed': {
+        // Update status to failed
+        await supabase
+          .from('content_queue')
+          .update({
+            status: 'failed',
+          })
+          .eq('id', queueItem.id);
+
+        // Log error
+        await supabase.from('agent_log').insert({
+          project_id: queueItem.project_id,
+          action: 'post_failed_webhook',
+          details: {
+            late_post_id: data.postId,
+            platform: data.platform,
+            error: data.error || 'Unknown error',
+            queue_id: queueItem.id,
+          },
+        });
+
+        console.log('[webhook-getlate] Post failed:', data.postId, data.error);
+        break;
+      }
+
+      case 'post.scheduled': {
+        // Optional: update scheduled_for if getLate changed it
+        if (data.scheduledFor) {
+          await supabase
+            .from('content_queue')
+            .update({
+              scheduled_for: data.scheduledFor,
+            })
+            .eq('id', queueItem.id);
+        }
+
+        console.log('[webhook-getlate] Post scheduled:', data.postId);
+        break;
+      }
+
+      case 'account.disconnected': {
+        // Log account disconnect — admin should reconnect in getLate dashboard
+        await supabase.from('agent_log').insert({
+          action: 'account_disconnected_webhook',
+          details: {
+            platform: data.platform,
+            account_id: data.accountId,
+            timestamp,
+          },
+        });
+
+        console.log('[webhook-getlate] Account disconnected:', data.platform, data.accountId);
+        break;
+      }
+
+      default:
+        console.log('[webhook-getlate] Unknown event:', event);
+    }
+
+    return NextResponse.json({ received: true, event, processed: true });
+  } catch (err) {
+    console.error('[webhook-getlate] Error:', err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+// Health check
+export async function GET() {
+  return NextResponse.json({
+    service: 'getLate.dev webhook handler',
+    status: 'active',
+    events: ['post.scheduled', 'post.published', 'post.failed', 'account.disconnected'],
+  });
+}

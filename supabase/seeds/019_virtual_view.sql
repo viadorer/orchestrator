@@ -385,5 +385,227 @@ INSERT INTO rss_sources (project_id, name, url, category, is_active, fetch_inter
 ('17443720-68b7-460a-859e-28b1b5d66913', 'ČNB - Tiskové zprávy', 'https://www.cnb.cz/cs/rss/rss_tz.xml', 'ekonomika', true, 24);
 
 -- ===========================================
+-- 5. B2C KNOWLEDGE BASE
+-- ===========================================
+
+-- ---- B2C STRATEGIE ----
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C strategie komunikace',
+'Soukromé osoby se rozhodují emocionálně — ale svůj rozhodovací proces ospravedlňují racionálně. B2C prompty proto pracují na obou vrstvách: nejprve vzbudíme zájem nebo emoci (strach z chyby, touha po jednoduchosti, hrdost na svůj prostor), pak přidáme konkrétní číslo nebo benefit, který rozhodnutí racionalizuje.
+
+Zásady B2C komunikace:
+- Hook: První věta musí zastavit scrollování — otázka, číslo, provokace nebo situace, se kterou se čtenář okamžitě ztotožní.
+- Žádný jargon: Nepište „digitální dvojče", „3D spatial data" ani „dollhouse view" — pište „projít si celý byt z gauče."
+- Konkrétní, ne obecné: Místo „prodejte rychleji" pište „prodejte o 10 dní dříve." Místo „za vyšší cenu" pište „+360 000 Kč."
+- Jedna myšlenka na post: Každý post komunikuje jeden benefit nebo jeden příběh. Více = méně.
+- CTA je konkrétní: Ne „Zjistěte více." Ale „Prohlédněte si ukázkový sken na virtualview.cz."
+- Bez RK kontextu: Virtual View je samostatná služba — v B2C postech se žádná realitní kancelář nezmiňuje.
+- A/B testujte hooky — stejný prompt s jiným prvním odstavcem může mít 3× vyšší engagement.', true),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'audience', 'B2C cílové segmenty',
+'Klíčové B2C segmenty Virtual View:
+
+1. PRODÁVAJÍCÍ NEMOVITOST — Pain: Dlouho na trhu, málo vážných zájemců, nutnost stále uklízet a být doma při prohlídkách.
+2. KUPUJÍCÍ NEMOVITOST — Pain: Obava z koupě zajíce v pytli, zbytečné cestování na prohlídky, velká životní investice.
+3. PRONAJÍMATEL — Pain: Ztráta času neproduktivními prohlídkami, pomalé obsazení, nekvalitní nájemci.
+4. NÁJEMCE HLEDAJÍCÍ BYT — Pain: Nejistota z dálkového výběru, strach že prostor nevypadá jako na fotkách.
+5. MAJITEL (DOKUMENTACE) — Pain: Žádná dokumentace stavu před rekonstrukcí, pojistná událost, dědictví.
+6. RODINY A ŽIVOTNÍ ROZHODNUTÍ — Pain: Vzdálení příbuzní nemohou vidět nový dům, plánování stěhování, příprava dětí na nový domov.', true),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'data', 'B2C statistiky pro social media',
+'Ověřené statistiky pro B2C komunikaci — každé číslo má zdroj:
+- Prodej o 31 % rychleji — Méně týdnů stresu, dříve máte peníze. (Matterport, 143 000 listingů)
+- O 9 % vyšší prodejní cena — Průměrný byt za 4 mil.: +360 000 Kč navíc. (Matterport)
+- 71 % kupujících by koupilo bez fyzické prohlídky — Váš byt dostupný pro kupující z celé ČR i zahraničí. (Redfin)
+- O 49 % více kvalifikovaných zájemců — Méně zbytečných návštěv, více vážných kupujících. (Matterport)
+- 3–6× delší čas strávený na inzerátu — Kupující si byt prochází celý, ne jen scrollují fotkami. (Zillow)
+- 88 % prodávajících preferuje makléře s 3D — Moderní prezentace jako standard, ne bonus. (NAR)
+- Přesnost měření do 1 % — Spolehlivá dokumentace pro pojistku, dědictví, rekonstrukci. (Matterport)', true);
+
+-- ---- B2C USE CASES ----
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Prodávající nemovitost',
+'Cíl: Ukázat, že 3D sken urychlí prodej, zvýší cenu a ušetří nervy. Prodávající je emotivně zaangažovaný — chce prodat rychle, za dobrou cenu a bez stresu.
+
+Klíčové argumenty:
+- Prodej o 31 % rychleji (méně týdnů stresu)
+- O 9 % vyšší cena (byt za 4 mil. = +360 000 Kč)
+- O 49 % více kvalifikovaných zájemců (méně zbytečných prohlídek)
+- 3D prohlídka funguje jako předfiltr — přijdou jen ti, kdo to myslí vážně
+- Průměrný prodej v ČR: 15–20 prohlídek, většina s lidmi, kteří si byt „jen chtějí podívat"
+
+Emocionální vrstva: Každá prohlídka = uklízení, přítomnost doma, ztracený čas. S 3D skenem tohle končí.', true),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Kupující nemovitost',
+'Cíl: Ukázat, že 3D sken eliminuje nejistotu, šetří čas cestování a pomáhá se správně rozhodnout. Kupující má strach z největší životní investice — nechce litovat.
+
+Klíčové argumenty:
+- 71 % kupujících by koupilo bez fyzické prohlídky s kvalitní 3D tour
+- Přesné měření každé místnosti přímo v prohlídce
+- Dollhouse view (ptačí pohled na celou dispozici)
+- Schématický půdorys s rozměry automaticky ze skenu
+- Sdílení prohlídky s partnerem, rodiči, architektem
+- Kupující po 3D prohlídce přicházejí s konkrétními otázkami — ne s pochybami
+
+Emocionální vrstva: Fotky lžou. 3D prohlídka ukazuje skutečné rozměry, skutečný prostor. Žádné překvapení po příjezdu.', true),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Pronajímatel',
+'Cíl: Ukázat, jak 3D sken urychlí obsazení, filtruje kvalitní nájemce a šetří čas. Pronajímatel je pragmatický — řeší výnos a spolehlivé nájemce.
+
+Klíčové argumenty:
+- Nájemce, který prošel celým bytem virtuálně a stále chce přijít, přichází s rozhodnutím
+- Méně zbytečných prohlídek, méně nepřizpůsobivých zájemců
+- Sken funguje 24/7 — prohlídka v noci, o víkendu, z jiného města
+- Nájemce zná přesně co dostane — žádné stížnosti po nastěhování
+
+Emocionální vrstva: „Kolikrát jste museli přijít kvůli prohlídce, která skončila za 5 minut větou ‚Dám vám vědět'?"', true),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Dokumentace a pojistné události',
+'Cíl: Ukázat hodnotu 3D skenu jako trvalé digitální dokumentace stavu nemovitosti — pro pojišťovny, dědictví, rekonstrukce, sousedské spory.
+
+Klíčové argumenty:
+- Kompletní digitální dokumentace každé místnosti s přesnými rozměry
+- Časové razítko a nemanipulovatelná historie
+- Dostupné kdykoli z internetu
+- Využití: pojistná událost (stav před škodou), rekonstrukce (přesné rozměry), prodej (podklad pro cenu), dědické řízení
+
+Scénář: Povodeň, požár nebo krádež — pojišťovna chce zdokumentovat stav před škodou. Kdo ho má?
+Přesnost měření do 1 % — spolehlivá dokumentace.', true),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Lifestyle a emocionální posty',
+'Cíl: Budovat povědomí a sympatie ke značce Virtual View prostřednictvím témat blízkých každému — nový domov, vzpomínky, rodina. Nejsou to prodejní posty — jsou to posty, které se sdílejí.
+
+Témata:
+- Vzpomínky na dům: Domy nesou vzpomínky — a ty se dají digitálně zachovat. Někdo prodává dům, ve kterém vyrostl.
+- Stěhování daleko: Ukázat nový domov rodičům nebo přátelům, kteří žijí daleko — pošlete link.
+- Hrdost na domov: Váš byt je krásný — a zaslouží si víc než pár fotek. 3D prohlídka zachytí každý detail.
+
+Tón: Nostalgický, teplý, lidský. Bez přímého prodeje v prvních větách.', true);
+
+-- ---- B2C CONTENT PATTERNS ----
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Pattern: Emocionální příběh + statistika',
+'Formát: Příběh → emoce → číslo → CTA. Struktura: 1. Situace (příběh, se kterým se čtenář ztotožní). 2. Problém (bolest, frustrace). 3. Řešení (3D prohlídka). 4. Důkaz (konkrétní statistika). 5. CTA (virtualview.cz). Příklad: „Byt na trhu 4 měsíce, každý týden prohlídka, každý týden zklamání — pak majitel přidal 3D prohlídku a prodal za 3 týdny."', true),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Pattern: Číslo jako hook',
+'Formát: Konkrétní číslo → vysvětlení → benefit → CTA. Struktura: 1. Hook: Překvapivé číslo (360 000 Kč, 31 %, 71 %). 2. Kontext: Co to číslo znamená v praxi. 3. Proč: Logické vysvětlení (kupující ví co kupuje → ochota zaplatit více). 4. CTA. Příklad: „360 000 Kč. Tolik navíc dostanete za průměrný byt s 3D prohlídkou."', true),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Pattern: Engagement / anketa / otázka',
+'Formát: Otázka do diskuse → kontext → jemný brand. Cíl: Generovat komentáře, sdílení a interakci. Algoritmy sítí preferují posty s vysokým engagement. Tyto posty neprodávají přímo — sbírají publikum. Příklady: „Kolik prohlídek jste měli, než jste prodali svůj byt?" „Jak si procházíte nemovitosti online? A) Fotky + popis B) Chci 3D prohlídku"', true),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Editorial kalendář — 4 týdny',
+'Týden 1 — Awareness: IG: Žádná překvapení (kupující vs fotky), FB: Prodej rychleji (příběh), LI: Konec zbytečných prohlídek (data).
+Týden 2 — Engagement: IG: Lepší nájemci (storytelling), FB: Otázka do diskuse, LI: Rozhodněte se jistě (due diligence).
+Týden 3 — Consideration: IG: Ukažte svůj domov (hrdost), FB: Dokumentace (pojistná událost), LI: Rekonstrukce (praktický benefit).
+Týden 4 — Decision/Action: IG: Věděli jste, že? (statistika), FB: Anketa (engagement), LI: Prodejte za víc (číslo jako hook).
+Rytmus: 3 posty/týden (1 per platforma), rotace segmentů, střídání awareness → engagement → consideration → decision.', true);
+
+-- ===========================================
+-- 6. B2C PROMPT TEMPLATES
+-- ===========================================
+
+INSERT INTO project_prompt_templates (project_id, slug, category, content, description, sort_order) VALUES
+
+-- B2C GUARDRAIL
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_guardrail_vv', 'guardrail',
+$$B2C PRAVIDLA (doplněk k hlavním guardrails):
+- JAZYK: Čeština, přístupný tón, bez odborného žargonu
+- Nepište „digitální dvojče" — pište „projít si celý byt z gauče"
+- Nepište „dollhouse view" — pište „ptačí pohled na celý byt"
+- Jedna myšlenka na post — více = méně
+- CTA je vždy konkrétní akce, ne „zjistěte více"
+- Bez zmínky o realitních kancelářích — Virtual View je samostatná služba
+- Statistiky vždy s kontextem pro běžného člověka (ne procenta, ale koruny/dny)
+- Emocionální vrstva + racionální důkaz v každém postu
+- Hook musí zastavit scrollování — otázka, číslo, situace$$,
+'B2C guardrails Virtual View', 31),
+
+-- B2C COMMUNICATION
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_communication_vv', 'communication',
+$$B2C KOMUNIKAČNÍ PRAVIDLA:
+- TÓN: Důvěryhodný, přístupný, emocionálně rezonující, bez fluff
+- EMOJI: Max 2 (Facebook, Instagram), 0 na LinkedIn
+- HASHTAHY: 3–4 na Instagram, žádné na LinkedIn, volitelně 1–2 na Facebook
+- FORMÁT: Krátké odstavce, jedna myšlenka = jeden odstavec
+- HOOK: Vždy první věta zastaví scrollování
+- ČÍSLA: Vždy přeložit do praxe (ne „9 %" ale „+360 000 Kč u bytu za 4 miliony")
+
+PLATFORMY B2C:
+- FACEBOOK: 100–160 slov, příběhy, emoce, otázky do diskuse, max 2 emoji
+- INSTAGRAM: 60–120 slov, vizuální, krátké, hashtagy, max 2 emoji
+- LINKEDIN: 150–200 slov, profesionální i pro B2C (prodávající manažeři, investoři), bez emoji$$,
+'B2C komunikační pravidla', 21),
+
+-- SKUPINA 1: PRODÁVAJÍCÍ NEMOVITOST
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_prodej_rychleji_fb', 'examples',
+$$Napište Facebook post pro Virtual View (virtualview.cz) zaměřený na lidi, kteří prodávají nebo plánují prodat svůj byt nebo dům v ČR. Začni příběhem: byt na trhu 4 měsíce, každý týden prohlídka, každý týden zklamání — a pak majitel přidal 3D prohlídku a prodal za 3 týdny. Nepoužívejte to jako faktuální case study, ale jako ilustrativní příběh ('Představte si...'). Přidejte statistiku: nemovitosti s 3D prohlídkou se prodávají o 31 % rychleji. Zdůrazněte, že zájemci přicházejí připraveni — 3D prohlídku si udělali sami, přišli na fyzickou prohlídku jen ti, kdo to myslí vážně. Tón: empatický, věcný, bez přehnaného prodejního tónu. Maximálně 1 emoji. Délka: 130–160 slov. CTA: 'Zjistěte, co pro váš byt může udělat 3D sken na virtualview.cz'. Čeština.$$,
+'B2C: Prodej rychleji / Facebook / Awareness', 100),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_prodejte_za_vic_ig', 'examples',
+$$Napište Instagram post pro Virtual View. Začněte konkrétním číslem jako hook: '360 000 Kč.' Pak vysvětlete: průměrný byt za 4 miliony se s 3D prohlídkou prodává o 9 % dráže — to je reálná částka navíc, ne procento na papíře. Vysvětlete proč: kupující, kteří prošli celým bytem virtuálně a rozhodli se ho chtít, jsou ochotni zaplatit více. Vědí, co kupují. Tón: přímý, bez zbytečných slov, respektující inteligenci čtenáře. Bez přehnaných výkřiků. 3–4 hashtagy (#prodejnemovitosti #3Dprohlidka #VirtualView #prodejbytu). Maximálně 1 emoji. Délka: 80–100 slov. Čeština.$$,
+'B2C: Prodejte za víc / Instagram / Consideration', 101),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_konec_prohlidek_li', 'examples',
+$$Napište LinkedIn post pro Virtual View pro lidi prodávající nemovitost, kteří jsou pracovně vytížení a nemají čas na desítky prohlídek. Popište problém: průměrný prodej v ČR zahrnuje 15–20 prohlídek, z nichž většina je s lidmi, kteří si byt 'jen chtějí podívat'. Každá prohlídka = uklízení, přítomnost doma, ztracený čas. Nabídněte řešení: 3D prohlídka funguje jako předfiltr. Lidé, kteří projdou celým bytem online a stále chtějí přijít, jsou kvalifikovaní zájemci. Přidejte statistiku: o 49 % více kvalifikovaných leadů, o 60 % méně zbytečných prohlídek. Tón: profesionální, věcný, respektující čas čtenáře. Bez emoji. Délka: 160–200 slov. CTA: 'Spočítejte si, kolik prohlídek vám 3D sken ušetří.' Čeština.$$,
+'B2C: Konec zbytečných prohlídek / LinkedIn / Consideration', 102),
+
+-- SKUPINA 2: KUPUJÍCÍ NEMOVITOST
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_kup_driv_fb', 'examples',
+$$Napište Facebook post pro Virtual View zaměřený na lidi hledající byt nebo dům k nákupu, kteří bydlí daleko od hledané lokality. Začněte situací: 'Našli jste vysněný byt v Plzni, bydlíte v Brně. Jet na prohlídku? 3 hodiny autem tam a zpět.' Vysvětlete, co 3D prohlídka umožňuje: procházet každou místností, měřit vzdálenosti, zkontrolovat sklepní kóje, balkón, vstup do budovy — vše bez nutnosti cestovat. Přidejte, že 71 % kupujících by koupilo nemovitost bez fyzické prohlídky, pokud má kvalitní 3D tour. Tón: přátelský, praktický, bez naléhání. Maximálně 2 emoji. Délka: 120–150 slov. CTA: 'Hledejte nemovitosti s 3D prohlídkou na virtualview.cz.' Čeština.$$,
+'B2C: Kup byt dřív než přijedeš / Facebook / Awareness', 103),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_zadna_prekvapeni_ig', 'examples',
+$$Napište Instagram post pro Virtual View pro lidi, kteří měli zkušenost s tím, že nemovitost na fotkách vypadá jinak než ve skutečnosti. Kontrastujte: 'Realitní fotka: prostorný obývák. Realita: 14 m² s nízkou výškou stropu.' Pak vysvětlete, jak 3D prohlídka funguje: vidíte skutečné rozměry, dostanete přesný půdorys, můžete si v prohlídce měřit vzdálenosti. Žádné zklamání po příjezdu. Tón: lehce ironický na začátku, pak věcný a uklidňující. 3–4 hashtagy (#kupbytu #3Dprohlidka #VirtualView #nemovitosti). Maximálně 2 emoji. Délka: 80–110 slov. Čeština.$$,
+'B2C: Žádná překvapení / Instagram / Consideration', 104),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_rozhodnete_se_jiste_li', 'examples',
+$$Napište LinkedIn post pro Virtual View pro lidi uvažující o koupi nemovitosti v hodnotě 5+ milionů Kč. Zdůrazněte, že při takové investici je informovanost klíčová. Popište, co 3D prohlídka nabízí nad rámec fotografií: přesné měření každé místnosti přímo v prohlídce, ptačí pohled na celou dispozici, schématický půdorys s rozměry automaticky generovaný ze skenu, možnost sdílet prohlídku s partnerem, rodiči nebo architektem. Přidejte, že kupující, kteří prošli 3D prohlídkou, přicházejí na fyzickou prohlídku s konkrétními otázkami — ne s pochybami. Tón: profesionální, respektující inteligenci čtenáře. Bez emoji. Délka: 150–180 slov. CTA: 'Podívejte se, jak vypadá 3D dokumentace nemovitosti na virtualview.cz.' Čeština.$$,
+'B2C: Rozhodněte se jistě / LinkedIn / Decision', 105),
+
+-- SKUPINA 3: PRONAJÍMATEL
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_obsadte_byt_fb', 'examples',
+$$Napište Facebook post pro Virtual View zaměřený na majitele pronajímaných nemovitostí. Začněte otázkou: 'Kolikrát jste museli přijít kvůli prohlídce, která skončila za 5 minut větou „Dám vám vědět"?' Vysvětlete řešení: nájemce, který prošel celým bytem virtuálně a stále chce přijít, přijde s rozhodnutím. Přidejte přínos: méně zbytečných prohlídek, méně nepřizpůsobivých zájemců, rychlejší obsazení. Zmiňte, že sken funguje 24/7 — potenciální nájemce si prohlídku udělá v noci, o víkendu, z jiného města. Tón: empatický vůči časové zátěži pronajímatele, věcný. Maximálně 1 emoji. Délka: 120–150 slov. CTA: 'Zjistěte víc na virtualview.cz.' Čeština.$$,
+'B2C: Obsaďte byt za méně prohlídek / Facebook / Awareness', 106),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_lepsi_najemci_ig', 'examples',
+$$Napište Instagram post pro Virtual View. Téma: 3D prohlídka jako způsob, jak přitáhnout seriózní nájemce. Použijte logiku: nájemce, který si prošel celý byt virtuálně, zná přesně co dostane. Nenapíše vám po nastěhování, že 'nevěděl o malé koupelně.' Sám si byt vybral se znalostí věci. Tón: přímý, praktický, mírně s nadhledem. Bez sentimentu. 3–4 hashtagy (#pronajem #pronajimatel #3Dprohlidka #VirtualView). 1 emoji max. Délka: 80–100 slov. Čeština.$$,
+'B2C: Lepší nájemci / Instagram / Consideration', 107),
+
+-- SKUPINA 4: DOKUMENTACE A POJISTNÉ UDÁLOSTI
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_dokumentace_fb', 'examples',
+$$Napište Facebook post pro Virtual View pro majitele rodinných domů a bytů. Téma: proč je 3D dokumentace nemovitosti chytrá ochrana. Začněte scénářem: povodeň, požár nebo krádež — a pojišťovna chce zdokumentovat stav před škodou. Kdo ho má? Vysvětlete, co 3D sken nabízí: kompletní digitální dokumentace každé místnosti s přesnými rozměry, časovým razítkem a nemanipulovatelnou historií. Sken je dostupný kdykoli z internetu. Zmiňte, že se hodí i při plánování rekonstrukce (přesné rozměry bez nutnosti měřit), při prodeji (podklad pro cenu), nebo při dědickém řízení. Tón: věcný, klidný, bez strašení. 1 emoji max. Délka: 130–160 slov. CTA: 'Zdokumentujte svůj domov jednou a mějte klid navždy. virtualview.cz.' Čeština.$$,
+'B2C: Zdokumentujte svůj domov / Facebook / Awareness', 108),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_rekonstrukce_ig', 'examples',
+$$Napište Instagram post pro Virtual View pro lidi, kteří plánují rekonstrukci. Začněte otázkou: 'Víte přesně, kolik metrů má vaše kuchyň? A výšku stropu v každém rohu?' 3D sken dá přesné rozměry každé místnosti — bez metru, bez papíru, bez chyby. Přidejte, že výstup (schématický půdorys s kótami) jde rovnou k architektovi nebo do designového studia. Ušetří hodiny zaměřování. Tón: praktický, přímý, mírně s humorem na začátku. 3–4 hashtagy (#rekonstrukce #interierdesign #3Dprohlidka #VirtualView). 1 emoji max. Délka: 80–110 slov. Čeština.$$,
+'B2C: Rekonstrukce bez překvapení / Instagram / Consideration', 109),
+
+-- SKUPINA 5: EMOCIONÁLNÍ A LIFESTYLE POSTY
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_vzpominky_fb', 'examples',
+$$Napište Facebook post pro Virtual View. Téma: domy nesou vzpomínky — a ty se dají digitálně zachovat. Nenapište prodejní text. Napište příběh: někdo prodává dům, ve kterém vyrůstal, a chce mít jeho každý kout uchován — ne jen na fotkách, ale průchozí, živou formou, kterou ukáže dětem. Bez jmenování produktu v prvních třech větách. Tón: nostalgický, teplý, lidský. Na konci jemně naváže na Virtual View: 'Víte, jak snadno dnes jde zachovat každý kout domova?' Bez významného CTA. 1 emoji max. Délka: 100–130 slov. Čeština.$$,
+'B2C: Vzpomínky na dům / Facebook / Brand building', 110),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_stehujete_se_ig', 'examples',
+$$Napište Instagram post pro Virtual View. Scénář: stěhujete se do nového bytu v jiném městě a nemůžete jet na prohlídku. Nebo si chcete ukázat nový domov rodičům nebo přátelům, kteří žijí daleko. 3D prohlídka to umožní — pošlete link, a oni si 'projdou' vaše nové bydlení sami, kdykoli chtějí. Tón: hřejivý, optimistický, životní. Bez přehnaného prodejního tónu. 3–4 hashtagy (#stehovani #novydomov #3Dprohlidka #VirtualView). 2 emoji max. Délka: 80–100 slov. Čeština.$$,
+'B2C: Stěhujete se daleko? / Instagram / Awareness', 111),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_ukazte_domov_ig', 'examples',
+$$Napište Instagram post pro Virtual View. Téma: váš byt je krásný — a zaslouží si víc než pár fotek. 3D prohlídka zachytí každý detail: materiály, světlo, dispozici, detaily, které na fotce zaniknou. A celý byt je možné sdílet jedním linkem. Tón: aspirativní, lehce prestižní, bez arogance. Cílí na lidi, kteří jsou na svůj domov hrdí a rádi ho ukazují. 3–4 hashtagy (#interier #bydleni #3Dprohlidka #VirtualView). 1–2 emoji. Délka: 70–90 slov. Čeština.$$,
+'B2C: Ukažte svůj domov světu / Instagram / Brand building', 112),
+
+-- SKUPINA 6: INTERAKTIVNÍ A ENGAGEMENTOVÉ POSTY
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_otazka_prodavajici_fb', 'examples',
+$$Napište Facebook post pro Virtual View, jehož primárním cílem je vyvolat diskusi. Položte otázku: 'Kolik prohlídek jste měli, než jste prodali svůj byt nebo dům?' Poproste lidi, ať napíší číslo do komentářů. Pak krátce zmiňte, co vidí Virtual View u svých klientů: průměr klesá výrazně, když má inzerát 3D prohlídku — protože zájemci přicházejí připraveni. Tón: konverzační, zvídavý, bez prodejního tlaku. Bez emoji v otázce. 1 emoji v závěru postu. Délka: 80–110 slov. Čeština.$$,
+'B2C: Otázka pro prodávající / Facebook / Engagement', 113),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_vedeli_jste_ig', 'examples',
+$$Napište Instagram post pro Virtual View ve formátu 'Věděli jste, že...?' Vyberte jednu překvapivou statistiku (např. '71 % kupujících by koupilo nemovitost bez fyzické prohlídky, pokud má kvalitní 3D tour') a dejte ji do kontextu: co to znamená pro prodávající, pro kupující, pro realitní trh v ČR. Konec: výzva k uložení nebo sdílení postu. Tón: informativní, překvapující, bez prodejního tónu. 3–4 hashtagy. 1 emoji. Délka: 60–80 slov. Čeština.$$,
+'B2C: Věděli jste, že? / Instagram / Awareness', 114),
+
+('17443720-68b7-460a-859e-28b1b5d66913', 'b2c_anketa_fb', 'examples',
+$$Napište Facebook post pro Virtual View ve formátu ankety. Otázka: 'Jak si procházíte nemovitosti online?' Dvě možnosti: A) Procházím fotky a čtu popis, B) Chci 3D prohlídku — jinak mi inzerát nezajímá. Po otázce přidejte 1–2 věty, proč se ptáte — Virtual View sleduje, jak se mění chování kupujících v ČR. Tón: zvídavý, přátelský. 1 emoji. Délka: 60–80 slov + 2 možnosti ankety. Čeština.$$,
+'B2C: Anketa / Facebook / Engagement', 115);
+
+-- ===========================================
 -- KONEC SEEDU Virtual View
 -- ===========================================

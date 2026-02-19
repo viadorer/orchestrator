@@ -391,114 +391,123 @@ INSERT INTO rss_sources (project_id, name, url, category, is_active, fetch_inter
 -- ---- B2C STRATEGIE ----
 INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
 ('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C strategie komunikace',
-'Soukromé osoby se rozhodují emocionálně — ale svůj rozhodovací proces ospravedlňují racionálně. B2C prompty proto pracují na obou vrstvách: nejprve vzbudíme zájem nebo emoci (strach z chyby, touha po jednoduchosti, hrdost na svůj prostor), pak přidáme konkrétní číslo nebo benefit, který rozhodnutí racionalizuje.
+$$Soukrome osoby se rozhoduji emocionalne — ale svuj rozhodovaci proces ospravedlnuji racionalne. B2C prompty proto pracuji na obou vrstvach: nejprve vzbudime zajem nebo emoci (strach z chyby, touha po jednoduchosti, hrdost na svuj prostor), pak pridame konkretni cislo nebo benefit, ktery rozhodnuti racionalizuje.
 
-Zásady B2C komunikace:
-- Hook: První věta musí zastavit scrollování — otázka, číslo, provokace nebo situace, se kterou se čtenář okamžitě ztotožní.
-- Žádný jargon: Nepište „digitální dvojče", „3D spatial data" ani „dollhouse view" — pište „projít si celý byt z gauče."
-- Konkrétní, ne obecné: Místo „prodejte rychleji" pište „prodejte o 10 dní dříve." Místo „za vyšší cenu" pište „+360 000 Kč."
-- Jedna myšlenka na post: Každý post komunikuje jeden benefit nebo jeden příběh. Více = méně.
-- CTA je konkrétní: Ne „Zjistěte více." Ale „Prohlédněte si ukázkový sken na virtualview.cz."
-- Bez RK kontextu: Virtual View je samostatná služba — v B2C postech se žádná realitní kancelář nezmiňuje.
-- A/B testujte hooky — stejný prompt s jiným prvním odstavcem může mít 3× vyšší engagement.', true),
+Zasady B2C komunikace:
+- Hook: Prvni veta musi zastavit scrollovani — otazka, cislo, provokace nebo situace, se kterou se ctenar okamzite ztotozni.
+- Zadny jargon: Nepiste "digitalni dvojce", "3D spatial data" ani "dollhouse view" — piste "projit si cely byt z gauce."
+- Konkretni, ne obecne: Misto "prodejte rychleji" piste "prodejte o 10 dni drive." Misto "za vyssi cenu" piste "+360 000 Kc."
+- Jedna myslenka na post: Kazdy post komunikuje jeden benefit nebo jeden pribeh. Vice = mene.
+- CTA je konkretni: Ne "Zjistete vice." Ale "Prohlednete si ukazkovy sken na virtualview.cz."
+- Bez RK kontextu: Virtual View je samostatna sluzba — v B2C postech se zadna realitni kancelar nezminuje.
+- A/B testujte hooky — stejny prompt s jinym prvnim odstavcem muze mit 3x vyssi engagement.$$, true);
 
-('17443720-68b7-460a-859e-28b1b5d66913', 'audience', 'B2C cílové segmenty',
-'Klíčové B2C segmenty Virtual View:
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'audience', 'B2C cilove segmenty',
+$$Klicove B2C segmenty Virtual View:
 
-1. PRODÁVAJÍCÍ NEMOVITOST — Pain: Dlouho na trhu, málo vážných zájemců, nutnost stále uklízet a být doma při prohlídkách.
-2. KUPUJÍCÍ NEMOVITOST — Pain: Obava z koupě zajíce v pytli, zbytečné cestování na prohlídky, velká životní investice.
-3. PRONAJÍMATEL — Pain: Ztráta času neproduktivními prohlídkami, pomalé obsazení, nekvalitní nájemci.
-4. NÁJEMCE HLEDAJÍCÍ BYT — Pain: Nejistota z dálkového výběru, strach že prostor nevypadá jako na fotkách.
-5. MAJITEL (DOKUMENTACE) — Pain: Žádná dokumentace stavu před rekonstrukcí, pojistná událost, dědictví.
-6. RODINY A ŽIVOTNÍ ROZHODNUTÍ — Pain: Vzdálení příbuzní nemohou vidět nový dům, plánování stěhování, příprava dětí na nový domov.', true),
+1. PRODAVAJICI NEMOVITOST — Pain: Dlouho na trhu, malo vaznych zajemcu, nutnost stale uklizetbyt doma pri prohlidkach.
+2. KUPUJICI NEMOVITOST — Pain: Obava z koupe zajice v pytli, zbytecne cestovani na prohlidky, velka zivotni investice.
+3. PRONAJIMATEL — Pain: Ztrata casu neproduktivnimi prohlidkami, pomale obsazeni, nekvalitni najemci.
+4. NAJEMCE HLEDAJICI BYT — Pain: Nejistota z dalkoveho vyberu, strach ze prostor nevypada jako na fotkach.
+5. MAJITEL (DOKUMENTACE) — Pain: Zadna dokumentace stavu pred rekonstrukci, pojistna udalost, dedictvi.
+6. RODINY A ZIVOTNI ROZHODNUTI — Pain: Vzdaleni pribuzni nemohou videt novy dum, planovani stehovani, priprava deti na novy domov.$$, true);
 
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
 ('17443720-68b7-460a-859e-28b1b5d66913', 'data', 'B2C statistiky pro social media',
-'Ověřené statistiky pro B2C komunikaci — každé číslo má zdroj:
-- Prodej o 31 % rychleji — Méně týdnů stresu, dříve máte peníze. (Matterport, 143 000 listingů)
-- O 9 % vyšší prodejní cena — Průměrný byt za 4 mil.: +360 000 Kč navíc. (Matterport)
-- 71 % kupujících by koupilo bez fyzické prohlídky — Váš byt dostupný pro kupující z celé ČR i zahraničí. (Redfin)
-- O 49 % více kvalifikovaných zájemců — Méně zbytečných návštěv, více vážných kupujících. (Matterport)
-- 3–6× delší čas strávený na inzerátu — Kupující si byt prochází celý, ne jen scrollují fotkami. (Zillow)
-- 88 % prodávajících preferuje makléře s 3D — Moderní prezentace jako standard, ne bonus. (NAR)
-- Přesnost měření do 1 % — Spolehlivá dokumentace pro pojistku, dědictví, rekonstrukci. (Matterport)', true);
+$$Overene statistiky pro B2C komunikaci — kazde cislo ma zdroj:
+- Prodej o 31 % rychleji — Mene tydnu stresu, drive mate penize. (Matterport, 143 000 listingu)
+- O 9 % vyssi prodejni cena — Prumerny byt za 4 mil.: +360 000 Kc navic. (Matterport)
+- 71 % kupujicich by koupilo bez fyzicke prohlidky — Vas byt dostupny pro kupujici z cele CR i zahranici. (Redfin)
+- O 49 % vice kvalifikovanych zajemcu — Mene zbytecnych navstev, vice vaznych kupujicich. (Matterport)
+- 3-6x delsi cas straveny na inzeratu — Kupujici si byt prochazi cely, ne jen scrolluji fotkami. (Zillow)
+- 88 % prodavajicich preferuje maklere s 3D — Moderni prezentace jako standard, ne bonus. (NAR)
+- Presnost mereni do 1 % — Spolehliva dokumentace pro pojistku, dedictvi, rekonstrukci. (Matterport)$$, true);
 
 -- ---- B2C USE CASES ----
 INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
-('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Prodávající nemovitost',
-'Cíl: Ukázat, že 3D sken urychlí prodej, zvýší cenu a ušetří nervy. Prodávající je emotivně zaangažovaný — chce prodat rychle, za dobrou cenu a bez stresu.
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Prodavajici nemovitost',
+$$Cil: Ukazat, ze 3D sken urychli prodej, zvysi cenu a usetri nervy. Prodavajici je emotivne zaangazovany — chce prodat rychle, za dobrou cenu a bez stresu.
 
-Klíčové argumenty:
-- Prodej o 31 % rychleji (méně týdnů stresu)
-- O 9 % vyšší cena (byt za 4 mil. = +360 000 Kč)
-- O 49 % více kvalifikovaných zájemců (méně zbytečných prohlídek)
-- 3D prohlídka funguje jako předfiltr — přijdou jen ti, kdo to myslí vážně
-- Průměrný prodej v ČR: 15–20 prohlídek, většina s lidmi, kteří si byt „jen chtějí podívat"
+Klicove argumenty:
+- Prodej o 31 % rychleji (mene tydnu stresu)
+- O 9 % vyssi cena (byt za 4 mil. = +360 000 Kc)
+- O 49 % vice kvalifikovanych zajemcu (mene zbytecnych prohlidek)
+- 3D prohlidka funguje jako predfiltr — prijdou jen ti, kdo to mysli vazne
+- Prumerny prodej v CR: 15-20 prohlidek, vetsina s lidmi, kteri si byt jen chteji podivat
 
-Emocionální vrstva: Každá prohlídka = uklízení, přítomnost doma, ztracený čas. S 3D skenem tohle končí.', true),
+Emocionalni vrstva: Kazda prohlidka = uklizeni, pritomnost doma, ztraceny cas. S 3D skenem tohle konci.$$, true);
 
-('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Kupující nemovitost',
-'Cíl: Ukázat, že 3D sken eliminuje nejistotu, šetří čas cestování a pomáhá se správně rozhodnout. Kupující má strach z největší životní investice — nechce litovat.
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Kupujici nemovitost',
+$$Cil: Ukazat, ze 3D sken eliminuje nejistotu, setri cas cestovani a pomaha se spravne rozhodnout. Kupujici ma strach z nejvetsi zivotni investice — nechce litovat.
 
-Klíčové argumenty:
-- 71 % kupujících by koupilo bez fyzické prohlídky s kvalitní 3D tour
-- Přesné měření každé místnosti přímo v prohlídce
-- Dollhouse view (ptačí pohled na celou dispozici)
-- Schématický půdorys s rozměry automaticky ze skenu
-- Sdílení prohlídky s partnerem, rodiči, architektem
-- Kupující po 3D prohlídce přicházejí s konkrétními otázkami — ne s pochybami
+Klicove argumenty:
+- 71 % kupujicich by koupilo bez fyzicke prohlidky s kvalitni 3D tour
+- Presne mereni kazde mistnosti primo v prohlidce
+- Dollhouse view (ptaci pohled na celou dispozici)
+- Schematicky pudorys s rozmery automaticky ze skenu
+- Sdileni prohlidky s partnerem, rodici, architektem
+- Kupujici po 3D prohlidce prichazeji s konkretnimi otazkami — ne s pochybami
 
-Emocionální vrstva: Fotky lžou. 3D prohlídka ukazuje skutečné rozměry, skutečný prostor. Žádné překvapení po příjezdu.', true),
+Emocionalni vrstva: Fotky lzou. 3D prohlidka ukazuje skutecne rozmery, skutecny prostor. Zadne prekvapeni po prijezdu.$$, true);
 
-('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Pronajímatel',
-'Cíl: Ukázat, jak 3D sken urychlí obsazení, filtruje kvalitní nájemce a šetří čas. Pronajímatel je pragmatický — řeší výnos a spolehlivé nájemce.
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Pronajimatel',
+$$Cil: Ukazat, jak 3D sken urychli obsazeni, filtruje kvalitni najemce a setri cas. Pronajimatel je pragmaticky — resi vynos a spolehlive najemce.
 
-Klíčové argumenty:
-- Nájemce, který prošel celým bytem virtuálně a stále chce přijít, přichází s rozhodnutím
-- Méně zbytečných prohlídek, méně nepřizpůsobivých zájemců
-- Sken funguje 24/7 — prohlídka v noci, o víkendu, z jiného města
-- Nájemce zná přesně co dostane — žádné stížnosti po nastěhování
+Klicove argumenty:
+- Najemce, ktery prosel celym bytem virtualne a stale chce prijit, prichazi s rozhodnutim
+- Mene zbytecnych prohlidek, mene neprizpusobivych zajemcu
+- Sken funguje 24/7 — prohlidka v noci, o vikendu, z jineho mesta
+- Najemce zna presne co dostane — zadne stiznosti po nastehavani
 
-Emocionální vrstva: „Kolikrát jste museli přijít kvůli prohlídce, která skončila za 5 minut větou ‚Dám vám vědět'?"', true),
+Emocionalni vrstva: Kolikrat jste museli prijit kvuli prohlidce, ktera skoncila za 5 minut vetou Dam vam vedet?$$, true);
 
-('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Dokumentace a pojistné události',
-'Cíl: Ukázat hodnotu 3D skenu jako trvalé digitální dokumentace stavu nemovitosti — pro pojišťovny, dědictví, rekonstrukce, sousedské spory.
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Dokumentace a pojistne udalosti',
+$$Cil: Ukazat hodnotu 3D skenu jako trvale digitalni dokumentace stavu nemovitosti — pro pojistovny, dedictvi, rekonstrukce, sousedske spory.
 
-Klíčové argumenty:
-- Kompletní digitální dokumentace každé místnosti s přesnými rozměry
-- Časové razítko a nemanipulovatelná historie
-- Dostupné kdykoli z internetu
-- Využití: pojistná událost (stav před škodou), rekonstrukce (přesné rozměry), prodej (podklad pro cenu), dědické řízení
+Klicove argumenty:
+- Kompletni digitalni dokumentace kazde mistnosti s presnymi rozmery
+- Casove razitko a nemanipulovatelna historie
+- Dostupne kdykoli z internetu
+- Vyuziti: pojistna udalost (stav pred skodou), rekonstrukce (presne rozmery), prodej (podklad pro cenu), dedicke rizeni
 
-Scénář: Povodeň, požár nebo krádež — pojišťovna chce zdokumentovat stav před škodou. Kdo ho má?
-Přesnost měření do 1 % — spolehlivá dokumentace.', true),
+Scenar: Povoden, pozar nebo kradez — pojistovna chce zdokumentovat stav pred skodou. Kdo ho ma?
+Presnost mereni do 1 % — spolehliva dokumentace.$$, true);
 
-('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Lifestyle a emocionální posty',
-'Cíl: Budovat povědomí a sympatie ke značce Virtual View prostřednictvím témat blízkých každému — nový domov, vzpomínky, rodina. Nejsou to prodejní posty — jsou to posty, které se sdílejí.
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'case_study', 'B2C: Lifestyle a emocionalni posty',
+$$Cil: Budovat povedomi a sympatie ke znacce Virtual View prostrednictvim temat blizkych kazdemu — novy domov, vzpominky, rodina. Nejsou to prodejni posty — jsou to posty, ktere se sdileji.
 
-Témata:
-- Vzpomínky na dům: Domy nesou vzpomínky — a ty se dají digitálně zachovat. Někdo prodává dům, ve kterém vyrostl.
-- Stěhování daleko: Ukázat nový domov rodičům nebo přátelům, kteří žijí daleko — pošlete link.
-- Hrdost na domov: Váš byt je krásný — a zaslouží si víc než pár fotek. 3D prohlídka zachytí každý detail.
+Temata:
+- Vzpominky na dum: Domy nesou vzpominky — a ty se daji digitalne zachovat. Nekdo prodava dum, ve kterem vyrustal.
+- Stehovani daleko: Ukazat novy domov rodicum nebo pratelum, kteri ziji daleko — poslete link.
+- Hrdost na domov: Vas byt je krasny — a zaslouzi si vic nez par fotek. 3D prohlidka zachyti kazdy detail.
 
-Tón: Nostalgický, teplý, lidský. Bez přímého prodeje v prvních větách.', true);
+Ton: Nostalgicky, teply, lidsky. Bez primeho prodeje v prvnich vetach.$$, true);
 
 -- ---- B2C CONTENT PATTERNS ----
 INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
-('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Pattern: Emocionální příběh + statistika',
-'Formát: Příběh → emoce → číslo → CTA. Struktura: 1. Situace (příběh, se kterým se čtenář ztotožní). 2. Problém (bolest, frustrace). 3. Řešení (3D prohlídka). 4. Důkaz (konkrétní statistika). 5. CTA (virtualview.cz). Příklad: „Byt na trhu 4 měsíce, každý týden prohlídka, každý týden zklamání — pak majitel přidal 3D prohlídku a prodal za 3 týdny."', true),
+('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Pattern: Emocionalni pribeh + statistika',
+$$Format: Pribeh - emoce - cislo - CTA. Struktura: 1. Situace (pribeh, se kterym se ctenar ztotozni). 2. Problem (bolest, frustrace). 3. Reseni (3D prohlidka). 4. Dukaz (konkretni statistika). 5. CTA (virtualview.cz). Priklad: Byt na trhu 4 mesice, kazdy tyden prohlidka, kazdy tyden zklamani — pak majitel pridal 3D prohlidku a prodal za 3 tydny.$$, true);
 
-('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Pattern: Číslo jako hook',
-'Formát: Konkrétní číslo → vysvětlení → benefit → CTA. Struktura: 1. Hook: Překvapivé číslo (360 000 Kč, 31 %, 71 %). 2. Kontext: Co to číslo znamená v praxi. 3. Proč: Logické vysvětlení (kupující ví co kupuje → ochota zaplatit více). 4. CTA. Příklad: „360 000 Kč. Tolik navíc dostanete za průměrný byt s 3D prohlídkou."', true),
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Pattern: Cislo jako hook',
+$$Format: Konkretni cislo - vysvetleni - benefit - CTA. Struktura: 1. Hook: Prekvapive cislo (360 000 Kc, 31 %, 71 %). 2. Kontext: Co to cislo znamena v praxi. 3. Proc: Logicke vysvetleni (kupujici vi co kupuje - ochota zaplatit vice). 4. CTA. Priklad: 360 000 Kc. Tolik navic dostanete za prumerny byt s 3D prohlidkou.$$, true);
 
-('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Pattern: Engagement / anketa / otázka',
-'Formát: Otázka do diskuse → kontext → jemný brand. Cíl: Generovat komentáře, sdílení a interakci. Algoritmy sítí preferují posty s vysokým engagement. Tyto posty neprodávají přímo — sbírají publikum. Příklady: „Kolik prohlídek jste měli, než jste prodali svůj byt?" „Jak si procházíte nemovitosti online? A) Fotky + popis B) Chci 3D prohlídku"', true),
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Pattern: Engagement / anketa / otazka',
+$$Format: Otazka do diskuse - kontext - jemny brand. Cil: Generovat komentare, sdileni a interakci. Algoritmy siti preferuji posty s vysokym engagement. Tyto posty neprodavaji primo — sbiraji publikum. Priklady: Kolik prohlidek jste meli, nez jste prodali svuj byt? Jak si prochazite nemovitosti online? A) Fotky + popis B) Chci 3D prohlidku$$, true);
 
-('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Editorial kalendář — 4 týdny',
-'Týden 1 — Awareness: IG: Žádná překvapení (kupující vs fotky), FB: Prodej rychleji (příběh), LI: Konec zbytečných prohlídek (data).
-Týden 2 — Engagement: IG: Lepší nájemci (storytelling), FB: Otázka do diskuse, LI: Rozhodněte se jistě (due diligence).
-Týden 3 — Consideration: IG: Ukažte svůj domov (hrdost), FB: Dokumentace (pojistná událost), LI: Rekonstrukce (praktický benefit).
-Týden 4 — Decision/Action: IG: Věděli jste, že? (statistika), FB: Anketa (engagement), LI: Prodejte za víc (číslo jako hook).
-Rytmus: 3 posty/týden (1 per platforma), rotace segmentů, střídání awareness → engagement → consideration → decision.', true);
+INSERT INTO knowledge_base (project_id, category, title, content, is_active) VALUES
+('17443720-68b7-460a-859e-28b1b5d66913', 'general', 'B2C Editorial kalendar — 4 tydny',
+$$Tyden 1 — Awareness: IG: Zadna prekvapeni (kupujici vs fotky), FB: Prodej rychleji (pribeh), LI: Konec zbytecnych prohlidek (data).
+Tyden 2 — Engagement: IG: Lepsi najemci (storytelling), FB: Otazka do diskuse, LI: Rozhodnete se jiste (due diligence).
+Tyden 3 — Consideration: IG: Ukazte svuj domov (hrdost), FB: Dokumentace (pojistna udalost), LI: Rekonstrukce (prakticky benefit).
+Tyden 4 — Decision/Action: IG: Vedeli jste, ze? (statistika), FB: Anketa (engagement), LI: Prodejte za vic (cislo jako hook).
+Rytmus: 3 posty/tyden (1 per platforma), rotace segmentu, stridani awareness - engagement - consideration - decision.$$, true);
 
 -- ===========================================
 -- 6. B2C PROMPT TEMPLATES

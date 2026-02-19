@@ -2054,7 +2054,7 @@ interface OrchestratorConfig {
 const DEFAULT_CONFIG: OrchestratorConfig = {
   enabled: true,
   posting_frequency: 'daily',
-  posting_times: ['09:00', '15:00'],
+  posting_times: ['09:00', '13:00', '15:00', '18:00'],
   max_posts_per_day: 2,
   content_strategy: '4-1-1',
   auto_publish: false,
@@ -2067,7 +2067,45 @@ const DEFAULT_CONFIG: OrchestratorConfig = {
 
 function getConfig(project: Record<string, unknown>): OrchestratorConfig {
   const raw = project.orchestrator_config as Partial<OrchestratorConfig> | null;
-  return { ...DEFAULT_CONFIG, ...raw };
+  const config = { ...DEFAULT_CONFIG, ...raw };
+
+  // If project has no custom posting_times, assign deterministic hours based on project ID
+  // This spreads 59 projects across hours 8-19 (CET) so they don't all fire at once
+  if (!raw?.posting_times && project.id) {
+    config.posting_times = getDefaultPostingTimes(project.id as string, config.posting_frequency);
+  }
+
+  return config;
+}
+
+/**
+ * Assign deterministic posting hours based on project ID hash.
+ * Spreads projects across hours 8-19 CET so cron load is distributed.
+ * - daily: 1 hour assigned (e.g. ['11:00'])
+ * - 2x_daily: 2 hours assigned (e.g. ['09:00', '16:00'])
+ * - 3x_week: 1 hour assigned
+ * - weekly: 1 hour assigned
+ */
+function getDefaultPostingTimes(projectId: string, frequency: string): string[] {
+  // Simple hash from project UUID → number
+  let hash = 0;
+  for (let i = 0; i < projectId.length; i++) {
+    hash = ((hash << 5) - hash + projectId.charCodeAt(i)) | 0;
+  }
+  hash = Math.abs(hash);
+
+  // Available posting hours: 8-19 CET (12 slots)
+  const SLOTS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+  const primarySlot = SLOTS[hash % SLOTS.length];
+
+  if (frequency === '2x_daily') {
+    // Second slot ~7 hours later, wrap around
+    const secondSlot = SLOTS[(hash + 7) % SLOTS.length];
+    const hours = [primarySlot, secondSlot].sort((a, b) => a - b);
+    return hours.map(h => `${String(h).padStart(2, '0')}:00`);
+  }
+
+  return [`${String(primarySlot).padStart(2, '0')}:00`];
 }
 
 /**
@@ -2208,14 +2246,12 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
     if (remainingSlots <= 0) { skip('daily_limit_reached'); continue; }
 
     // Generate one content group (= one topic, N platform variants)
+    // Tasks are created with scheduled_for=now so they execute in this same cron run.
+    // Execution delay between tasks is handled in runPendingTasks() (3-8s between each).
     const contentGroupId = randomUUID();
-    const staggerBase = Math.floor(Math.random() * 13) + 2 + (scheduled * 5);
 
     for (let i = 0; i < platforms.length; i++) {
       const platform = platforms[i];
-      // Stagger tasks: spread across time so they don't all hit AI at once
-      const staggerMinutes = staggerBase + (i * 2);
-      const scheduledFor = new Date(Date.now() + staggerMinutes * 60 * 1000);
       await createTask(project.id, 'generate_content', {
         platform,
         content_group_id: contentGroupId,
@@ -2223,7 +2259,7 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
         media_strategy: config.media_strategy,
         auto_publish: config.auto_publish,
         auto_publish_threshold: config.auto_publish_threshold,
-      }, { priority: 3, scheduledFor: scheduledFor.toISOString() });
+      }, { priority: 3 });
       scheduled++;
     }
 

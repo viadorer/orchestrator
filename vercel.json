@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/agent",
-      "schedule": "0 8,12,17 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/rss",

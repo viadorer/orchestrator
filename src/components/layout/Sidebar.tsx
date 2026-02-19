@@ -14,10 +14,11 @@ import {
   ChevronRight,
   Bot,
   MessageCircle,
+  PenSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 
-export type AdminView = 'dashboard' | 'projects' | 'agent' | 'generate' | 'review' | 'publish' | 'calendar' | 'chat' | 'settings';
+export type AdminView = 'dashboard' | 'projects' | 'agent' | 'generate' | 'manual-post' | 'review' | 'publish' | 'calendar' | 'chat' | 'settings';
 
 interface SidebarProps {
   currentView: AdminView;
@@ -29,6 +30,7 @@ const NAV_ITEMS: Array<{ view: AdminView; label: string; icon: React.ElementType
   { view: 'projects', label: 'Projekty', icon: FolderKanban },
   { view: 'agent', label: 'Agent Hugo', icon: Bot },
   { view: 'generate', label: 'Generovat', icon: Sparkles },
+  { view: 'manual-post', label: 'Ruční post', icon: PenSquare },
   { view: 'review', label: 'Review', icon: ClipboardCheck },
   { view: 'publish', label: 'Publikovat', icon: Send },
   { view: 'calendar', label: 'Kalendář', icon: Calendar },

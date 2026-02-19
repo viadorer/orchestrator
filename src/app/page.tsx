@@ -13,6 +13,7 @@ import { CalendarView } from '@/components/calendar/CalendarView';
 import { SettingsView } from '@/components/settings/SettingsView';
 import { AgentView } from '@/components/agent/AgentView';
 import { ChatView } from '@/components/chat/ChatView';
+import { ManualPostView } from '@/components/manual-post/ManualPostView';
 import { Loader2 } from 'lucide-react';
 
 export default function Home() {
@@ -52,6 +53,7 @@ export default function Home() {
         {view === 'projects' && <ProjectsView />}
         {view === 'agent' && <AgentView />}
         {view === 'generate' && <GenerateView />}
+        {view === 'manual-post' && <ManualPostView />}
         {view === 'review' && <ReviewView />}
         {view === 'publish' && <PublishView />}
         {view === 'calendar' && <CalendarView />}

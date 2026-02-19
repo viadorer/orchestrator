@@ -62,12 +62,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
       }
     }
-    const { event, timestamp, data } = payload;
+    const { event, timestamp, post } = payload;
 
-    console.log('[webhook-getlate] Received:', event, data);
+    console.log('[webhook-getlate] Received:', event, post);
 
     // Validate payload
-    if (!event || !data) {
+    if (!event || !post) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
@@ -75,10 +75,10 @@ export async function POST(request: Request) {
     const { data: queueItems } = await supabase
       .from('content_queue')
       .select('id, project_id, status, text_content')
-      .eq('late_post_id', data.postId);
+      .eq('late_post_id', post.id);
 
     if (!queueItems || queueItems.length === 0) {
-      console.log('[webhook-getlate] No queue item found for late_post_id:', data.postId);
+      console.log('[webhook-getlate] No queue item found for late_post_id:', post.id);
       // Not an error — might be a post created outside Orchestrator
       return NextResponse.json({ received: true, matched: false });
     }
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
           .from('content_queue')
           .update({
             status: 'published',
-            sent_at: data.publishedAt || new Date().toISOString(),
+            sent_at: post.publishedAt || new Date().toISOString(),
           })
           .eq('id', queueItem.id);
 
@@ -102,14 +102,14 @@ export async function POST(request: Request) {
           project_id: queueItem.project_id,
           action: 'post_published_webhook',
           details: {
-            late_post_id: data.postId,
-            platform: data.platform,
-            published_at: data.publishedAt,
+            late_post_id: post.id,
+            platforms: post.platforms,
+            published_at: post.publishedAt,
             queue_id: queueItem.id,
           },
         });
 
-        console.log('[webhook-getlate] Post published:', data.postId);
+        console.log('[webhook-getlate] Post published:', post.id);
         break;
       }
 
@@ -127,44 +127,45 @@ export async function POST(request: Request) {
           project_id: queueItem.project_id,
           action: 'post_failed_webhook',
           details: {
-            late_post_id: data.postId,
-            platform: data.platform,
-            error: data.error || 'Unknown error',
+            late_post_id: post.id,
+            platforms: post.platforms,
+            status: post.status,
             queue_id: queueItem.id,
           },
         });
 
-        console.log('[webhook-getlate] Post failed:', data.postId, data.error);
+        console.log('[webhook-getlate] Post failed:', post.id);
         break;
       }
 
       case 'post.scheduled': {
         // Optional: update scheduled_for if getLate changed it
-        if (data.scheduledFor) {
+        if (post.scheduledFor) {
           await supabase
             .from('content_queue')
             .update({
-              scheduled_for: data.scheduledFor,
+              scheduled_for: post.scheduledFor,
             })
             .eq('id', queueItem.id);
         }
 
-        console.log('[webhook-getlate] Post scheduled:', data.postId);
+        console.log('[webhook-getlate] Post scheduled:', post.id);
         break;
       }
 
       case 'account.disconnected': {
         // Log account disconnect — admin should reconnect in getLate dashboard
+        // Note: account events don't have post object, need to handle differently
         await supabase.from('agent_log').insert({
           action: 'account_disconnected_webhook',
           details: {
-            platform: data.platform,
-            account_id: data.accountId,
+            event,
             timestamp,
+            payload,
           },
         });
 
-        console.log('[webhook-getlate] Account disconnected:', data.platform, data.accountId);
+        console.log('[webhook-getlate] Account disconnected');
         break;
       }
 

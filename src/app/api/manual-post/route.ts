@@ -189,11 +189,11 @@ async function adaptTextForPlatform(
   const styleRules = projectData.style_rules as { max_length?: number } | null;
 
   const platformLimits: Record<string, { maxChars: number; tips: string }> = {
-    facebook: { maxChars: 63206, tips: 'Může být delší, přátelský tón, emoji OK' },
+    facebook: { maxChars: 63206, tips: 'Může být delší, přátelský tón, krátké odstavce' },
     instagram: { maxChars: 2200, tips: 'Krátký hook na začátek, hashtagy na konec, max 30 hashtagů' },
     linkedin: { maxChars: 3000, tips: 'Profesionální tón, krátké odstavce, hook na první řádek' },
     x: { maxChars: 280, tips: 'Extrémně stručné, bez hashtagů v textu, max 1-2 hashtagy' },
-    tiktok: { maxChars: 4000, tips: 'Neformální, emoji, trendy hashtagy' },
+    tiktok: { maxChars: 4000, tips: 'Neformální, trendy hashtagy' },
     threads: { maxChars: 500, tips: 'Konverzační tón, krátké' },
   };
 
@@ -204,7 +204,10 @@ async function adaptTextForPlatform(
 PŮVODNÍ TEXT:
 ${originalText}
 
-PRAVIDLA:
+KRITICKÉ PRAVIDLO:
+- ABSOLUTNĚ ŽÁDNÉ emotikony/emoji. Emoji jsou ZAKÁZANÉ. Nikdy nepoužívej Unicode emoji symboly (žádné 🤔📈💰🤩😉👋🤯🏡🌍 ani jakékoli jiné).
+
+DALŠÍ PRAVIDLA:
 - Max ${limit.maxChars} znaků
 - ${limit.tips}
 - Tón: ${mood?.tone || 'profesionální'}
@@ -230,6 +233,11 @@ VÝSTUP: Pouze přizpůsobený text, nic jiného. Zachovej smysl a klíčová sd
   if (!response.ok) return originalText;
 
   const data = await response.json();
-  const adapted = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-  return adapted || originalText;
+  let adapted = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  if (!adapted) return originalText;
+
+  // Safety net: strip any emoji that Gemini might have added despite instructions
+  adapted = adapted.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '').replace(/\s{2,}/g, ' ').trim();
+
+  return adapted;
 }

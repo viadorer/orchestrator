@@ -87,7 +87,7 @@ export async function POST(request: Request) {
           platforms: [platform],
           target_platform: platform,
           status,
-          source: 'manual_post',
+          source: 'manual',
           ai_scores: { overall: 10, creativity: 10, tone_match: 10, hallucination_risk: 10, value_score: 10 },
           generation_context: {
             source: 'manual_post',

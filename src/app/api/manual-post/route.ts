@@ -83,7 +83,7 @@ export async function POST(request: Request) {
         const insertData: Record<string, unknown> = {
           project_id: proj.id,
           text_content: finalText,
-          content_type: 'manual',
+          content_type: 'educational',
           platforms: [platform],
           target_platform: platform,
           status,

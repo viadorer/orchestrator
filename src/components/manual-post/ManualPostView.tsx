@@ -148,17 +148,8 @@ export function ManualPostView() {
       const res = await fetch('/api/media/upload', { method: 'POST', body: formData });
       const data = await res.json();
 
-      if (data.results?.[0]?.success) {
-        // Get public URL from media_assets
-        const assetId = data.results[0].asset_id;
-        // Fetch the public URL
-        const assetRes = await fetch(`/api/media/${assetId}`).catch(() => null);
-        let publicUrl = '';
-        if (assetRes?.ok) {
-          const assetData = await assetRes.json();
-          publicUrl = assetData.public_url || '';
-        }
-
+      if (data.results?.[0]?.success && data.results[0].public_url) {
+        const publicUrl = data.results[0].public_url;
         setMedia(prev => prev.map((m, i) => i === index ? { ...m, uploading: false, uploaded: true, public_url: publicUrl } : m));
         return publicUrl;
       } else {

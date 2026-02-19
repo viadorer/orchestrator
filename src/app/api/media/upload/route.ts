@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No files provided' }, { status: 400 });
   }
 
-  const results: Array<{ file_name: string; success: boolean; asset_id?: string; error?: string }> = [];
+  const results: Array<{ file_name: string; success: boolean; asset_id?: string; public_url?: string; error?: string }> = [];
 
   for (const file of files) {
     try {
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
         continue;
       }
 
-      results.push({ file_name: file.name, success: true, asset_id: asset.id });
+      results.push({ file_name: file.name, success: true, asset_id: asset.id, public_url: publicUrl });
     } catch (err) {
       results.push({ file_name: file.name, success: false, error: err instanceof Error ? err.message : 'Unknown error' });
     }

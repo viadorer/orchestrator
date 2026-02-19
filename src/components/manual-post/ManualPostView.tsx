@@ -456,92 +456,103 @@ export function ManualPostView() {
           </div>
 
           {/* Right: Project picker (2 cols) */}
-          <div className="lg:col-span-2 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Projekty a sítě</label>
-              <input
-                value={projectSearch}
-                onChange={e => setProjectSearch(e.target.value)}
-                placeholder="Hledat projekt..."
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              />
-              {projectSearch && filteredProjects.length > 0 && (
-                <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-800 bg-slate-900">
-                  {filteredProjects.slice(0, 10).map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => addProject(p)}
-                      className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center justify-between"
-                    >
-                      <span>{p.name}</span>
-                      <span className="text-xs text-slate-500">{p.platforms?.length || 0} sítí</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+          <div className="lg:col-span-2 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-300">Projekty a sítě</label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (selectedProjects.length === projects.length) {
+                      setSelectedProjects([]);
+                    } else {
+                      setSelectedProjects(projects.map(p => {
+                        const connected = (p.platforms || []).filter(pl => p.late_accounts?.[pl]);
+                        return {
+                          id: p.id, name: p.name, platforms: p.platforms || [],
+                          selectedPlatforms: connected.length > 0 ? [...connected] : [...(p.platforms || [])],
+                          connectedPlatforms: connected,
+                        };
+                      }));
+                    }
+                  }}
+                  className="text-[11px] text-violet-400 hover:text-violet-300 transition-colors"
+                >
+                  {selectedProjects.length === projects.length ? 'Zrušit vše' : 'Vybrat vše'}
+                </button>
+                <span className="text-[11px] text-slate-600">{selectedProjects.length}/{projects.length}</span>
+              </div>
             </div>
 
-            {/* Selected projects */}
-            <div className="space-y-3">
-              {selectedProjects.length === 0 && (
-                <div className="text-center py-8 text-slate-600">
-                  <Send className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">Vyberte projekty kam odeslat</p>
-                </div>
-              )}
+            <input
+              value={projectSearch}
+              onChange={e => setProjectSearch(e.target.value)}
+              placeholder="Filtrovat projekty..."
+              className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
 
-              {selectedProjects.map(proj => (
-                <div key={proj.id} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-white">{proj.name}</span>
-                    <div className="flex items-center gap-2">
+            {/* All projects with checkboxes */}
+            <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
+              {projects
+                .filter(p => !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase()))
+                .map(project => {
+                  const isSelected = selectedProjects.some(sp => sp.id === project.id);
+                  const selectedProj = selectedProjects.find(sp => sp.id === project.id);
+                  const connected = (project.platforms || []).filter(pl => project.late_accounts?.[pl]);
+
+                  return (
+                    <div key={project.id} className={`rounded-lg border transition-colors ${
+                      isSelected ? 'border-violet-500/30 bg-violet-600/5' : 'border-slate-800 bg-slate-900'
+                    }`}>
+                      {/* Project checkbox row */}
                       <button
-                        onClick={() => selectAllPlatforms(proj.id)}
-                        className="text-[10px] text-violet-400 hover:text-violet-300"
+                        onClick={() => {
+                          if (isSelected) {
+                            removeProject(project.id);
+                          } else {
+                            addProject(project);
+                          }
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left"
                       >
-                        Vše
+                        <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                          isSelected ? 'bg-violet-600 border-violet-500' : 'border-slate-600 bg-slate-800'
+                        }`}>
+                          {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                        </div>
+                        <span className={`text-sm font-medium flex-1 truncate ${isSelected ? 'text-white' : 'text-slate-400'}`}>
+                          {project.name}
+                        </span>
+                        <span className="text-[10px] text-slate-600 flex-shrink-0">
+                          {connected.length}/{(project.platforms || []).length}
+                        </span>
                       </button>
-                      <button
-                        onClick={() => removeProject(proj.id)}
-                        className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-red-400 transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+
+                      {/* Platform chips (shown when selected) */}
+                      {isSelected && selectedProj && (
+                        <div className="px-3 pb-2 flex flex-wrap gap-1">
+                          {selectedProj.platforms.map(platform => {
+                            const isPlatformSelected = selectedProj.selectedPlatforms.includes(platform);
+                            const isConnected = connected.includes(platform);
+                            return (
+                              <button
+                                key={platform}
+                                onClick={() => togglePlatform(project.id, platform)}
+                                className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                  isPlatformSelected
+                                    ? 'bg-violet-600/20 text-violet-300'
+                                    : 'bg-slate-800 text-slate-500 hover:text-slate-300'
+                                }`}
+                              >
+                                {PLATFORM_LABELS[platform] || platform}
+                                {!isConnected && <span className="text-amber-500">!</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {proj.platforms.map(platform => {
-                      const isSelected = proj.selectedPlatforms.includes(platform);
-                      const isConnected = proj.connectedPlatforms.includes(platform);
-                      return (
-                        <button
-                          key={platform}
-                          onClick={() => togglePlatform(proj.id, platform)}
-                          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
-                            isSelected
-                              ? 'bg-violet-600/20 text-violet-300 border border-violet-500/30'
-                              : 'bg-slate-800 text-slate-500 border border-transparent hover:text-slate-300'
-                          }`}
-                        >
-                          <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${
-                            isSelected ? (PLATFORM_COLORS[platform] || 'bg-slate-600') : 'bg-slate-700'
-                          }`}>
-                            {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
-                          </div>
-                          {PLATFORM_LABELS[platform] || platform}
-                          {!isConnected && (
-                            <span className="text-[9px] text-amber-500" title="Není propojeno s getLate">⚠</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-2 text-[10px] text-slate-600">
-                    {proj.selectedPlatforms.length} z {proj.platforms.length} sítí •
-                    {proj.connectedPlatforms.length} propojených
-                  </div>
-                </div>
-              ))}
+                  );
+                })}
             </div>
 
             {/* Summary */}

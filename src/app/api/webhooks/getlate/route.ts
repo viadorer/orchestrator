@@ -1,11 +1,16 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 /**
  * getLate.dev Webhook Handler
  * POST /api/webhooks/getlate
  * 
  * Receives real-time notifications from getLate.dev about post status changes.
+ * 
+ * Security:
+ * - Verifies HMAC signature in X-Late-Signature header using GETLATE_WEBHOOK_SECRET
+ * - Rejects requests without valid signature
  * 
  * Events:
  * - post.scheduled: Post successfully scheduled
@@ -33,7 +38,30 @@ export async function POST(request: Request) {
   }
 
   try {
-    const payload = await request.json();
+    // Read raw body for signature verification
+    const rawBody = await request.text();
+    const payload = JSON.parse(rawBody);
+
+    // Verify HMAC signature if secret is configured
+    const webhookSecret = process.env.GETLATE_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const signature = request.headers.get('x-late-signature');
+      if (!signature) {
+        console.error('[webhook-getlate] Missing X-Late-Signature header');
+        return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+      }
+
+      // Compute expected signature
+      const hmac = crypto.createHmac('sha256', webhookSecret);
+      hmac.update(rawBody);
+      const expectedSignature = hmac.digest('hex');
+
+      // Compare signatures (timing-safe)
+      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+        console.error('[webhook-getlate] Invalid signature');
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
+    }
     const { event, timestamp, data } = payload;
 
     console.log('[webhook-getlate] Received:', event, data);

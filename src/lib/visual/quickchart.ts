@@ -35,6 +35,22 @@ export interface VisualIdentity {
   photography_color_grade?: string; // e.g. 'warm tones, slight film grain', 'desaturated, muted palette'
   photography_reference?: string;   // e.g. 'Similar to Apple product photography' or 'Czech street photography'
   brand_visual_keywords?: string;   // e.g. 'trust, stability, modern Czech family, home ownership'
+  // Text overlay settings for compositing text on photos
+  text_overlay?: {
+    enabled: boolean;
+    position: 'top' | 'center' | 'bottom';
+    max_chars: number;
+    max_lines: number;
+    uppercase: boolean;
+    font_size_ratio: number;       // % of image width, e.g. 0.045 = 4.5%
+    font_weight: 'normal' | 'bold';
+    bg_style: 'box' | 'gradient' | 'shadow_only' | 'none';
+    bg_opacity: number;            // 0-1
+    text_color: string;            // hex, e.g. '#FFFFFF'
+    accent_color: string;          // hex, for numbers/highlights
+    padding_ratio: number;         // % of image width, e.g. 0.06
+    highlight_numbers: boolean;    // render numbers in accent_color
+  };
 }
 
 const DEFAULT_IDENTITY: VisualIdentity = {

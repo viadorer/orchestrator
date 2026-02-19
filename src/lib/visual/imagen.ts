@@ -53,14 +53,48 @@ export interface ImagenResult {
 /**
  * Generate image with Imagen 4 and save to Supabase Storage + media_assets
  */
+export interface TextOverlayConfig {
+  enabled: boolean;
+  position: 'top' | 'center' | 'bottom';
+  max_chars: number;
+  max_lines: number;
+  uppercase: boolean;
+  font_size_ratio: number;
+  font_weight: 'normal' | 'bold';
+  bg_style: 'box' | 'gradient' | 'shadow_only' | 'none';
+  bg_opacity: number;
+  text_color: string;
+  accent_color: string;
+  padding_ratio: number;
+  highlight_numbers: boolean;
+}
+
+export const DEFAULT_TEXT_OVERLAY: TextOverlayConfig = {
+  enabled: false,
+  position: 'bottom',
+  max_chars: 50,
+  max_lines: 2,
+  uppercase: true,
+  font_size_ratio: 0.045,
+  font_weight: 'bold',
+  bg_style: 'gradient',
+  bg_opacity: 0.6,
+  text_color: '#FFFFFF',
+  accent_color: '#FACC15',
+  padding_ratio: 0.06,
+  highlight_numbers: true,
+};
+
 export async function generateAndStoreImage(options: {
   projectId: string;
   imagePrompt: string;
   platform: string;
   postId?: string;
   logoUrl?: string | null;
+  overlayText?: string | null;
+  textOverlayConfig?: Partial<TextOverlayConfig> | null;
 }): Promise<ImagenResult> {
-  const { projectId, imagePrompt, platform, postId, logoUrl } = options;
+  const { projectId, imagePrompt, platform, postId, logoUrl, overlayText, textOverlayConfig } = options;
 
   if (!GEMINI_API_KEY) {
     return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: 'GOOGLE_GENERATIVE_AI_API_KEY not set' };
@@ -93,6 +127,16 @@ export async function generateAndStoreImage(options: {
         finalImageBuffer = await compositeWithLogo(finalImageBuffer, logoUrl);
       } catch {
         // Logo compositing failed, use original image
+      }
+    }
+
+    // 3b. Text overlay (AFTER logo — text should be on top of everything)
+    const mergedOverlayConfig = { ...DEFAULT_TEXT_OVERLAY, ...textOverlayConfig };
+    if (overlayText && mergedOverlayConfig.enabled) {
+      try {
+        finalImageBuffer = await compositeWithText(finalImageBuffer, overlayText, mergedOverlayConfig);
+      } catch (e) {
+        console.error('[imagen] Text overlay failed:', e);
       }
     }
 
@@ -211,6 +255,7 @@ export async function generateAndStoreImage(options: {
       prompt_length: imagePrompt.length,
       file_size: finalImageBuffer.length,
       has_logo: !!logoUrl,
+      has_text_overlay: !!(overlayText && mergedOverlayConfig.enabled),
       post_id: postId || null,
     });
 
@@ -395,6 +440,120 @@ async function compositeWithLogo(imageBuffer: Buffer, logoUrl: string): Promise<
     // sharp not available — return image without logo
     return imageBuffer;
   }
+}
+
+/**
+ * Composite text overlay on image using Sharp + SVG
+ * Supports: position (top/center/bottom), background style (box/gradient/shadow_only/none),
+ * uppercase, number highlighting, configurable font size and padding.
+ */
+async function compositeWithText(
+  imageBuffer: Buffer,
+  text: string,
+  config: TextOverlayConfig
+): Promise<Buffer> {
+  const sharp = (await import('sharp')).default;
+  const meta = await sharp(imageBuffer).metadata();
+  const w = meta.width || 1080;
+  const h = meta.height || 1350;
+
+  // Truncate text to max_chars
+  let displayText = text.slice(0, config.max_chars);
+  if (config.uppercase) displayText = displayText.toUpperCase();
+
+  // Escape XML entities
+  const escapeXml = (s: string) => s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  const fontSize = Math.round(w * config.font_size_ratio);
+  const lineHeight = Math.round(fontSize * 1.45);
+  const padding = Math.round(w * config.padding_ratio);
+  const fontWeight = config.font_weight === 'bold' ? 'bold' : 'normal';
+
+  // Word-wrap into lines
+  const words = displayText.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = '';
+  const maxCharsPerLine = Math.floor((w - padding * 2) / (fontSize * 0.55));
+
+  for (const word of words) {
+    if (currentLine && (currentLine + ' ' + word).length > maxCharsPerLine) {
+      lines.push(currentLine);
+      currentLine = word;
+      if (lines.length >= config.max_lines) break;
+    } else {
+      currentLine = currentLine ? currentLine + ' ' + word : word;
+    }
+  }
+  if (currentLine && lines.length < config.max_lines) lines.push(currentLine);
+
+  const totalTextHeight = lines.length * lineHeight;
+  const boxHeight = totalTextHeight + padding * 1.5;
+
+  // Calculate Y position based on config.position
+  let boxY: number;
+  if (config.position === 'top') {
+    boxY = 0;
+  } else if (config.position === 'center') {
+    boxY = Math.round((h - boxHeight) / 2);
+  } else {
+    boxY = h - boxHeight;
+  }
+
+  // Build background SVG element
+  let bgSvg = '';
+  if (config.bg_style === 'box') {
+    bgSvg = `<rect x="0" y="${boxY}" width="${w}" height="${boxHeight}" fill="rgba(0,0,0,${config.bg_opacity})" />`;
+  } else if (config.bg_style === 'gradient') {
+    const gradY1 = config.position === 'top' ? '0%' : `${Math.round((boxY - h * 0.1) / h * 100)}%`;
+    const gradY2 = config.position === 'top' ? `${Math.round(boxHeight / h * 100 + 10)}%` : '100%';
+    const stops = config.position === 'top'
+      ? `<stop offset="0%" stop-color="black" stop-opacity="${config.bg_opacity}"/><stop offset="100%" stop-color="black" stop-opacity="0"/>`
+      : `<stop offset="0%" stop-color="black" stop-opacity="0"/><stop offset="100%" stop-color="black" stop-opacity="${config.bg_opacity}"/>`;
+    bgSvg = `
+      <defs><linearGradient id="tg" x1="0" y1="${gradY1}" x2="0" y2="${gradY2}" gradientUnits="userSpaceOnUse">${stops}</linearGradient></defs>
+      <rect x="0" y="${config.position === 'top' ? 0 : boxY - h * 0.1}" width="${w}" height="${boxHeight + h * 0.1}" fill="url(#tg)" />`;
+  }
+  // shadow_only and none: no background element
+
+  // Build text lines with optional number highlighting
+  const textStartY = boxY + padding * 0.75 + fontSize;
+  const textLines = lines.map((line, i) => {
+    const y = textStartY + i * lineHeight;
+    const x = padding;
+
+    if (config.highlight_numbers) {
+      // Split line into segments: numbers vs text
+      const parts = line.split(/(\d[\d\s,.%×x+−-]*\d|\d+\s*%|\d+)/g);
+      let svgLine = `<text x="${x}" y="${y}" font-family="sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${escapeXml(config.text_color)}">`;
+      for (const part of parts) {
+        if (/\d/.test(part)) {
+          svgLine += `<tspan fill="${escapeXml(config.accent_color)}">${escapeXml(part)}</tspan>`;
+        } else {
+          svgLine += escapeXml(part);
+        }
+      }
+      svgLine += '</text>';
+      return svgLine;
+    }
+
+    return `<text x="${x}" y="${y}" font-family="sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${escapeXml(config.text_color)}">${escapeXml(line)}</text>`;
+  }).join('\n    ');
+
+  const svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+    ${bgSvg}
+    ${textLines}
+  </svg>`;
+
+  console.log(`[imagen] Text overlay: ${lines.length} lines, pos=${config.position}, bg=${config.bg_style}, fontSize=${fontSize}`);
+
+  return sharp(imageBuffer)
+    .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+    .png()
+    .toBuffer();
 }
 
 /**

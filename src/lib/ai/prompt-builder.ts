@@ -261,11 +261,7 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
     : '{ "width": 1200, "height": 630, "aspectRatio": "1.91:1" }';
 
   const platformLimits = PLATFORM_LIMITS[ctx.platform];
-  const emojiRule = platformLimits?.contentSpec.emojiPolicy === 'none'
-    ? '- ŽÁDNÉ emotikony/emoji'
-    : platformLimits?.contentSpec.emojiPolicy === 'minimal'
-      ? '- Emoji: maximálně 1-2, pouze pokud přidávají hodnotu'
-      : '- Emoji: povoleny střídmě, max 3-4';
+  const emojiRule = '- ABSOLUTNĚ ŽÁDNÉ emotikony/emoji v textu. Emoji jsou ZAKÁZANÉ. Nikdy nepoužívej Unicode emoji symboly.';
 
   const hashtagRule = platformLimits?.contentSpec.hashtagPlacement === 'none'
     ? '- ŽÁDNÉ hashtagy (#) v textu'

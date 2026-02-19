@@ -170,6 +170,11 @@ export async function POST(request: Request) {
     failed: results.filter(r => !r.success).length,
     total: results.length,
     results,
+    debug: {
+      media_urls_received: media_urls || [],
+      media_count: media_urls?.length || 0,
+      image_url_used: imageUrl,
+    },
   });
 }
 
@@ -238,7 +243,11 @@ VÝSTUP: Pouze přizpůsobený text, nic jiného. Zachovej smysl a klíčová sd
   if (!adapted) return originalText;
 
   // Safety net: strip any emoji that Gemini might have added despite instructions
-  adapted = adapted.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '').replace(/\s{2,}/g, ' ').trim();
+  // Replace emoji with empty string, but preserve newlines and formatting
+  adapted = adapted
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, '')
+    .replace(/ {2,}/g, ' ')  // Collapse multiple spaces (but not newlines)
+    .trim();
 
   return adapted;
 }

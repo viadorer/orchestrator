@@ -233,13 +233,15 @@ export function PublishView() {
             <div
               key={i}
               className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
-                r.status === 'sent'
-                  ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-                  : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                r.status === 'failed'
+                  ? 'bg-red-500/10 border border-red-500/20 text-red-400'
+                  : r.status === 'scheduled'
+                    ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                    : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
               }`}
             >
-              {r.status === 'sent' ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-              {r.status === 'sent' ? 'Odesláno' : `Chyba: ${r.error}`}
+              {r.status === 'failed' ? <XCircle className="w-4 h-4" /> : r.status === 'scheduled' ? <Clock className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+              {r.status === 'failed' ? `Chyba: ${r.error || 'Neznámá chyba'}` : r.status === 'scheduled' ? 'Naplánováno' : 'Odesláno'}
             </div>
           ))}
         </div>

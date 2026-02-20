@@ -1312,6 +1312,19 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Load first media asset from project for template previews
+  const [previewPhoto, setPreviewPhoto] = useState<string>('');
+  useEffect(() => {
+    fetch(`/api/media/project/${project.id}`)
+      .then(r => r.json())
+      .then(data => {
+        const assets = data.assets || [];
+        const photo = assets.find((a: Record<string, unknown>) => (a.file_type as string)?.startsWith('image'));
+        if (photo?.public_url) setPreviewPhoto(photo.public_url as string);
+      })
+      .catch(() => {});
+  }, [project.id]);
+
   // Photography preset state (photography_preset is stored in visual_identity JSONB but not in the TS interface)
   const presetInit = (vi as Record<string, unknown>).photography_preset as Record<string, unknown> | null ?? null;
   const ppPost = (presetInit?.post_processing as Record<string, unknown>) ?? {};
@@ -1514,7 +1527,8 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
             const accentHex = accent.replace('#', '');
             const textHex = textColor.replace('#', '');
             const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-            const url = `${baseUrl}/api/visual/template?t=${t.key}&hook=${encodeURIComponent(t.hook)}&body=${encodeURIComponent(t.body)}&subtitle=${encodeURIComponent(t.subtitle || '')}&project=${encodeURIComponent(project.name)}&bg=${bgHex}&accent=${accentHex}&text=${textHex}&logo=${encodeURIComponent(logoUrl || '')}&photo=${encodeURIComponent(t.photo || '')}&platform=facebook&w=600&h=315`;
+            const photoUrl = previewPhoto || t.photo || SAMPLE_PHOTO;
+            const url = `${baseUrl}/api/visual/template?t=${t.key}&hook=${encodeURIComponent(t.hook)}&body=${encodeURIComponent(t.body)}&subtitle=${encodeURIComponent(t.subtitle || '')}&project=${encodeURIComponent(project.name)}&bg=${bgHex}&accent=${accentHex}&text=${textHex}&logo=${encodeURIComponent(logoUrl || '')}&photo=${encodeURIComponent(photoUrl)}&platform=facebook&w=600&h=315`;
             return (
               <div key={t.key} className="group relative">
                 <div className="rounded-lg overflow-hidden border border-slate-700 bg-slate-800 aspect-[1.91/1]">

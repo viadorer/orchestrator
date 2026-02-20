@@ -98,15 +98,17 @@ interface TemplateProps {
 
 // ─── Logo Component (vždy vpravo dole) ──────────────────────
 
-function LogoBadge({ logoUrl, project, textColor, accent, size = 'normal' }: { logoUrl: string; project: string; textColor: string; accent: string; size?: 'normal' | 'small' }) {
+function LogoBadge({ logoUrl, project, accent, size = 'normal' }: { logoUrl: string; project: string; textColor: string; accent: string; size?: 'normal' | 'small' }) {
   const logoSize = size === 'small' ? 28 : 40;
-  const fontSize = size === 'small' ? 12 : 16;
+  const hasLogo = logoUrl && logoUrl.length > 5;
+
+  if (!hasLogo && !project) return null;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center' }}>
-      {logoUrl ? (
+      {hasLogo ? (
         <img src={logoUrl} width={logoSize} height={logoSize} style={{ borderRadius: '8px' }} />
-      ) : project ? (
+      ) : (
         <div style={{
           width: `${logoSize}px`,
           height: `${logoSize}px`,
@@ -121,7 +123,7 @@ function LogoBadge({ logoUrl, project, textColor, accent, size = 'normal' }: { l
         }}>
           {project[0]?.toUpperCase()}
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

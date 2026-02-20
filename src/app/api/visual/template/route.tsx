@@ -319,6 +319,7 @@ function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoU
       }} />
       {hook && (
         <div style={{
+          display: 'flex',
           fontSize: `${hookSize}px`,
           fontWeight: 900,
           color: `#${textColor}`,
@@ -326,7 +327,7 @@ function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoU
           marginBottom: '6px',
         }}>
           <span style={{ color: `#${accent}` }}>{hook.match(/[\d,.%]+/)?.[0] || ''}</span>
-          {hook.replace(/[\d,.%]+/, '')}
+          <span>{hook.replace(/[\d,.%]+/, '')}</span>
         </div>
       )}
       {body && (

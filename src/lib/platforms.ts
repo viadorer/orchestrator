@@ -101,9 +101,10 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     imageSpecs: [
       { width: 1080, height: 1350, aspectRatio: '4:5', label: 'portrait' },
       { width: 1080, height: 1080, aspectRatio: '1:1', label: 'square' },
-      { width: 1080, height: 566, aspectRatio: '16:9', label: 'landscape' },
+      { width: 1080, height: 1920, aspectRatio: '9:16', label: 'story' },
+      { width: 1080, height: 566, aspectRatio: '1.91:1', label: 'landscape' },
     ],
-    videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 90, optimalDurationSec: 20, maxSizeMB: 4096, format: 'MP4' },
+    videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 90, optimalDurationSec: 15, maxSizeMB: 4096, format: 'MP4' },
     maxImages: 10,
     contentSpec: {
       tone: 'vizuální, casual, authentic, inspirativní',
@@ -113,7 +114,7 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
       hashtagPlacement: 'end',
       emojiPolicy: 'none',
     },
-    aiPromptHint: 'Instagram: Vizuál je král. Caption max 150 znaků, hook v prvních 125. Obrázek 1080×1350px portrait (4:5). 15-20 hashtagů na konci.',
+    aiPromptHint: 'Instagram: Vizuál je král. Caption max 150 znaků, hook v prvních 125. Obrázek: portrait 1080×1350 (4:5, NEJLEPŠÍ VOLBA), square 1080×1080 (1:1, dobré pro mřížku), story/reels 1080×1920 (9:16). NEPOŽÍVEJTE landscape — působí drobně. 15-20 hashtagů na konci.',
   },
   linkedin: {
     name: 'LinkedIn',

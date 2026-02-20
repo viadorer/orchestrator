@@ -498,12 +498,17 @@ async function generatePhotoVisual(
     };
   }
 
-  // Step 3: Fallback — return prompt text only
+  // Step 3: Fallback — Imagen failed, use placeholder image for template
+  // Generate template URL with a placeholder photo (will show brand frame with text+logo)
+  const placeholderUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1080&h=1350&fit=crop';
+  const templateUrl = buildPhotoTemplateUrl(placeholderUrl, ctx, { hookText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
+  
   return {
     visual_type: 'photo',
     chart_url: null,
     card_url: null,
     image_prompt: cleanPrompt,
+    template_url: templateUrl,
   };
 }
 

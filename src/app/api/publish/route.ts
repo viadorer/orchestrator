@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
-import { publishPost, buildPlatformsArray, type LateMediaItem } from '@/lib/getlate';
+import { getPublisher, buildPlatformsArray, type MediaItem } from '@/lib/publishers';
 import { validatePostMultiPlatform } from '@/lib/platforms';
 import { ensureImageAspectRatio } from '@/lib/visual/image-resize';
 import { NextResponse } from 'next/server';
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
 
     try {
       // Build media items from visual assets
-      const mediaItems: LateMediaItem[] = [];
+      const mediaItems: MediaItem[] = [];
       
       // Priority 1: media_urls array (multiple images from manual post)
       if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
@@ -103,7 +103,8 @@ export async function POST(request: Request) {
         }
       }
 
-      const lateResult = await publishPost({
+      const publisher = getPublisher();
+      const publishResult = await publisher.publish({
         content: post.text_content,
         platforms: platformEntries,
         mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
@@ -111,14 +112,18 @@ export async function POST(request: Request) {
         timezone: 'Europe/Prague',
       });
 
+      if (!publishResult.ok) {
+        throw new Error(publishResult.error);
+      }
+
       // Update status in DB
       await supabase
         .from('content_queue')
         .update({
-          status: scheduledFor ? 'scheduled' : 'sent',
-          sent_at: scheduledFor ? null : new Date().toISOString(),
+          status: publishResult.data.status,
+          sent_at: publishResult.data.status === 'sent' ? new Date().toISOString() : null,
           scheduled_for: scheduledFor || null,
-          late_post_id: lateResult._id,
+          late_post_id: publishResult.data.externalId,
         })
         .eq('id', post.id);
 
@@ -143,7 +148,7 @@ export async function POST(request: Request) {
           .eq('id', post.matched_media_id);
       }
 
-      results.push({ id: post.id, status: 'sent', late_post_id: lateResult._id });
+      results.push({ id: post.id, status: publishResult.data.status, late_post_id: publishResult.data.externalId });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       await supabase

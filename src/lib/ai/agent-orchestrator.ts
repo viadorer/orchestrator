@@ -2655,8 +2655,9 @@ export async function publishApprovedPosts(): Promise<{
   if (!posts || posts.length === 0) return { published: 0, failed: 0, skipped: 0 };
 
   // Lazy import to avoid circular deps
-  const { publishPost, buildPlatformsArray } = await import('@/lib/getlate');
+  const { getPublisher, buildPlatformsArray } = await import('@/lib/publishers');
   const { validatePostMultiPlatform } = await import('@/lib/platforms');
+  const publisher = getPublisher();
 
   let published = 0;
   let failed = 0;
@@ -2723,18 +2724,22 @@ export async function publishApprovedPosts(): Promise<{
         }
       }
 
-      const lateResult = await publishPost({
+      const publishResult = await publisher.publish({
         content: post.text_content,
         platforms: platformEntries,
         mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
         timezone: 'Europe/Prague',
       });
 
+      if (!publishResult.ok) {
+        throw new Error(publishResult.error);
+      }
+
       // Update status
       await supabase.from('content_queue').update({
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        late_post_id: lateResult._id,
+        status: publishResult.data.status,
+        sent_at: publishResult.data.status === 'sent' ? new Date().toISOString() : null,
+        late_post_id: publishResult.data.externalId,
       }).eq('id', post.id);
 
       // Record in post_history

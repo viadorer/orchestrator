@@ -117,14 +117,14 @@ interface TemplateProps {
 function getTemplateSizes(width: number, height: number) {
   const base = Math.min(width, height);
   return {
-    logo: Math.round(base * 0.07),
-    logoBorderRadius: Math.round(base * 0.01),
-    padding: Math.round(base * 0.03),
-    hookFont: Math.round(width * 0.045),
-    bodyFont: Math.round(width * 0.022),
-    subtitleFont: Math.round(width * 0.018),
-    accentBar: Math.round(base * 0.004),
-    dividerWidth: Math.round(base * 0.06),
+    logo: Math.round(base * 0.1),
+    logoBorderRadius: Math.round(base * 0.012),
+    padding: Math.round(base * 0.04),
+    hookFont: Math.round(width * 0.055),
+    bodyFont: Math.round(width * 0.028),
+    subtitleFont: Math.round(width * 0.022),
+    accentBar: Math.round(base * 0.005),
+    dividerWidth: Math.round(base * 0.07),
   };
 }
 

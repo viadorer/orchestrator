@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
   switch (template) {
     case 'photo_strip':
-      element = <PhotoStripTemplate {...props} />;
+      element = hasPhoto ? <PhotoStripWithPhoto {...props} /> : <PhotoStripNoPhoto {...props} />;
       break;
     case 'split':
       element = <SplitTemplate {...props} />;
@@ -294,96 +294,94 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
 }
 
 // ─── Template 2: Photo + Brand Strip ────────────────────────
+// Split into two components to avoid ALL ternary JSX in Satori
 
-function PhotoStripTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, hasLogo, hasPhoto }: TemplateProps) {
-  const stripHeight = Math.round(height * 0.28);
+function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoUrl, project, hasLogo }: { hook: string; body: string; accent: string; textColor: string; stripHeight: number; logoUrl: string; project: string; hasLogo: boolean }) {
   const hookSize = Math.min(stripHeight * 0.45, 52);
   const bodySize = Math.min(stripHeight * 0.2, 22);
-
   return (
     <div style={{
-      width: '100%',
-      height: '100%',
+      height: `${stripHeight}px`,
+      backgroundColor: 'transparent',
       display: 'flex',
       flexDirection: 'column',
+      justifyContent: 'center',
+      padding: '0 40px',
       position: 'relative',
-      overflow: 'hidden',
     }}>
-      {/* Photo area */}
       <div style={{
-        flex: 1,
-        display: 'flex',
-        position: 'relative',
-        overflow: 'hidden',
-        backgroundColor: `#${bg}`,
-      }}>
-        {hasPhoto ? <PhotoFull photoUrl={photoUrl} /> : <PhotoFallback bg={bg} accent={accent} textColor={textColor} />}
-        {/* Gradient fade to strip */}
+        position: 'absolute',
+        top: 0,
+        left: '40px',
+        right: '40px',
+        height: '3px',
+        background: `linear-gradient(90deg, #${accent}, transparent)`,
+      }} />
+      {hook && (
         <div style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: '60px',
-          background: `linear-gradient(transparent, #${bg})`,
-        }} />
-      </div>
-
-      {/* Brand strip */}
-      <div style={{
-        height: `${stripHeight}px`,
-        backgroundColor: `#${bg}`,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        padding: '0 40px',
-        position: 'relative',
-      }}>
-        {/* Accent line top of strip */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: '40px',
-          right: '40px',
-          height: '3px',
-          background: `linear-gradient(90deg, #${accent}, transparent)`,
-        }} />
-
-        {hook && (
-          <div style={{
-            fontSize: `${hookSize}px`,
-            fontWeight: 900,
-            color: `#${textColor}`,
-            lineHeight: 1.2,
-            marginBottom: '6px',
-          }}>
-            <span style={{ color: `#${accent}` }}>{hook.match(/[\d,.%]+/)?.[0] || ''}</span>
-            {hook.replace(/[\d,.%]+/, '')}
-          </div>
-        )}
-
-        {body && (
-          <div style={{
-            fontSize: `${bodySize}px`,
-            fontWeight: 400,
-            color: `#${textColor}`,
-            opacity: 0.8,
-            lineHeight: 1.4,
-          }}>
-            {body}
-          </div>
-        )}
-
-        {/* Logo — bottom right of strip */}
-        <div style={{
-          position: 'absolute',
-          bottom: '16px',
-          right: '30px',
-          display: 'flex',
+          fontSize: `${hookSize}px`,
+          fontWeight: 900,
+          color: `#${textColor}`,
+          lineHeight: 1.2,
+          marginBottom: '6px',
         }}>
-          {hasLogo ? <LogoBadgeImg logoUrl={logoUrl} size="small" /> : <LogoBadgeFallback project={project} accent={accent} size="small" />}
+          <span style={{ color: `#${accent}` }}>{hook.match(/[\d,.%]+/)?.[0] || ''}</span>
+          {hook.replace(/[\d,.%]+/, '')}
         </div>
+      )}
+      {body && (
+        <div style={{
+          fontSize: `${bodySize}px`,
+          fontWeight: 400,
+          color: `#${textColor}`,
+          opacity: 0.8,
+          lineHeight: 1.4,
+        }}>
+          {body}
+        </div>
+      )}
+      <div style={{
+        position: 'absolute',
+        bottom: '16px',
+        right: '30px',
+        display: 'flex',
+      }}>
+        {hasLogo ? <LogoBadgeImg logoUrl={logoUrl} size="small" /> : <LogoBadgeFallback project={project} accent={accent} size="small" />}
       </div>
+    </div>
+  );
+}
+
+function PhotoStripWithPhoto({ hook, body, project, bg, accent, textColor, logoUrl, photoUrl, width, height, hasLogo }: TemplateProps) {
+  const stripHeight = Math.round(height * 0.28);
+  const photoHeight = height - stripHeight;
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', backgroundColor: `#${bg}` }}>
+      <div style={{ width: `${width}px`, height: `${photoHeight}px`, display: 'flex', position: 'relative', overflow: 'hidden' }}>
+        <img src={photoUrl} width={width} height={photoHeight} style={{ objectFit: 'cover' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px', background: `linear-gradient(transparent, #${bg})` }} />
+      </div>
+      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} hasLogo={hasLogo} />
+    </div>
+  );
+}
+
+function PhotoStripNoPhoto({ hook, body, project, bg, accent, textColor, logoUrl, width, height, hasLogo }: TemplateProps) {
+  const stripHeight = Math.round(height * 0.28);
+  const photoHeight = height - stripHeight;
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', backgroundColor: `#${bg}` }}>
+      <div style={{ width: `${width}px`, height: `${photoHeight}px`, display: 'flex', position: 'relative', overflow: 'hidden' }}>
+        <div style={{
+          width: '100%', height: '100%',
+          background: `linear-gradient(135deg, #${bg} 0%, #${accent}33 100%)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ fontSize: '80px', opacity: 0.15, color: `#${textColor}` }}>📷</div>
+        </div>
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px', background: `linear-gradient(transparent, #${bg})` }} />
+      </div>
+      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} hasLogo={hasLogo} />
     </div>
   );
 }

@@ -76,6 +76,20 @@ export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAs
       return generateCardVisual(decision, ctx);
     case 'photo':
       return generatePhotoVisual(decision, ctx);
+    case 'none': {
+      // X/Twitter can skip visuals, all other platforms MUST have one
+      const noVisualPlatforms = ['x', 'twitter'];
+      if (noVisualPlatforms.includes(ctx.platform)) {
+        return { visual_type: 'none', chart_url: null, card_url: null, image_prompt: null };
+      }
+      // Force a card visual for platforms that require imagery
+      console.log(`[visual-agent] Platform ${ctx.platform} requires visual — forcing card`);
+      return generateCardVisual({
+        ...decision,
+        card_hook: decision.card_hook || ctx.text.split('\n')[0]?.trim().substring(0, 40) || ctx.projectName,
+        card_body: decision.card_body || ctx.text.split('\n').slice(1, 3).join(' ').substring(0, 80) || '',
+      }, ctx);
+    }
     default:
       return { visual_type: 'none', chart_url: null, card_url: null, image_prompt: null };
   }
@@ -231,12 +245,19 @@ function generateChartVisual(
  * Replaces the old /api/visual/card with richer, more branded design.
  */
 function generateCardVisual(
-  decision: { card_hook?: string; card_body?: string; card_subtitle?: string },
+  decision: { card_hook?: string; card_body?: string; card_subtitle?: string; template_key?: string },
   ctx: VisualContext,
 ): VisualAssets {
   const vi = ctx.visualIdentity;
+
+  // Use Hugo's template_key if valid, otherwise default to bold_card
+  let template: TemplateKey = 'bold_card';
+  if (decision.template_key && VALID_TEMPLATES.includes(decision.template_key as TemplateKey)) {
+    template = decision.template_key as TemplateKey;
+  }
+
   const params = new URLSearchParams({
-    t: 'bold_card',
+    t: template,
     hook: decision.card_hook || '',
     body: decision.card_body || '',
     subtitle: decision.card_subtitle || '',
@@ -258,6 +279,7 @@ function generateCardVisual(
     chart_url: null,
     card_url: cardUrl,
     image_prompt: null,
+    template_url: cardUrl,
   };
 }
 
@@ -274,15 +296,14 @@ type TemplateKey = typeof VALID_TEMPLATES[number];
 function buildPhotoTemplateUrl(
   photoUrl: string,
   ctx: VisualContext,
-  hookText?: string,
-  templateKey?: string,
+  opts?: { hookText?: string; bodyText?: string; subtitleText?: string; templateKey?: string },
 ): string {
   const vi = ctx.visualIdentity;
 
   // Use Hugo's choice if valid, otherwise fall back to platform heuristic
   let template: TemplateKey;
-  if (templateKey && VALID_TEMPLATES.includes(templateKey as TemplateKey)) {
-    template = templateKey as TemplateKey;
+  if (opts?.templateKey && VALID_TEMPLATES.includes(opts.templateKey as TemplateKey)) {
+    template = opts.templateKey as TemplateKey;
   } else {
     const verticalPlatforms = ['instagram', 'tiktok', 'pinterest', 'threads'];
     template = verticalPlatforms.includes(ctx.platform) ? 'gradient' : 'photo_strip';
@@ -298,9 +319,15 @@ function buildPhotoTemplateUrl(
     project: ctx.projectName,
   });
 
-  if (hookText) {
-    const hook = hookText.split(/[.!?\n]/)[0]?.trim().substring(0, 60) || '';
+  if (opts?.hookText) {
+    const hook = opts.hookText.split(/[.!?\n]/)[0]?.trim().substring(0, 60) || '';
     params.set('hook', hook);
+  }
+  if (opts?.bodyText) {
+    params.set('body', opts.bodyText.substring(0, 120));
+  }
+  if (opts?.subtitleText) {
+    params.set('subtitle', opts.subtitleText.substring(0, 80));
   }
 
   if (vi.logo_url) {
@@ -401,7 +428,7 @@ async function generatePhotoVisual(
   const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform);
   if (match) {
     console.log(`[visual-agent] Using library photo (similarity: ${match.similarity.toFixed(3)})`);
-    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, hookText, decision.template_key);
+    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, { hookText, templateKey: decision.template_key });
     return {
       visual_type: 'matched_photo',
       chart_url: null,
@@ -425,7 +452,7 @@ async function generatePhotoVisual(
   });
 
   if (result.success && result.public_url) {
-    const templateUrl = buildPhotoTemplateUrl(result.public_url, ctx, hookText, decision.template_key);
+    const templateUrl = buildPhotoTemplateUrl(result.public_url, ctx, { hookText, templateKey: decision.template_key });
     return {
       visual_type: 'generated_photo',
       chart_url: null,

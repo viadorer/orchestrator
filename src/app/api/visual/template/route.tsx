@@ -203,10 +203,10 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
         position: 'absolute',
         top: '50%',
         left: '50%',
-        width: '600px',
-        height: '600px',
+        width: `${Math.round(width * 0.7)}px`,
+        height: `${Math.round(width * 0.7)}px`,
         borderRadius: '50%',
-        background: `radial-gradient(circle, #${accent}22 0%, transparent 70%)`,
+        background: `radial-gradient(circle, #${accent}33 0%, transparent 70%)`,
         transform: 'translate(-50%, -50%)',
       }} />
 
@@ -216,7 +216,7 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
         top: 0,
         left: 0,
         right: 0,
-        height: '5px',
+        height: `${s.accentBar}px`,
         background: `linear-gradient(90deg, #${accent}, #${accent}88, #${accent})`,
       }} />
 
@@ -313,7 +313,7 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
         bottom: 0,
         left: 0,
         right: 0,
-        height: '5px',
+        height: `${s.accentBar}px`,
         background: `linear-gradient(90deg, #${accent}, #${accent}88, #${accent})`,
       }} />
     </div>
@@ -325,15 +325,15 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
 
 function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoUrl, project, logoMode, width, height }: { hook: string; body: string; accent: string; textColor: string; stripHeight: number; logoUrl: string; project: string; logoMode: 'img' | 'fallback'; width: number; height: number }) {
   const s = getTemplateSizes(width, height);
-  const hookSize = Math.round(stripHeight * 0.4);
-  const bodySize = Math.round(stripHeight * 0.18);
+  const hookSize = Math.round(stripHeight * 0.28);
+  const bodySize = Math.round(stripHeight * 0.15);
   return (
     <div style={{
       height: `${stripHeight}px`,
       backgroundColor: 'transparent',
       display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
       padding: `0 ${s.padding}px`,
       position: 'relative',
     }}>
@@ -345,36 +345,34 @@ function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoU
         height: `${s.accentBar}px`,
         background: `linear-gradient(90deg, #${accent}, transparent)`,
       }} />
-      {hook && (
-        <div style={{
-          display: 'flex',
-          fontSize: `${hookSize}px`,
-          fontWeight: 900,
-          color: `#${textColor}`,
-          lineHeight: 1.2,
-          marginBottom: '6px',
-        }}>
-          <span style={{ color: `#${accent}` }}>{hook.match(/[\d,.%]+/)?.[0] || ''}</span>
-          <span>{hook.replace(/[\d,.%]+/, '')}</span>
-        </div>
-      )}
-      {body && (
-        <div style={{
-          fontSize: `${bodySize}px`,
-          fontWeight: 400,
-          color: `#${textColor}`,
-          opacity: 0.8,
-          lineHeight: 1.4,
-        }}>
-          {body}
-        </div>
-      )}
-      <div style={{
-        position: 'absolute',
-        bottom: `${s.padding}px`,
-        right: `${s.padding}px`,
-        display: 'flex',
-      }}>
+      {/* Text area — left */}
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+        {hook && (
+          <div style={{
+            display: 'flex',
+            fontSize: `${hookSize}px`,
+            fontWeight: 900,
+            color: `#${textColor}`,
+            lineHeight: 1.2,
+            marginBottom: `${Math.round(stripHeight * 0.03)}px`,
+          }}>
+            {hook}
+          </div>
+        )}
+        {body && (
+          <div style={{
+            fontSize: `${bodySize}px`,
+            fontWeight: 400,
+            color: `#${textColor}`,
+            opacity: 0.7,
+            lineHeight: 1.4,
+          }}>
+            {body}
+          </div>
+        )}
+      </div>
+      {/* Logo — right */}
+      <div style={{ display: 'flex', marginLeft: `${s.padding}px` }}>
         <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={s.logo} borderRadius={s.logoBorderRadius} />
       </div>
     </div>
@@ -382,7 +380,7 @@ function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoU
 }
 
 function PhotoStripWithPhoto({ hook, body, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode }: TemplateProps) {
-  const stripHeight = Math.round(height * 0.28);
+  const stripHeight = Math.round(height * 0.22);
   const photoHeight = height - stripHeight;
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', backgroundColor: `#${bg}` }}>
@@ -396,7 +394,7 @@ function PhotoStripWithPhoto({ hook, body, project, bg, accent, textColor, logoU
 }
 
 function PhotoStripNoPhoto({ hook, body, project, bg, accent, textColor, logoUrl, width, height, logoMode }: TemplateProps) {
-  const stripHeight = Math.round(height * 0.28);
+  const stripHeight = Math.round(height * 0.22);
   const photoHeight = height - stripHeight;
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', backgroundColor: `#${bg}` }}>

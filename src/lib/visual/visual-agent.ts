@@ -63,7 +63,16 @@ export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAs
     const decision = await decideVisualType(ctx);
     // Use Hugo's image_prompt if available, otherwise generate a generic one
     const imagePrompt = decision.image_prompt || `Professional photo related to: ${ctx.text.substring(0, 150)}`;
-    return generatePhotoVisual({ image_prompt: imagePrompt, template_key: decision.template_key }, ctx);
+    // If Hugo picked bold_card, override to photo_strip (forcePhoto = we want a photo template)
+    const templateKey = (decision.template_key === 'bold_card') ? 'photo_strip' : (decision.template_key || 'photo_strip');
+    return generatePhotoVisual({
+      image_prompt: imagePrompt,
+      template_key: templateKey,
+      aspect_ratio: decision.aspect_ratio,
+      card_hook: decision.card_hook,
+      card_body: decision.card_body,
+      card_subtitle: decision.card_subtitle,
+    }, ctx);
   }
 
   // Step 1: Ask Hugo what visual type this post needs + template selection
@@ -478,12 +487,14 @@ async function generatePhotoVisual(
   }
 
   // Step 2: Generate with Imagen 4 (with per-project preset for quality control)
-  console.log('[visual-agent] No library match, generating with Imagen 4...');
+  // NOTE: Do NOT pass logoUrl here — template adds logo itself. Sharp logo overlay would cause double logo.
+  // Use platform variant (e.g. facebook_portrait) so Imagen generates correct aspect ratio
+  const imagenPlatform = resolvePlatformVariant(ctx.platform, decision.aspect_ratio);
+  console.log(`[visual-agent] No library match, generating with Imagen 4... (platform: ${imagenPlatform})`);
   const result = await generateAndStoreImage({
     projectId: ctx.projectId,
     imagePrompt: cleanPrompt,
-    platform: ctx.platform,
-    logoUrl: ctx.logoUrl,
+    platform: imagenPlatform,
     photographyPreset: ctx.photographyPreset,
   });
 

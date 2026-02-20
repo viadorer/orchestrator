@@ -589,11 +589,25 @@ export function buildPlatformPromptBlock(platform: string): string {
 
 /**
  * Get the default (first/recommended) image spec for a platform.
+ * Supports platform variants like 'facebook_portrait', 'instagram_square' etc.
  */
 export function getDefaultImageSpec(platform: string): ImageSpec | null {
-  const limits = PLATFORM_LIMITS[platform];
-  if (!limits || limits.imageSpecs.length === 0) return null;
-  return limits.imageSpecs[0];
+  // Direct match first (e.g. 'facebook', 'instagram')
+  const directLimits = PLATFORM_LIMITS[platform];
+  if (directLimits && directLimits.imageSpecs.length > 0) return directLimits.imageSpecs[0];
+
+  // Try variant match: 'facebook_portrait' → base='facebook', variant='portrait'
+  const variantMatch = platform.match(/^(.+?)_(portrait|square|landscape|story|vertical|pin|thumbnail|article_cover)$/);
+  if (variantMatch) {
+    const [, basePlatform, variantLabel] = variantMatch;
+    const baseLimits = PLATFORM_LIMITS[basePlatform];
+    if (baseLimits) {
+      const spec = baseLimits.imageSpecs.find(s => s.label === variantLabel);
+      if (spec) return spec;
+    }
+  }
+
+  return null;
 }
 
 /**

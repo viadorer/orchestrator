@@ -25,7 +25,7 @@ import { findMatchingMedia, markMediaUsed } from '@/lib/ai/vision-engine';
 import { getRelevantNews } from '@/lib/rss/fetcher';
 import { getNextContentType } from './content-engine';
 import { hugoEditorReview } from './hugo-editor';
-import { getDefaultImageSpec } from '@/lib/platforms';
+import { getDefaultImageSpec, buildPlatformPromptBlock, PLATFORM_LIMITS } from '@/lib/platforms';
 
 // ============================================
 // Constants
@@ -478,6 +478,9 @@ async function buildAgentPrompt(
         }
       }
 
+      // ---- Platform-specific content generation specs ----
+      parts.push(buildPlatformPromptBlock(platform));
+
       // ---- Creative instructions ----
       parts.push(`\n---\nGENERUJ příspěvek pro platformu: ${platform}`);
       parts.push(`Typ obsahu: ${contentType}`);
@@ -499,11 +502,25 @@ async function buildAgentPrompt(
 - creativity < 7 = AUTOMATICKY ZAMÍTNUTO a přegenerováno
 - Buď k sobě přísný. Pokud post připomíná něco, co už bylo publikováno, sniž creativity.`);
 
+      // ---- Platform-aware output format ----
+      const platformLimits = PLATFORM_LIMITS[platform];
+      const defaultImg = getDefaultImageSpec(platform);
+      const imgSpecExample = defaultImg
+        ? `{ "width": ${defaultImg.width}, "height": ${defaultImg.height}, "aspectRatio": "${defaultImg.aspectRatio}" }`
+        : '{ "width": 1200, "height": 630, "aspectRatio": "1.91:1" }';
+
+      const hashtagRule = platformLimits?.contentSpec.hashtagPlacement === 'none'
+        ? '- ŽÁDNÉ hashtagy (#) v textu'
+        : platformLimits?.contentSpec.hashtagPlacement === 'inline'
+          ? `- Hashtagy: max ${platformLimits.maxHashtags} INLINE v textu (ne na konci)`
+          : `- Hashtagy: max ${platformLimits?.maxHashtags || 5} na KONCI textu (ne v textu)`;
+
       parts.push(`\nVrať POUZE JSON:
 {
-  "text": "Text příspěvku",
-  "image_prompt": "Popis obrázku pro generování",
-  "alt_text": "Alt text",
+  "text": "Text příspěvku optimalizovaný pro ${platform}. Délka: ${platformLimits?.optimalChars || 500} znaků.",
+  "image_prompt": "DETAILED English scene description for photo generation",
+  "image_spec": ${imgSpecExample},
+  "alt_text": "Alt text pro obrázek v češtině",
   "scores": {
     "creativity": 1-10,
     "tone_match": 1-10,
@@ -511,7 +528,19 @@ async function buildAgentPrompt(
     "value_score": 1-10,
     "overall": 1-10
   }
-}`);
+}
+
+DŮLEŽITÉ PRAVIDLO PRO TEXT:
+${hashtagRule}
+- ABSOLUTNĚ ŽÁDNÉ emotikony/emoji v textu
+- ŽÁDNÉ URL odkazy
+- Text MUSÍ mít délku kolem ${platformLimits?.optimalChars || 500} znaků (max ${platformLimits?.maxChars || 2200})
+- Hook MUSÍ být v prvních ${platformLimits?.visibleChars || 200} znacích (to je vše co uživatel vidí)
+
+PRAVIDLA PRO image_prompt (KRITICKÉ):
+- MUSÍ být v angličtině
+- Piš jako FILMOVÝ REŽISÉR: konkrétní scéna, kdo, kde, co dělá, osvětlení, nálada
+- Aspect ratio: ${defaultImg?.aspectRatio || '1.91:1'}`);
       break;
     }
     case 'suggest_topics': {

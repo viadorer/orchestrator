@@ -50,11 +50,12 @@ export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAs
     const decision = await decideVisualType(ctx);
     // Use Hugo's image_prompt if available, otherwise generate a generic one
     const imagePrompt = decision.image_prompt || `Professional photo related to: ${ctx.text.substring(0, 150)}`;
-    return generatePhotoVisual({ image_prompt: imagePrompt }, ctx);
+    return generatePhotoVisual({ image_prompt: imagePrompt, template_key: decision.template_key }, ctx);
   }
 
-  // Step 1: Ask Hugo what visual type this post needs
+  // Step 1: Ask Hugo what visual type this post needs + template selection
   const decision = await decideVisualType(ctx);
+  console.log(`[visual-agent] Hugo decision: type=${decision.visual_type}, template=${decision.template_key || 'auto'}, reason=${decision.template_reason || '-'}`);
 
   // Step 2: Generate the visual based on decision
   switch (decision.visual_type) {
@@ -78,6 +79,7 @@ async function decideVisualType(ctx: VisualContext): Promise<{
   card_subtitle?: string;
   image_prompt?: string;
   template_key?: string;
+  template_reason?: string;
 }> {
   // Build brand context for visual decision
   const vi = ctx.visualIdentity as Record<string, string>;
@@ -93,7 +95,7 @@ async function decideVisualType(ctx: VisualContext): Promise<{
     ? `\nVIZUÁLNÍ IDENTITA ZNAČKY:\n${brandContext.join('\n')}`
     : '';
 
-  const prompt = `Analyzuj tento post a rozhodni, jaký vizuál potřebuje.
+  const prompt = `Analyzuj tento post a rozhodni, jaký vizuál potřebuje. Vyber KONKRÉTNÍ šablonu.
 
 POST:
 """
@@ -104,16 +106,32 @@ PROJEKT: ${ctx.projectName}
 PLATFORMA: ${ctx.platform}
 ${brandBlock}
 
-PRAVIDLA:
-- LinkedIn: Preferuj "card" (textová karta s velkým číslem) nebo "photo".
-- Instagram: VŽDY potřebuje vizuál. Preferuj "card" nebo "photo".
+PRAVIDLA PRO PLATFORMY:
+- LinkedIn: Preferuj "card" nebo "photo". Split layout funguje dobře.
+- Instagram: VŽDY potřebuje vizuál. Gradient overlay nebo text_logo pro engagement.
 - Facebook: "card" pokud jsou čísla, "photo" pro lifestyle, jinak "none".
 - X/Twitter: Většinou "none" (text stačí), "card" jen pro silná čísla.
 
 TYPY VIZUÁLŮ:
-1. "card" – pokud post začíná VELKÝM ČÍSLEM (hook). Číslo se zobrazí velké na tmavém pozadí.
+1. "card" – pokud post začíná VELKÝM ČÍSLEM (hook). Číslo se zobrazí velké.
 2. "photo" – pokud post potřebuje realistickou fotku (lifestyle, architektura, lidi).
 3. "none" – pokud text funguje sám o sobě.
+
+ŠABLONY (template_key) — vyber JEDNU podle obsahu a platformy:
+- "bold_card" → Velké číslo uprostřed, glow efekt, dekorativní rohy. PRO: statistiky, hook čísla, procenta.
+- "photo_strip" → Fotka nahoře (72%), brand pás dole s textem. PRO: lifestyle, architektura, obecné fotky.
+- "split" → Půlka fotka, půlka text vedle sebe. PRO: LinkedIn, profesionální obsah, delší text.
+- "gradient" → Fotka přes celou plochu, gradient overlay, bold text dole. PRO: Instagram, atmosférické, emocionální.
+- "text_logo" → Text vlevo nahoře, logo vpravo dole, fotka na pozadí. PRO: hook headline, krátký výrazný text, branding.
+- "minimal" → Jen fotka + malý brand badge. PRO: X/Twitter, repost, když fotka mluví sama.
+
+PRAVIDLA PRO VÝBĚR ŠABLONY:
+- Pokud je ČÍSLO hlavní hook → "bold_card"
+- Pokud je krátký výrazný headline (1-2 věty) + fotka → "text_logo" nebo "gradient"
+- Pokud je delší text s fotkou → "photo_strip" nebo "split"
+- Pokud fotka mluví sama → "minimal"
+- Instagram/TikTok preferuj vertikální: "gradient", "text_logo", "photo_strip"
+- LinkedIn/Facebook preferuj horizontální: "split", "photo_strip", "bold_card"
 
 PRAVIDLA PRO image_prompt (KRITICKÉ):
 - Piš v ANGLIČTINĚ, jako pokyn pro fotografa na place
@@ -123,14 +141,18 @@ PRAVIDLA PRO image_prompt (KRITICKÉ):
 - NIKDY nepiš genericky: "Professional photo of business" nebo "Happy people in office"
 - Zaměř se na EMOCI a PŘÍBĚH, ne na popis produktu
 - Pokud post mluví o konkrétním tématu (hypotéka, investice, rodina), popisuj REÁLNOU situaci
+- Pro "text_logo"/"gradient" šablony: fotka by měla mít VOLNÝ PROSTOR pro text (ne příliš detailní)
+- Pro "minimal": fotka musí být vizuálně silná sama o sobě
 
 Vrať POUZE JSON:
 {
   "visual_type": "card|photo|none",
+  "template_key": "bold_card|photo_strip|split|gradient|text_logo|minimal",
   "card_hook": "1,37" | null,
   "card_body": "dětí na ženu v ČR" | null,
   "card_subtitle": "Pro udržení populace je potřeba 2,1" | null,
-  "image_prompt": "Detailed English scene description for photographer – specific, cinematic, emotional" | null
+  "image_prompt": "Detailed English scene description for photographer – specific, cinematic, emotional" | null,
+  "template_reason": "Krátké zdůvodnění proč tato šablona (1 věta česky)"
 }`;
 
   const { text: rawResponse } = await generateText({
@@ -227,18 +249,31 @@ function generateCardVisual(
 }
 
 /**
+ * Valid template keys for brand frame templates.
+ */
+const VALID_TEMPLATES = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'minimal'] as const;
+type TemplateKey = typeof VALID_TEMPLATES[number];
+
+/**
  * Build a brand template URL for a photo visual.
- * Picks the best template based on platform and whether we have hook text.
+ * Uses Hugo's dynamic template_key selection. Falls back to platform-based heuristic.
  */
 function buildPhotoTemplateUrl(
   photoUrl: string,
   ctx: VisualContext,
   hookText?: string,
+  templateKey?: string,
 ): string {
   const vi = ctx.visualIdentity;
-  // Pick template: gradient for Instagram/TikTok (vertical), photo_strip for horizontal
-  const verticalPlatforms = ['instagram', 'tiktok', 'pinterest', 'threads'];
-  const template = verticalPlatforms.includes(ctx.platform) ? 'gradient' : 'photo_strip';
+
+  // Use Hugo's choice if valid, otherwise fall back to platform heuristic
+  let template: TemplateKey;
+  if (templateKey && VALID_TEMPLATES.includes(templateKey as TemplateKey)) {
+    template = templateKey as TemplateKey;
+  } else {
+    const verticalPlatforms = ['instagram', 'tiktok', 'pinterest', 'threads'];
+    template = verticalPlatforms.includes(ctx.platform) ? 'gradient' : 'photo_strip';
+  }
 
   const params = new URLSearchParams({
     t: template,
@@ -251,7 +286,6 @@ function buildPhotoTemplateUrl(
   });
 
   if (hookText) {
-    // Extract first sentence or first 60 chars as hook
     const hook = hookText.split(/[.!?\n]/)[0]?.trim().substring(0, 60) || '';
     params.set('hook', hook);
   }
@@ -319,7 +353,7 @@ async function matchMediaFromLibrary(
  * 3. Fallback → return image_prompt text only
  */
 async function generatePhotoVisual(
-  decision: { image_prompt?: string },
+  decision: { image_prompt?: string; template_key?: string },
   ctx: VisualContext,
 ): Promise<VisualAssets> {
   const rawPrompt = decision.image_prompt || '';
@@ -352,7 +386,7 @@ async function generatePhotoVisual(
   const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform);
   if (match) {
     console.log(`[visual-agent] Using library photo (similarity: ${match.similarity.toFixed(3)})`);
-    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, hookText);
+    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, hookText, decision.template_key);
     return {
       visual_type: 'matched_photo',
       chart_url: null,
@@ -375,7 +409,7 @@ async function generatePhotoVisual(
   });
 
   if (result.success && result.public_url) {
-    const templateUrl = buildPhotoTemplateUrl(result.public_url, ctx, hookText);
+    const templateUrl = buildPhotoTemplateUrl(result.public_url, ctx, hookText, decision.template_key);
     return {
       visual_type: 'generated_photo',
       chart_url: null,

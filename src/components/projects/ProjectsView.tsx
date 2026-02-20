@@ -1286,6 +1286,16 @@ function Field({ label, value, onChange, placeholder, multiline }: {
 const VISUAL_STYLES = ['minimal', 'bold', 'elegant', 'playful', 'corporate', 'dark', 'light'] as const;
 const FONTS = ['Inter', 'Poppins', 'Roboto', 'Montserrat', 'Open Sans', 'Lato', 'Raleway', 'Nunito', 'Source Sans Pro', 'DM Sans'] as const;
 
+const SAMPLE_PHOTO = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&h=400&fit=crop';
+const TEMPLATE_PREVIEWS: Array<{ key: string; label: string; desc: string; hook: string; body: string; subtitle?: string; photo?: string }> = [
+  { key: 'bold_card', label: 'Bold Card', desc: 'Velké číslo, glow efekt', hook: '1,37', body: 'dětí na ženu v ČR', subtitle: 'Zdroj: ČSÚ 2025' },
+  { key: 'photo_strip', label: 'Photo Strip', desc: 'Fotka + brand pás', hook: 'Nový pohled', body: 'na bydlení v Praze', photo: SAMPLE_PHOTO },
+  { key: 'split', label: 'Split', desc: 'Půlka fotka, půlka text', hook: 'Investice', body: 'která se vyplatí', photo: SAMPLE_PHOTO },
+  { key: 'gradient', label: 'Gradient', desc: 'Fotka + gradient overlay', hook: 'Budoucnost', body: 'začíná dnes', photo: SAMPLE_PHOTO },
+  { key: 'text_logo', label: 'Text + Logo', desc: 'Headline + branding', hook: 'Víte, kolik stojí', body: 'průměrný byt v Praze?', photo: SAMPLE_PHOTO },
+  { key: 'minimal', label: 'Minimal', desc: 'Jen fotka + badge', hook: '', body: '', photo: SAMPLE_PHOTO },
+];
+
 function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: Partial<Project>) => void }) {
   const vi = project.visual_identity || {
     primary_color: '#1a1a2e', secondary_color: '#16213e', accent_color: '#0f3460',
@@ -1489,6 +1499,47 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
         )}
         <p className="text-xs text-slate-500 mt-2">
           Používá se na kartách a jako overlay na AI generovaných obrázcích (Imagen).
+        </p>
+      </div>
+
+      {/* ---- Template Preview Gallery ---- */}
+      <div className="border-t border-slate-700 pt-6">
+        <h3 className="text-sm font-medium text-white mb-1">Šablony příspěvků</h3>
+        <p className="text-xs text-slate-500 mb-4">
+          Hugo automaticky vybírá šablonu podle obsahu a platformy. Takhle budou vypadat příspěvky s vašimi barvami.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {TEMPLATE_PREVIEWS.map(t => {
+            const bgHex = primary.replace('#', '');
+            const accentHex = accent.replace('#', '');
+            const textHex = textColor.replace('#', '');
+            const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+            const url = `${baseUrl}/api/visual/template?t=${t.key}&hook=${encodeURIComponent(t.hook)}&body=${encodeURIComponent(t.body)}&subtitle=${encodeURIComponent(t.subtitle || '')}&project=${encodeURIComponent(project.name)}&bg=${bgHex}&accent=${accentHex}&text=${textHex}&logo=${encodeURIComponent(logoUrl || '')}&photo=${encodeURIComponent(t.photo || '')}&platform=facebook&w=600&h=315`;
+            return (
+              <div key={t.key} className="group relative">
+                <div className="rounded-lg overflow-hidden border border-slate-700 bg-slate-800 aspect-[1.91/1]">
+                  <img
+                    src={url}
+                    alt={t.label}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="mt-1.5 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-white">{t.label}</p>
+                    <p className="text-[10px] text-slate-500">{t.desc}</p>
+                  </div>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                    {t.key}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-slate-600 mt-3">
+          Hugo vybírá šablonu automaticky: čísla → bold_card, fotka + text → gradient/split, krátký headline → text_logo, jen fotka → minimal.
         </p>
       </div>
 

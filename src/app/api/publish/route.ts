@@ -87,14 +87,13 @@ export async function POST(request: Request) {
         }
       } else {
         // Priority 2: individual fields
-        // Imagen/Media Library photo (absolute URL)
-        if (post.image_url) {
-          mediaItems.push({ type: 'image', url: post.image_url });
-        }
-        // Brand template (may be relative /api/visual/template?...)
-        if (!post.image_url && (post.template_url || post.card_url)) {
+        // Brand template has priority (photo + brand frame + logo + text)
+        if (post.template_url || post.card_url) {
           const templateSrc = post.template_url || post.card_url;
           mediaItems.push({ type: 'image', url: resolveUrl(templateSrc) });
+        } else if (post.image_url) {
+          // Fallback: raw photo without brand frame (Imagen/Media Library)
+          mediaItems.push({ type: 'image', url: post.image_url });
         }
         // Chart (absolute URL from QuickChart.io)
         if (post.chart_url) {

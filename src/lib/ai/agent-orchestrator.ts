@@ -21,7 +21,6 @@ import { randomUUID } from 'crypto';
 import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, getPromptTemplate, getProjectPrompts, type PromptContext } from './prompt-builder';
 import { generateVisualAssets } from '@/lib/visual/visual-agent';
-import { findMatchingMedia, markMediaUsed } from '@/lib/ai/vision-engine';
 import { getRelevantNews } from '@/lib/rss/fetcher';
 import { getNextContentType } from './content-engine';
 import { hugoEditorReview } from './hugo-editor';
@@ -1634,31 +1633,9 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         // Visual generation failed, continue without
       }
 
-      // ---- Media: Imagen generated > Media Library match > none ----
-      let matchedImageUrl: string | null = visualData.generated_image_url || null;
-      let matchedMediaId: string | null = visualData.media_asset_id || null;
-
-      // If Imagen didn't generate, try Media Library matching (pgvector)
-      if (!matchedImageUrl && mediaStrategy === 'auto') {
-        try {
-          const matches = await findMatchingMedia(task.project_id, result.text as string, {
-            limit: 5,
-            fileType: 'image',
-            excludeRecentlyUsed: true,
-          });
-          if (matches.length > 0) {
-            const best = matches[0];
-            matchedImageUrl = best.public_url;
-            matchedMediaId = best.id;
-            await markMediaUsed(best.id);
-          }
-        } catch {
-          // Media matching failed, continue without
-        }
-      }
-
-      // Fallback chain: Imagen > Media Library > template_url (brand frame with photo)
-      const finalImageUrl = matchedImageUrl || null;
+      // ---- Media from visual-agent (already handles: Library match → Imagen → fallback) ----
+      const matchedImageUrl: string | null = visualData.generated_image_url || null;
+      const matchedMediaId: string | null = visualData.media_asset_id || null;
       const templateUrl = (visualData as Record<string, unknown>).template_url as string | null || null;
 
       // Determine post status: auto-publish or review
@@ -1761,7 +1738,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         generation_context: generationContext,
         alt_text: (result.alt_text as string) || null,
         editor_review: result.editor_review || null,
-        visual_type: matchedImageUrl ? 'matched_photo' : visualData.visual_type,
+        visual_type: visualData.visual_type,
         chart_url: visualData.chart_url || null,
         card_url: visualData.card_url || templateUrl || null,
         template_url: templateUrl || null,

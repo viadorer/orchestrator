@@ -10,7 +10,6 @@ import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, type PromptContext } from './prompt-builder';
 import { generateVisualAssets, type VisualAssets } from '@/lib/visual/visual-agent';
-import { findMatchingMedia, markMediaUsed } from '@/lib/ai/vision-engine';
 import { hugoEditorReview, type EditorContext } from './hugo-editor';
 
 export interface GeneratedContent {
@@ -383,27 +382,15 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
     }
   }
 
-  // Media matching: find best photo from Media Library (pgvector)
-  if (mediaStrategy === 'auto') {
-    try {
-      const matches = await findMatchingMedia(req.projectId, content.text, {
-        limit: 5,
-        fileType: 'image',
-        excludeRecentlyUsed: true,
-      });
-      if (matches.length > 0) {
-        content.matched_image_url = matches[0].public_url;
-        content.matched_media_id = matches[0].id;
-        await markMediaUsed(matches[0].id);
-        reasoning.media_matching = {
-          matched: true,
-          similarity: (matches[0] as { similarity?: number }).similarity || 0,
-          total_candidates: matches.length,
-        };
-      }
-    } catch {
-      // Media matching failed (no media_assets table or no processed photos)
-    }
+  // Media from visual-agent (already handles: Library match → Imagen → fallback)
+  if (content.visual) {
+    content.matched_image_url = content.visual.generated_image_url || null;
+    content.matched_media_id = content.visual.media_asset_id || null;
+    reasoning.media_matching = {
+      matched: !!content.visual.media_asset_id,
+      visual_type: content.visual.visual_type,
+      similarity: content.visual.match_similarity || null,
+    };
   }
 
   // Performance metrics

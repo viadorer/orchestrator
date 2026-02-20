@@ -26,6 +26,7 @@ interface QueueItem {
   visual_type?: string;
   chart_url?: string | null;
   card_url?: string | null;
+  template_url?: string | null;
   editor_review?: Record<string, unknown> | null;
   image_url?: string | null;
   generation_context?: Record<string, unknown> | null;
@@ -319,11 +320,11 @@ export function ReviewView() {
                 {selected.has(item.id) && <Check className="w-3 h-3 text-white" />}
               </button>
 
-              {/* Thumbnail – matched photo */}
-              {(item.image_url || item.chart_url || item.card_url) && (
+              {/* Thumbnail – template > photo > chart > card */}
+              {(item.template_url || item.image_url || item.chart_url || item.card_url) && (
                 <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-slate-700 bg-slate-800">
                   <img
-                    src={item.image_url || item.chart_url || item.card_url || ''}
+                    src={item.template_url || item.image_url || item.chart_url || item.card_url || ''}
                     alt=""
                     className="w-full h-full object-cover"
                     loading="lazy"
@@ -356,7 +357,10 @@ export function ReviewView() {
                   {item.card_url && (
                     <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-xs text-indigo-400">🃏 karta</span>
                   )}
-                  {!item.image_url && !item.chart_url && !item.card_url && item.image_prompt && (
+                  {item.template_url && (
+                    <span className="px-1.5 py-0.5 rounded bg-fuchsia-500/20 text-xs text-fuchsia-400" title="Brand template (fotka + logo + text)">🖼 template</span>
+                  )}
+                  {!item.template_url && !item.image_url && !item.chart_url && !item.card_url && item.image_prompt && (
                     <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-xs text-amber-400">🎨 prompt</span>
                   )}
                   {item.source === 'ab_variant' && (
@@ -430,6 +434,7 @@ export function ReviewView() {
                       imageUrl={item.image_url}
                       chartUrl={item.chart_url}
                       cardUrl={item.card_url}
+                      templateUrl={item.template_url}
                     />
                   </div>
                 )}

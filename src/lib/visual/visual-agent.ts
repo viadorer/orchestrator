@@ -427,7 +427,7 @@ async function matchMediaFromLibrary(
  * 3. Fallback → return image_prompt text only
  */
 async function generatePhotoVisual(
-  decision: { image_prompt?: string; template_key?: string; aspect_ratio?: string },
+  decision: { image_prompt?: string; template_key?: string; aspect_ratio?: string; card_hook?: string; card_body?: string; card_subtitle?: string },
   ctx: VisualContext,
 ): Promise<VisualAssets> {
   const rawPrompt = decision.image_prompt || '';
@@ -455,14 +455,16 @@ async function generatePhotoVisual(
     };
   }
 
-  // Extract hook text from post (first line or first sentence)
-  const hookText = ctx.text.split('\n')[0]?.trim();
+  // Use Gemini-generated hook/body text for template, fall back to first line of post
+  const hookText = decision.card_hook || ctx.text.split('\n')[0]?.trim();
+  const bodyText = decision.card_body || undefined;
+  const subtitleText = decision.card_subtitle || undefined;
 
   // Step 1: Try Media Library match (pgvector)
   const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform);
   if (match) {
     console.log(`[visual-agent] Using library photo (similarity: ${match.similarity.toFixed(3)})`);
-    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, { hookText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
+    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
     return {
       visual_type: 'matched_photo',
       chart_url: null,
@@ -486,7 +488,7 @@ async function generatePhotoVisual(
   });
 
   if (result.success && result.public_url) {
-    const templateUrl = buildPhotoTemplateUrl(result.public_url, ctx, { hookText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
+    const templateUrl = buildPhotoTemplateUrl(result.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
     return {
       visual_type: 'generated_photo',
       chart_url: null,
@@ -501,7 +503,7 @@ async function generatePhotoVisual(
   // Step 3: Fallback — Imagen failed, use placeholder image for template
   // Generate template URL with a placeholder photo (will show brand frame with text+logo)
   const placeholderUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1080&h=1350&fit=crop';
-  const templateUrl = buildPhotoTemplateUrl(placeholderUrl, ctx, { hookText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
+  const templateUrl = buildPhotoTemplateUrl(placeholderUrl, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
   
   return {
     visual_type: 'photo',

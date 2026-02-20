@@ -11,9 +11,10 @@ interface PostPreviewProps {
   imageUrl?: string | null;
   chartUrl?: string | null;
   cardUrl?: string | null;
+  templateUrl?: string | null;
 }
 
-export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, cardUrl }: PostPreviewProps) {
+export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, cardUrl, templateUrl }: PostPreviewProps) {
   const [activePlatform, setActivePlatform] = useState(platforms[0] || 'facebook');
 
   const validation = validatePost(text, activePlatform);
@@ -21,7 +22,8 @@ export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, 
 
   if (!limits) return null;
 
-  const mediaUrl = imageUrl || chartUrl || cardUrl;
+  // Template (photo + brand frame + logo + text) has priority over raw photo
+  const mediaUrl = templateUrl || imageUrl || chartUrl || cardUrl;
   const handle = projectName?.toLowerCase().replace(/\s+/g, '') || 'projekt';
   const initial = (projectName || 'P')[0];
 

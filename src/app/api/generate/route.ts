@@ -60,6 +60,7 @@ export async function POST(request: Request) {
       visual_type: visual.visual_type || null,
       chart_url: visual.chart_url || null,
       card_url: visual.card_url || null,
+      template_url: visual.template_url || null,
       editor_review: content.editor_review || null,
       generation_context: {
         content_type: resolvedContentType,

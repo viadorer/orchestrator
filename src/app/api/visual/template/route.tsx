@@ -39,9 +39,9 @@ export async function GET(request: NextRequest) {
   const width = parseInt(searchParams.get('w') || String(dims.w));
   const height = parseInt(searchParams.get('h') || String(dims.h));
 
-  const hasLogo = !!(logoUrl && logoUrl.length > 5);
+  const logoMode: 'img' | 'fallback' = (logoUrl && logoUrl.length > 5) ? 'img' : 'fallback';
   const hasPhoto = !!(photoUrl && photoUrl.length > 5);
-  const props = { hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, hasLogo, hasPhoto };
+  const props = { hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto };
 
   let element: React.ReactElement;
 
@@ -96,23 +96,22 @@ interface TemplateProps {
   photoUrl: string;
   width: number;
   height: number;
-  hasLogo: boolean;
+  logoMode: 'img' | 'fallback';
   hasPhoto: boolean;
 }
 
 // ─── Logo Component (vždy vpravo dole) ──────────────────────
+// Single component with early return — NO ternary in JSX (Satori bug workaround)
 
-function LogoBadgeImg({ logoUrl, size = 'normal' }: { logoUrl: string; size?: 'normal' | 'small' }) {
+function LogoBadge({ mode, logoUrl, project, accent, size = 'normal' }: { mode: 'img' | 'fallback'; logoUrl: string; project: string; accent: string; size?: 'normal' | 'small' }) {
   const logoSize = size === 'small' ? 36 : 48;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center' }}>
-      <img src={logoUrl} width={logoSize} height={logoSize} style={{ borderRadius: '8px' }} />
-    </div>
-  );
-}
-
-function LogoBadgeFallback({ project, accent, size = 'normal' }: { project: string; accent: string; size?: 'normal' | 'small' }) {
-  const logoSize = size === 'small' ? 36 : 48;
+  if (mode === 'img') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <img src={logoUrl} width={logoSize} height={logoSize} style={{ borderRadius: '8px' }} />
+      </div>
+    );
+  }
   return (
     <div style={{ display: 'flex', alignItems: 'center' }}>
       <div style={{
@@ -153,7 +152,7 @@ function PhotoFallback({ bg, accent, textColor }: { bg: string; accent: string; 
 
 // ─── Template 1: Bold Card (výrazné číslo s efekty) ─────────
 
-function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, width, height, hasLogo }: TemplateProps) {
+function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, width, height, logoMode }: TemplateProps) {
   const isVertical = height > width;
   const hookSize = Math.min(width * 0.18, isVertical ? 180 : 140);
   const bodySize = Math.min(width * 0.04, 36);
@@ -277,7 +276,7 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
         right: '30px',
         display: 'flex',
       }}>
-        {hasLogo ? <LogoBadgeImg logoUrl={logoUrl} /> : <LogoBadgeFallback project={project} accent={accent} />}
+        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} />
       </div>
 
       {/* Bottom accent bar */}
@@ -296,7 +295,7 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
 // ─── Template 2: Photo + Brand Strip ────────────────────────
 // Split into two components to avoid ALL ternary JSX in Satori
 
-function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoUrl, project, hasLogo }: { hook: string; body: string; accent: string; textColor: string; stripHeight: number; logoUrl: string; project: string; hasLogo: boolean }) {
+function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoUrl, project, logoMode }: { hook: string; body: string; accent: string; textColor: string; stripHeight: number; logoUrl: string; project: string; logoMode: 'img' | 'fallback' }) {
   const hookSize = Math.min(stripHeight * 0.45, 52);
   const bodySize = Math.min(stripHeight * 0.2, 22);
   return (
@@ -347,13 +346,13 @@ function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoU
         right: '30px',
         display: 'flex',
       }}>
-        {hasLogo ? <LogoBadgeImg logoUrl={logoUrl} size="small" /> : <LogoBadgeFallback project={project} accent={accent} size="small" />}
+        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} size="small" />
       </div>
     </div>
   );
 }
 
-function PhotoStripWithPhoto({ hook, body, project, bg, accent, textColor, logoUrl, photoUrl, width, height, hasLogo }: TemplateProps) {
+function PhotoStripWithPhoto({ hook, body, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode }: TemplateProps) {
   const stripHeight = Math.round(height * 0.28);
   const photoHeight = height - stripHeight;
   return (
@@ -362,12 +361,12 @@ function PhotoStripWithPhoto({ hook, body, project, bg, accent, textColor, logoU
         <img src={photoUrl} width={width} height={photoHeight} style={{ objectFit: 'cover' }} />
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px', background: `linear-gradient(transparent, #${bg})` }} />
       </div>
-      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} hasLogo={hasLogo} />
+      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} logoMode={logoMode} />
     </div>
   );
 }
 
-function PhotoStripNoPhoto({ hook, body, project, bg, accent, textColor, logoUrl, width, height, hasLogo }: TemplateProps) {
+function PhotoStripNoPhoto({ hook, body, project, bg, accent, textColor, logoUrl, width, height, logoMode }: TemplateProps) {
   const stripHeight = Math.round(height * 0.28);
   const photoHeight = height - stripHeight;
   return (
@@ -382,14 +381,14 @@ function PhotoStripNoPhoto({ hook, body, project, bg, accent, textColor, logoUrl
         </div>
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px', background: `linear-gradient(transparent, #${bg})` }} />
       </div>
-      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} hasLogo={hasLogo} />
+      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} logoMode={logoMode} />
     </div>
   );
 }
 
 // ─── Template 3: Split Layout ───────────────────────────────
 
-function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, hasLogo, hasPhoto }: TemplateProps) {
+function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
   const isVertical = height > width;
   const hookSize = isVertical ? 48 : 56;
   const bodySize = isVertical ? 18 : 22;
@@ -493,7 +492,7 @@ function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, l
           right: '30px',
           display: 'flex',
         }}>
-          {hasLogo ? <LogoBadgeImg logoUrl={logoUrl} size="small" /> : <LogoBadgeFallback project={project} accent={accent} size="small" />}
+          <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} size="small" />
         </div>
       </div>
     </div>
@@ -502,7 +501,7 @@ function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, l
 
 // ─── Template 4: Gradient Overlay ───────────────────────────
 
-function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, hasLogo, hasPhoto }: TemplateProps) {
+function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
   const hookSize = Math.min(width * 0.065, 72);
   const bodySize = Math.min(width * 0.03, 28);
 
@@ -593,7 +592,7 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
           right: '30px',
           display: 'flex',
         }}>
-          {hasLogo ? <LogoBadgeImg logoUrl={logoUrl} size="small" /> : <LogoBadgeFallback project={project} accent={accent} size="small" />}
+          <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} size="small" />
         </div>
       </div>
     </div>
@@ -602,7 +601,7 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
 
 // ─── Template 6: Text Logo (text vlevo nahoře, logo vpravo dole) ────
 
-function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, hasLogo, hasPhoto }: TemplateProps) {
+function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
   const isVertical = height > width;
   const hookSize = Math.min(width * 0.06, isVertical ? 64 : 56);
   const bodySize = Math.min(width * 0.032, isVertical ? 28 : 24);
@@ -730,7 +729,7 @@ function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor
         right: '30px',
         display: 'flex',
       }}>
-        {hasLogo ? <LogoBadgeImg logoUrl={logoUrl} /> : <LogoBadgeFallback project={project} accent={accent} />}
+        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} />
       </div>
     </div>
   );
@@ -738,7 +737,7 @@ function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor
 
 // ─── Template 5: Minimal Badge ──────────────────────────────
 
-function MinimalTemplate({ project, bg, accent, textColor, logoUrl, photoUrl, width, height, hasLogo, hasPhoto }: TemplateProps) {
+function MinimalTemplate({ project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
   return (
     <div style={{
       width: '100%',
@@ -767,7 +766,7 @@ function MinimalTemplate({ project, bg, accent, textColor, logoUrl, photoUrl, wi
         right: '20px',
         display: 'flex',
       }}>
-        {hasLogo ? <LogoBadgeImg logoUrl={logoUrl} size="small" /> : <LogoBadgeFallback project={project} accent={accent} size="small" />}
+        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} size="small" />
       </div>
     </div>
   );

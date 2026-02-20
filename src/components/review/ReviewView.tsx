@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info, Share2, Pencil, Save, Sparkles, TrendingUp, Copy } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info, Share2, Pencil, Save, Sparkles, TrendingUp, Copy, ImageIcon } from 'lucide-react';
 import { PostPreview } from './PostPreview';
+import { MediaPickerModal } from './MediaPickerModal';
 
 interface QueueItem {
   id: string;
@@ -30,6 +31,7 @@ interface QueueItem {
   generation_context?: Record<string, unknown> | null;
   engagement_score?: number | null;
   engagement_metrics?: Record<string, unknown> | null;
+  media_urls?: string[] | null;
 }
 
 type SortBy = 'overall_asc' | 'overall_desc' | 'date_desc' | 'date_asc';
@@ -62,6 +64,7 @@ export function ReviewView() {
   const [editText, setEditText] = useState('');
   const [feedbackNote, setFeedbackNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [mediaPickerItem, setMediaPickerItem] = useState<QueueItem | null>(null);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -196,6 +199,19 @@ export function ReviewView() {
     setEditingPost(null);
     setEditText('');
     setFeedbackNote('');
+    loadItems();
+  };
+
+  const saveMedia = async (item: QueueItem, mediaUrls: string[]) => {
+    await fetch(`/api/queue/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        media_urls: mediaUrls,
+        image_url: mediaUrls[0] || null,
+      }),
+    });
+    setMediaPickerItem(null);
     loadItems();
   };
 
@@ -477,6 +493,13 @@ export function ReviewView() {
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
+                      onClick={() => setMediaPickerItem(item)}
+                      className="p-2 rounded-lg bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 transition-colors"
+                      title="Změnit fotky"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => approveOne(item)}
                       className="p-2 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors"
                       title="Schválit + vybrat sítě"
@@ -520,6 +543,13 @@ export function ReviewView() {
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
+                      onClick={() => setMediaPickerItem(item)}
+                      className="p-2 rounded-lg bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 transition-colors"
+                      title="Změnit fotky"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => publishOne(item)}
                       className="p-2 rounded-lg bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 transition-colors"
                       title="Odeslat na sítě"
@@ -542,6 +572,17 @@ export function ReviewView() {
           mode={platformPicker.mode}
           onConfirm={(postId, platforms) => confirmAction(postId, platforms, platformPicker.mode)}
           onClose={() => setPlatformPicker(null)}
+        />
+      )}
+
+      {/* Media Picker Modal */}
+      {mediaPickerItem && (
+        <MediaPickerModal
+          projectId={mediaPickerItem.project_id}
+          currentImageUrl={mediaPickerItem.image_url}
+          currentMediaUrls={mediaPickerItem.media_urls || undefined}
+          onSave={(urls) => saveMedia(mediaPickerItem, urls)}
+          onClose={() => setMediaPickerItem(null)}
         />
       )}
     </div>

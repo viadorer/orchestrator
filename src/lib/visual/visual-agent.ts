@@ -82,12 +82,13 @@ export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAs
       if (noVisualPlatforms.includes(ctx.platform)) {
         return { visual_type: 'none', chart_url: null, card_url: null, image_prompt: null };
       }
-      // Force a card visual for platforms that require imagery
-      console.log(`[visual-agent] Platform ${ctx.platform} requires visual — forcing card`);
-      return generateCardVisual({
-        ...decision,
-        card_hook: decision.card_hook || ctx.text.split('\n')[0]?.trim().substring(0, 40) || ctx.projectName,
-        card_body: decision.card_body || ctx.text.split('\n').slice(1, 3).join(' ').substring(0, 80) || '',
+      // Force a photo visual for platforms that require imagery (photo > card priority)
+      console.log(`[visual-agent] Platform ${ctx.platform} requires visual — forcing photo`);
+      const fallbackPrompt = decision.image_prompt || `Professional photo related to: ${ctx.text.substring(0, 150)}`;
+      return generatePhotoVisual({
+        image_prompt: fallbackPrompt,
+        template_key: decision.template_key || 'photo_strip',
+        aspect_ratio: decision.aspect_ratio,
       }, ctx);
     }
     default:
@@ -134,60 +135,58 @@ PROJEKT: ${ctx.projectName}
 PLATFORMA: ${ctx.platform}
 ${brandBlock}
 
-PRAVIDLA PRO PLATFORMY:
-- LinkedIn: Preferuj "card" nebo "photo". Split layout funguje dobře. Landscape (1200×627).
-- Instagram: VŽDY potřebuje vizuál. Gradient overlay nebo text_logo pro engagement. Portrait (1080×1350).
-- Facebook: VŽDY potřebuje vizuál. Portrait 4:5 (1080×1350) = nejlepší engagement na mobilu. Square 1:1 pro univerzální. Landscape 1.91:1 jen pro sdílené odkazy.
-- X/Twitter: Většinou "none" (text stačí), "card" jen pro silná čísla.
+=== PRIORITA VÝBĚRU VIZUÁLU (DODŘŽUJ TOTO POŘADÍ!) ===
 
-ASPECT RATIO (aspect_ratio) — vyber podle platformy a obsahu:
-- "portrait" (4:5) — Facebook feed, Instagram feed. Nejvíc místa na mobilu.
-- "square" (1:1) — Univerzální, funguje všude.
-- "landscape" (1.91:1) — LinkedIn, sdílené odkazy, X/Twitter.
+🥇 PRIORITA 1 — FOTKA + TEXT + LOGO (visual_type: "photo")
+VŽDY preferuj reálnou fotku s textem. Toto je DEFAULTNÍ volba.
+Šablony: "photo_strip", "split", "gradient", "text_logo"
+- "photo_strip" → Fotka nahoře (72%), brand pás dole s hook textem + logo. UNIVERZÁLNÍ, funguje vždy.
+- "gradient" → Fotka přes celou plochu, tmavý gradient overlay, bold text dole + logo. PRO: Instagram, atmosférické, emocionální.
+- "text_logo" → Fotka na pozadí, text vlevo nahoře, logo vpravo dole. PRO: krátký výrazný headline, branding.
+- "split" → Půlka fotka, půlka text vedle sebe + logo. PRO: LinkedIn, profesionální obsah, delší text.
+
+🥈 PRIORITA 2 — FOTKA + LOGO (visual_type: "photo")
+Když fotka mluví sama a text by rušil.
+Šablona: "minimal" → Jen fotka + malý brand badge vpravo dole.
+
+🥉 PRIORITA 3 — INFOGRAFIKA: ČÍSLO + TEXT (visual_type: "card")
+POUZE když je v postu KONKRÉTNÍ ČÍSLO jako hlavní hook (statistika, procento, cena).
+Šablona: "bold_card" → Velké číslo uprostřed, glow efekt, dekorativní rohy.
+Použij JEN když číslo je skutečně hlavní sdělení postu. Jinak preferuj fotku.
+
+=== PRAVIDLA PRO PLATFORMY ===
+- Facebook: VŽDY vizuál. Portrait 4:5 (1080×1350) = nejlepší engagement.
+- Instagram: VŽDY vizuál. Portrait 4:5. NEPOŽÍVEJTE landscape.
+- LinkedIn: VŽDY vizuál. Landscape (1200×627). Split layout funguje dobře.
+- X/Twitter: Může být "none" (text stačí). Pokud vizuál, preferuj "minimal".
+
+=== ASPECT RATIO ===
+- "portrait" (4:5) — Facebook, Instagram. Nejvíc místa na mobilu.
+- "square" (1:1) — Univerzální.
+- "landscape" (1.91:1) — LinkedIn, X/Twitter, sdílené odkazy.
 - "story" (9:16) — Stories, TikTok, Reels.
 
-TYPY VIZUÁLŮ:
-1. "card" – pokud post začíná VELKÝM ČÍSLEM (hook). Číslo se zobrazí velké.
-2. "photo" – pokud post potřebuje realistickou fotku (lifestyle, architektura, lidi).
-3. "none" – pokud text funguje sám o sobě.
-
-ŠABLONY (template_key) — vyber JEDNU podle obsahu a platformy:
-- "bold_card" → Velké číslo uprostřed, glow efekt, dekorativní rohy. PRO: statistiky, hook čísla, procenta.
-- "photo_strip" → Fotka nahoře (72%), brand pás dole s textem. PRO: lifestyle, architektura, obecné fotky.
-- "split" → Půlka fotka, půlka text vedle sebe. PRO: LinkedIn, profesionální obsah, delší text.
-- "gradient" → Fotka přes celou plochu, gradient overlay, bold text dole. PRO: Instagram, atmosférické, emocionální.
-- "text_logo" → Text vlevo nahoře, logo vpravo dole, fotka na pozadí. PRO: hook headline, krátký výrazný text, branding.
-- "minimal" → Jen fotka + malý brand badge. PRO: X/Twitter, repost, když fotka mluví sama.
-
-PRAVIDLA PRO VÝBĚR ŠABLONY:
-- Pokud je ČÍSLO hlavní hook → "bold_card"
-- Pokud je krátký výrazný headline (1-2 věty) + fotka → "text_logo" nebo "gradient"
-- Pokud je delší text s fotkou → "photo_strip" nebo "split"
-- Pokud fotka mluví sama → "minimal"
-- Instagram/TikTok preferuj vertikální: "gradient", "text_logo", "photo_strip"
-- LinkedIn/Facebook preferuj horizontální: "split", "photo_strip", "bold_card"
-
-PRAVIDLA PRO image_prompt (KRITICKÉ):
+=== PRAVIDLA PRO image_prompt (KRITICKÉ) ===
+- VŽDY generuj image_prompt, i pro "bold_card" (použije se jako fallback)
 - Piš v ANGLIČTINĚ, jako pokyn pro fotografa na place
 - Popisuj KONKRÉTNÍ scénu: kdo, kde, co dělá, jaké prostředí
 - Uveď KONKRÉTNÍ detaily: materiály, barvy, textury, počasí, denní dobu
 - Piš jako filmový režisér: "Close-up of weathered hands signing a document on oak desk, morning light through window, shallow depth of field"
 - NIKDY nepiš genericky: "Professional photo of business" nebo "Happy people in office"
 - Zaměř se na EMOCI a PŘÍBĚH, ne na popis produktu
-- Pokud post mluví o konkrétním tématu (hypotéka, investice, rodina), popisuj REÁLNOU situaci
-- Pro "text_logo"/"gradient" šablony: fotka by měla mít VOLNÝ PROSTOR pro text (ne příliš detailní)
+- Pro "gradient"/"text_logo": fotka musí mít VOLNÝ PROSTOR pro text (ne příliš detailní)
 - Pro "minimal": fotka musí být vizuálně silná sama o sobě
 
 Vrať POUZE JSON:
 {
-  "visual_type": "card|photo|none",
-  "template_key": "bold_card|photo_strip|split|gradient|text_logo|minimal",
+  "visual_type": "photo|card|none",
+  "template_key": "photo_strip|gradient|text_logo|split|minimal|bold_card",
   "aspect_ratio": "portrait|square|landscape|story",
-  "card_hook": "1,37" | null,
-  "card_body": "dětí na ženu v ČR" | null,
-  "card_subtitle": "Pro udržení populace je potřeba 2,1" | null,
-  "image_prompt": "Detailed English scene description for photographer – specific, cinematic, emotional" | null,
-  "template_reason": "Krátké zdůvodnění proč tato šablona (1 věta česky)"
+  "card_hook": "krátký hook text pro šablonu (1. řádek)" | null,
+  "card_body": "druhý řádek textu pro šablonu" | null,
+  "card_subtitle": "volitelný třetí řádek" | null,
+  "image_prompt": "VŽDY vyplň — detailed English scene description for photographer" | null,
+  "template_reason": "Krátké zdůvodnění (1 věta česky)"
 }`;
 
   const { text: rawResponse } = await generateText({

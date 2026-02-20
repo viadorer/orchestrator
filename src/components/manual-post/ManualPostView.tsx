@@ -20,12 +20,23 @@ interface SelectedProject {
 }
 
 interface MediaFile {
-  file: File;
+  file?: File;
   preview: string;
   uploading: boolean;
   uploaded: boolean;
   public_url?: string;
   error?: string;
+  fromStorage?: boolean; // True if selected from existing storage
+  assetId?: string; // ID from media_assets
+}
+
+interface StorageAsset {
+  id: string;
+  file_name: string;
+  file_type: string;
+  public_url: string;
+  ai_description?: string;
+  ai_tags?: string[];
 }
 
 interface PostResult {
@@ -69,6 +80,10 @@ export function ManualPostView() {
   const [results, setResults] = useState<PostResult[] | null>(null);
   const [error, setError] = useState('');
   const [projectSearch, setProjectSearch] = useState('');
+  const [showStoragePicker, setShowStoragePicker] = useState(false);
+  const [storageAssets, setStorageAssets] = useState<StorageAsset[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(false);
+  const [tagFilter, setTagFilter] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -138,6 +153,16 @@ export function ManualPostView() {
     const item = media[index];
     if (!item || item.uploaded) return item?.public_url || null;
 
+    // If from storage, already has public_url
+    if (item.fromStorage && item.public_url) {
+      return item.public_url;
+    }
+
+    // Must have file to upload
+    if (!item.file) {
+      return null;
+    }
+
     setMedia(prev => prev.map((m, i) => i === index ? { ...m, uploading: true } : m));
 
     try {
@@ -182,7 +207,7 @@ export function ManualPostView() {
   const removeMedia = (index: number) => {
     setMedia(prev => {
       const item = prev[index];
-      if (item) URL.revokeObjectURL(item.preview);
+      if (item && !item.fromStorage) URL.revokeObjectURL(item.preview);
       return prev.filter((_, i) => i !== index);
     });
   };
@@ -190,6 +215,37 @@ export function ManualPostView() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+  };
+
+  // Load storage assets for selected projects
+  const loadStorageAssets = async () => {
+    if (selectedProjects.length === 0) return;
+    
+    setLoadingAssets(true);
+    try {
+      // Load assets from first selected project
+      const projectId = selectedProjects[0].id;
+      const res = await fetch(`/api/media/project/${projectId}`);
+      const data = await res.json();
+      setStorageAssets(data.assets || []);
+      setShowStoragePicker(true);
+    } catch (err) {
+      console.error('Failed to load storage assets:', err);
+    } finally {
+      setLoadingAssets(false);
+    }
+  };
+
+  // Add asset from storage to media
+  const addFromStorage = (asset: StorageAsset) => {
+    setMedia(prev => [...prev, {
+      preview: asset.public_url,
+      uploading: false,
+      uploaded: true,
+      public_url: asset.public_url,
+      fromStorage: true,
+      assetId: asset.id,
+    }]);
   };
 
   // Submit
@@ -367,7 +423,7 @@ export function ManualPostView() {
                 <div className="flex flex-wrap gap-3 mb-3">
                   {media.map((m, i) => (
                     <div key={i} className="relative group w-24 h-24 rounded-xl overflow-hidden border border-slate-700 bg-slate-800">
-                      {m.file.type.startsWith('image/') ? (
+                      {(m.fromStorage || m.file?.type.startsWith('image/')) ? (
                         <img src={m.preview} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
@@ -400,19 +456,40 @@ export function ManualPostView() {
                 </div>
               )}
 
-              <div
-                onDragOver={e => e.preventDefault()}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800/30 cursor-pointer hover:border-slate-600 hover:bg-slate-800/50 transition-colors"
-              >
-                <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0">
-                  <ImageIcon className="w-5 h-5 text-slate-400" />
+              <div className="flex gap-2">
+                <div
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800/30 cursor-pointer hover:border-slate-600 hover:bg-slate-800/50 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0">
+                    <Upload className="w-5 h-5 text-slate-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-300">Nahrát nové</p>
+                    <p className="text-xs text-slate-500 mt-0.5">JPG, PNG, WebP, MP4</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-slate-300">Přetáhněte fotky/videa nebo klikněte</p>
-                  <p className="text-xs text-slate-500 mt-0.5">JPG, PNG, WebP, MP4 • max 20 MB</p>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={loadStorageAssets}
+                  disabled={selectedProjects.length === 0 || loadingAssets}
+                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800/30 hover:border-slate-600 hover:bg-slate-800/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center flex-shrink-0">
+                    {loadingAssets ? (
+                      <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+                    ) : (
+                      <ImageIcon className="w-5 h-5 text-slate-400" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-300">Ze storage</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Vybrat existující</p>
+                  </div>
+                </button>
               </div>
             </div>
 
@@ -591,6 +668,115 @@ export function ManualPostView() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Storage Picker Modal */}
+      {showStoragePicker && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-slate-800">
+              <h2 className="text-lg font-semibold text-white">Vybrat fotky ze storage</h2>
+              <button
+                onClick={() => setShowStoragePicker(false)}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {/* Tag filter */}
+              {storageAssets.length > 0 && (
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    value={tagFilter}
+                    onChange={e => setTagFilter(e.target.value)}
+                    placeholder="🔍 Filtrovat podle tagů (např. 'business', 'people')"
+                    className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                  {tagFilter && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {storageAssets.filter(a => 
+                        a.ai_tags?.some(tag => tag.toLowerCase().includes(tagFilter.toLowerCase()))
+                      ).length} fotek odpovídá filtru
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {storageAssets.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                  <ImageIcon className="w-12 h-12 mb-3" />
+                  <p className="text-sm">Žádné fotky ve storage</p>
+                  <p className="text-xs mt-1">Nahrajte fotky přes Media Library</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                  {storageAssets
+                    .filter(asset => {
+                      if (!tagFilter) return true;
+                      return asset.ai_tags?.some(tag => 
+                        tag.toLowerCase().includes(tagFilter.toLowerCase())
+                      );
+                    })
+                    .map(asset => {
+                    const isSelected = media.some(m => m.assetId === asset.id);
+                    return (
+                      <button
+                        key={asset.id}
+                        onClick={() => {
+                          if (!isSelected) {
+                            addFromStorage(asset);
+                          }
+                        }}
+                        disabled={isSelected}
+                        className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                          isSelected
+                            ? 'border-emerald-500 opacity-50 cursor-not-allowed'
+                            : 'border-slate-700 hover:border-violet-500 cursor-pointer'
+                        }`}
+                      >
+                        <img
+                          src={asset.public_url}
+                          alt={asset.file_name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23334155" width="100" height="100"/%3E%3C/svg%3E';
+                          }}
+                        />
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
+                              <Check className="w-5 h-5 text-white" />
+                            </div>
+                          </div>
+                        )}
+                        {asset.ai_description && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                            <p className="text-[10px] text-white/80 line-clamp-2">{asset.ai_description}</p>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-800 flex justify-between items-center">
+              <p className="text-xs text-slate-500">
+                {media.filter(m => m.fromStorage).length} vybráno ze storage
+              </p>
+              <button
+                onClick={() => setShowStoragePicker(false)}
+                className="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 transition-colors"
+              >
+                Hotovo
+              </button>
+            </div>
           </div>
         </div>
       )}

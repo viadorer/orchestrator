@@ -1590,15 +1590,16 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         visual_type: 'none', chart_url: null, card_url: null, image_prompt: (result.image_prompt as string) || null,
       };
       try {
-        const visualIdentity = (ctx.project.visual_identity as Record<string, string>) || {};
+        const visualIdentity = (ctx.project.visual_identity as Record<string, unknown>) || {};
         visualData = await generateVisualAssets({
           text: result.text as string,
           projectName: ctx.project.name as string,
           platform,
-          visualIdentity,
+          visualIdentity: visualIdentity as Record<string, string>,
           kbEntries: ctx.kbEntries,
           projectId: task.project_id,
           logoUrl: (visualIdentity as Record<string, string>).logo_url || null,
+          photographyPreset: (visualIdentity.photography_preset as Record<string, unknown>) || null,
         });
       } catch {
         // Visual generation failed, continue without

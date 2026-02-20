@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { storage } from '@/lib/storage';
 import { analyzeImage, generateMediaEmbedding } from '@/lib/ai/vision-engine';
 import { getDefaultImageSpec } from '@/lib/platforms';
+import { type PhotographyPreset, DEFAULT_PHOTOGRAPHY_PRESET } from '@/lib/visual/quickchart';
 
 const GEMINI_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY || '';
 const IMAGEN_MODEL = 'imagen-4.0-generate-001';
@@ -94,8 +95,10 @@ export async function generateAndStoreImage(options: {
   logoUrl?: string | null;
   overlayText?: string | null;
   textOverlayConfig?: Partial<TextOverlayConfig> | null;
+  photographyPreset?: Partial<PhotographyPreset> | null;
 }): Promise<ImagenResult> {
   const { projectId, imagePrompt, platform, postId, logoUrl, overlayText, textOverlayConfig } = options;
+  const preset: PhotographyPreset = { ...DEFAULT_PHOTOGRAPHY_PRESET, ...options.photographyPreset };
 
   if (!GEMINI_API_KEY) {
     return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: 'GOOGLE_GENERATIVE_AI_API_KEY not set' };
@@ -105,16 +108,25 @@ export async function generateAndStoreImage(options: {
   }
 
   try {
-    // 1. Generate image via Imagen API
+    // 1. Generate image(s) via Imagen API — with negativePrompt and sampleCount from preset
     const aspectRatio = getPlatformAspectRatio(platform);
-    const imageBytes = await callImagenAPI(imagePrompt, aspectRatio);
-    if (!imageBytes) {
+    const sampleCount = Math.min(Math.max(preset.sample_count, 1), 4);
+    const allImages = await callImagenAPI(imagePrompt, aspectRatio, preset.negative_prompt, sampleCount);
+    if (!allImages || allImages.length === 0) {
       return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: 'Imagen API returned no image' };
     }
 
-    // 2. Enforce platform aspect ratio FIRST (crop+resize to exact platform dimensions)
+    // 2. Pick best image: if multiple samples, use Gemini Vision to score and select
+    let imageBytes: string;
+    if (allImages.length > 1) {
+      imageBytes = await pickBestImage(allImages, imagePrompt, preset.quality_threshold);
+      console.log(`[imagen] Picked best from ${allImages.length} samples`);
+    } else {
+      imageBytes = allImages[0];
+    }
+
+    // 3. Enforce platform aspect ratio FIRST (crop+resize to exact platform dimensions)
     // Must happen BEFORE logo overlay — otherwise logo gets cropped off!
-    // Imagen generates 3:4 for Instagram but we need 4:5 (1080×1350)
     let finalImageBuffer: Buffer = Buffer.from(imageBytes, 'base64') as Buffer;
     try {
       finalImageBuffer = await enforceAspectRatio(finalImageBuffer, platform);
@@ -122,7 +134,14 @@ export async function generateAndStoreImage(options: {
       // Crop failed, continue with original
     }
 
-    // 3. Compose final image (add logo overlay AFTER crop — logo stays intact)
+    // 4. Post-processing pipeline (per-project settings from preset)
+    try {
+      finalImageBuffer = await applyPostProcessing(finalImageBuffer, preset.post_processing);
+    } catch (e) {
+      console.error('[imagen] Post-processing failed, using unprocessed:', e);
+    }
+
+    // 5. Compose final image (add logo overlay AFTER crop — logo stays intact)
     if (logoUrl) {
       try {
         finalImageBuffer = await compositeWithLogo(finalImageBuffer, logoUrl);
@@ -131,7 +150,7 @@ export async function generateAndStoreImage(options: {
       }
     }
 
-    // 3b. Text overlay (AFTER logo — text should be on top of everything)
+    // 5b. Text overlay (AFTER logo — text should be on top of everything)
     const mergedOverlayConfig = { ...DEFAULT_TEXT_OVERLAY, ...textOverlayConfig };
     if (overlayText && mergedOverlayConfig.enabled) {
       try {
@@ -272,9 +291,26 @@ export async function generateAndStoreImage(options: {
 
 /**
  * Call Imagen 4 REST API
- * Returns base64 image bytes or null
+ * Returns array of base64 image bytes (1-4 samples)
+ * Uses negativePrompt as separate API parameter (not mixed into prompt)
  */
-async function callImagenAPI(prompt: string, aspectRatio: string): Promise<string | null> {
+async function callImagenAPI(
+  prompt: string,
+  aspectRatio: string,
+  negativePrompt?: string,
+  sampleCount: number = 1,
+): Promise<string[]> {
+  const parameters: Record<string, unknown> = {
+    sampleCount: Math.min(Math.max(sampleCount, 1), 4),
+    aspectRatio,
+    personGeneration: 'allow_adult',
+  };
+
+  // negativePrompt as separate API parameter — much more effective than mixing into prompt
+  if (negativePrompt) {
+    parameters.negativePrompt = negativePrompt;
+  }
+
   const response = await fetch(IMAGEN_API_URL, {
     method: 'POST',
     headers: {
@@ -283,11 +319,7 @@ async function callImagenAPI(prompt: string, aspectRatio: string): Promise<strin
     },
     body: JSON.stringify({
       instances: [{ prompt }],
-      parameters: {
-        sampleCount: 1,
-        aspectRatio,
-        personGeneration: 'allow_adult',
-      },
+      parameters,
     }),
   });
 
@@ -298,20 +330,167 @@ async function callImagenAPI(prompt: string, aspectRatio: string): Promise<strin
   }
 
   const data = await response.json();
-  console.log('[imagen] API response structure:', JSON.stringify(data).substring(0, 500));
+  console.log(`[imagen] API returned ${data.predictions?.length || 0} samples`);
   
   const predictions = data.predictions;
   if (!predictions || predictions.length === 0) {
-    console.error('[imagen] No predictions in response:', data);
-    return null;
+    console.error('[imagen] No predictions in response');
+    return [];
   }
 
-  // Imagen returns base64 encoded image in bytesBase64Encoded field
-  const imageBytes = predictions[0].bytesBase64Encoded || null;
-  if (!imageBytes) {
-    console.error('[imagen] No bytesBase64Encoded in prediction:', predictions[0]);
+  // Collect all valid base64 images
+  const images: string[] = [];
+  for (const pred of predictions) {
+    if (pred.bytesBase64Encoded) {
+      images.push(pred.bytesBase64Encoded);
+    }
   }
-  return imageBytes;
+  return images;
+}
+
+/**
+ * Pick the best image from multiple samples using Gemini Vision scoring.
+ * Scores each image for: photorealism, composition, relevance to prompt, absence of AI artifacts.
+ * Returns the best base64 image.
+ */
+async function pickBestImage(
+  images: string[],
+  originalPrompt: string,
+  qualityThreshold: number,
+): Promise<string> {
+  if (images.length <= 1) return images[0];
+
+  try {
+    const { google } = await import('@ai-sdk/google');
+    const { generateText } = await import('ai');
+
+    // Score each image with Gemini Vision
+    const scores: Array<{ index: number; score: number }> = [];
+
+    for (let i = 0; i < images.length; i++) {
+      try {
+        const { text } = await generateText({
+          model: google('gemini-2.0-flash'),
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: Buffer.from(images[i], 'base64'),
+              },
+              {
+                type: 'text',
+                text: `Rate this photo on a scale of 1-10 for use as a social media post image.
+                
+Original prompt: "${originalPrompt.substring(0, 200)}"
+
+Score based on:
+- Photorealism (does it look like a real photo, not AI-generated?)
+- Composition (good framing, rule of thirds, visual balance?)
+- Relevance (does it match the prompt description?)
+- Technical quality (sharp, well-lit, no artifacts, no extra fingers?)
+- Emotional impact (does it evoke feeling, tell a story?)
+
+Return ONLY a JSON: {"score": N, "reason": "one sentence"}`,
+              },
+            ],
+          }],
+          temperature: 0.1,
+        });
+
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]);
+          scores.push({ index: i, score: parsed.score || 5 });
+          console.log(`[imagen] Sample ${i + 1}: score=${parsed.score}, reason=${parsed.reason}`);
+        } else {
+          scores.push({ index: i, score: 5 });
+        }
+      } catch {
+        scores.push({ index: i, score: 5 });
+      }
+    }
+
+    // Sort by score descending, pick best
+    scores.sort((a, b) => b.score - a.score);
+    const best = scores[0];
+
+    if (best.score < qualityThreshold) {
+      console.log(`[imagen] Best score ${best.score} below threshold ${qualityThreshold} — using anyway (no retry budget here)`);
+    }
+
+    return images[best.index];
+  } catch (err) {
+    console.error('[imagen] pickBestImage failed, using first sample:', err);
+    return images[0];
+  }
+}
+
+/**
+ * Apply post-processing pipeline to image buffer using Sharp.
+ * All settings are per-project from PhotographyPreset.post_processing.
+ */
+async function applyPostProcessing(
+  imageBuffer: Buffer,
+  settings: PhotographyPreset['post_processing'],
+): Promise<Buffer> {
+  const sharp = (await import('sharp')).default;
+  let pipeline = sharp(imageBuffer);
+
+  // Denoise (median filter — removes AI noise without losing detail)
+  if (settings.denoise) {
+    pipeline = pipeline.median(3);
+  }
+
+  // Sharpening (subtle unsharp mask for crisp details)
+  if (settings.sharpen) {
+    pipeline = pipeline.sharpen({ sigma: 0.8, m1: 0.5, m2: 0.3 });
+  }
+
+  // Color adjustments: saturation, contrast, warmth
+  const needsModulate = settings.saturation !== 1.0 || settings.warmth !== 0;
+  if (needsModulate) {
+    pipeline = pipeline.modulate({
+      saturation: settings.saturation,
+      // warmth: shift hue slightly toward warm (positive) or cool (negative)
+      hue: Math.round(settings.warmth * 15), // ±0.1 → ±1.5 degree hue shift
+    });
+  }
+
+  // Contrast adjustment via linear transform
+  if (settings.contrast !== 1.0) {
+    pipeline = pipeline.linear(settings.contrast, -(128 * (settings.contrast - 1)));
+  }
+
+  // Film grain (adds realism — AI images are too clean)
+  if (settings.film_grain > 0) {
+    // Generate noise overlay and composite
+    const metadata = await sharp(imageBuffer).metadata();
+    const w = metadata.width || 1080;
+    const h = metadata.height || 1080;
+    const grainIntensity = Math.round(settings.film_grain * 40); // 0.15 → ~6
+
+    // Create noise buffer (random grayscale pixels)
+    const noisePixels = Buffer.alloc(w * h);
+    for (let i = 0; i < noisePixels.length; i++) {
+      noisePixels[i] = Math.round(128 + (Math.random() - 0.5) * grainIntensity * 2);
+    }
+
+    const noiseBuffer = await sharp(noisePixels, { raw: { width: w, height: h, channels: 1 } })
+      .png()
+      .toBuffer();
+
+    // Composite noise as soft-light blend (subtle grain effect)
+    pipeline = pipeline.composite([{
+      input: noiseBuffer,
+      blend: 'soft-light' as const,
+      gravity: 'center',
+    }]);
+  }
+
+  const result = await pipeline.png().toBuffer();
+  console.log(`[imagen] Post-processing applied: sharpen=${settings.sharpen}, denoise=${settings.denoise}, grain=${settings.film_grain}, sat=${settings.saturation}, contrast=${settings.contrast}`);
+  return result as Buffer;
 }
 
 /**
@@ -556,14 +735,17 @@ async function compositeWithText(
 /**
  * Build a rich, brand-aware image prompt from Hugo's decision.
  * 
- * Uses the full visual identity (photography style, mood, subjects, lighting,
- * color grading, negative prompts) to produce images that look like they belong
+ * Uses PhotographyPreset (per-project) to produce images that look like they belong
  * to the brand — not generic AI stock photos.
+ * 
+ * NO hardcoded fallbacks — everything comes from the preset (which has sensible defaults).
+ * Legacy visual identity fields are migrated to preset format automatically.
  */
 export function buildCleanImagePrompt(options: {
   rawPrompt: string;
   projectName: string;
   platform: string;
+  photographyPreset?: Partial<PhotographyPreset> | null;
   visualIdentity?: Partial<{
     primary_color: string;
     style: string;
@@ -576,8 +758,22 @@ export function buildCleanImagePrompt(options: {
     photography_reference: string;
     brand_visual_keywords: string;
   }>;
-}): string {
-  const { rawPrompt, projectName, platform, visualIdentity: vi } = options;
+}): { prompt: string; negativePrompt: string } {
+  const { rawPrompt, platform, visualIdentity: vi } = options;
+
+  // Merge: explicit preset > legacy VI fields > defaults
+  const preset: PhotographyPreset = {
+    ...DEFAULT_PHOTOGRAPHY_PRESET,
+    // Migrate legacy VI fields if no explicit preset provided
+    ...(vi?.photography_style && !options.photographyPreset?.style ? { style: vi.photography_style } : {}),
+    ...(vi?.photography_mood && !options.photographyPreset?.mood ? { mood: vi.photography_mood } : {}),
+    ...(vi?.photography_lighting && !options.photographyPreset?.lighting ? { lighting: vi.photography_lighting } : {}),
+    ...(vi?.photography_color_grade && !options.photographyPreset?.color_grade ? { color_grade: vi.photography_color_grade } : {}),
+    ...(vi?.photography_subjects && !options.photographyPreset?.typical_subjects ? { typical_subjects: vi.photography_subjects } : {}),
+    ...(vi?.photography_avoid && !options.photographyPreset?.negative_prompt ? { negative_prompt: vi.photography_avoid } : {}),
+    ...(vi?.photography_reference && !options.photographyPreset?.composition ? { composition: vi.photography_reference } : {}),
+    ...options.photographyPreset,
+  };
 
   // 1. Clean the raw prompt from AI
   const cleanedPrompt = rawPrompt
@@ -586,79 +782,54 @@ export function buildCleanImagePrompt(options: {
     .replace(/\b(stock photo|generic|placeholder|sample|example image)\b/gi, '')
     .trim();
 
-  // 2. Build prompt layers
+  // 2. Build positive prompt — concise, structured layers from preset
   const parts: string[] = [];
 
-  // Core scene description from AI
+  // Core scene description from Hugo AI (this is the per-post, per-topic part)
   parts.push(cleanedPrompt);
 
-  // Photography style (documentary > editorial > lifestyle > corporate)
-  if (vi?.photography_style) {
-    parts.push(`Photography style: ${vi.photography_style}.`);
-  } else {
-    parts.push('Candid documentary-style photography, not posed.');
+  // Per-project photography directives from preset
+  parts.push(`${preset.style} photography.`);
+  parts.push(`Mood: ${preset.mood}.`);
+  parts.push(`Lighting: ${preset.lighting}.`);
+  parts.push(`Color grade: ${preset.color_grade}.`);
+  parts.push(`Composition: ${preset.composition}.`);
+
+  if (preset.typical_subjects) {
+    parts.push(`Subjects: ${preset.typical_subjects}.`);
+  }
+  if (preset.typical_settings) {
+    parts.push(`Setting: ${preset.typical_settings}.`);
   }
 
-  // Mood & atmosphere
-  if (vi?.photography_mood) {
-    parts.push(`Mood: ${vi.photography_mood}.`);
-  }
-
-  // Lighting
-  if (vi?.photography_lighting) {
-    parts.push(`Lighting: ${vi.photography_lighting}.`);
-  } else {
-    parts.push('Natural ambient lighting.');
-  }
-
-  // Color grading
-  if (vi?.photography_color_grade) {
-    parts.push(`Color grade: ${vi.photography_color_grade}.`);
-  } else if (vi?.primary_color) {
-    parts.push(`Subtle color accent: ${vi.primary_color}.`);
-  }
-
-  // Subject guidance
-  if (vi?.photography_subjects) {
-    parts.push(`Subjects: ${vi.photography_subjects}.`);
-  }
-
-  // Brand keywords for visual coherence
+  // Brand visual keywords from legacy VI (if present)
   if (vi?.brand_visual_keywords) {
     parts.push(`Visual themes: ${vi.brand_visual_keywords}.`);
   }
 
-  // Reference style
-  if (vi?.photography_reference) {
-    parts.push(`Reference: ${vi.photography_reference}.`);
-  }
+  // Camera/technical style from preset
+  parts.push(`${preset.camera_style}, photorealistic.`);
 
-  // Platform-specific composition hints (minimal, not overriding brand)
-  const platformHint: Record<string, string> = {
-    instagram: 'Composed for square crop, strong visual center.',
-    linkedin: 'Clean composition, professional context.',
-    facebook: 'Warm, inviting composition, community feel.',
-    x: 'High contrast, bold framing, minimal background.',
-    tiktok: 'Vertical framing, dynamic energy.',
-    pinterest: 'Vertical composition, aspirational aesthetic.',
+  // Platform composition hint — minimal, just aspect ratio guidance
+  const platformComposition: Record<string, string> = {
+    instagram: 'Strong visual center, works in square crop.',
+    linkedin: 'Clean professional framing.',
+    facebook: 'Inviting, community-oriented framing.',
+    x: 'Bold framing, high contrast.',
+    tiktok: 'Vertical framing, dynamic.',
+    pinterest: 'Vertical, aspirational.',
   };
-  if (platformHint[platform]) {
-    parts.push(platformHint[platform]);
+  if (platformComposition[platform]) {
+    parts.push(platformComposition[platform]);
   }
 
-  // Anti-AI / anti-stock quality directives
-  const avoidParts: string[] = [];
-  if (vi?.photography_avoid) {
-    avoidParts.push(vi.photography_avoid);
-  }
-  avoidParts.push('No text overlays, no watermarks, no logos in the image');
-  avoidParts.push('Avoid: overly saturated colors, plastic skin, symmetrical stock poses, fake smiles, AI artifacts, extra fingers');
-  parts.push(avoidParts.join('. ') + '.');
+  // 3. Negative prompt — separate, sent as negativePrompt API parameter
+  const negativePrompt = preset.negative_prompt;
 
-  // Technical quality
-  parts.push('Shot on high-end mirrorless camera, shallow depth of field where appropriate, photorealistic, 4K resolution.');
-
-  return parts.join(' ').replace(/\s{2,}/g, ' ').trim();
+  return {
+    prompt: parts.join(' ').replace(/\s{2,}/g, ' ').trim(),
+    negativePrompt,
+  };
 }
 
 /**

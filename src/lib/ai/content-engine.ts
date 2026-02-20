@@ -355,16 +355,17 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
   // Generate visual assets (chart/card/photo)
   if (mediaStrategy !== 'none' || req.forcePhoto) {
     try {
-      const visualIdentity = (project.visual_identity as Record<string, string>) || {};
+      const visualIdentity = (project.visual_identity as Record<string, unknown>) || {};
       const visual = await generateVisualAssets({
         text: content.text,
         projectName: project.name as string,
         platform: req.platform,
-        visualIdentity,
+        visualIdentity: visualIdentity as Record<string, string>,
         kbEntries: ctx.kbEntries,
         projectId: req.projectId,
         logoUrl: (visualIdentity as Record<string, string>).logo_url || null,
         forcePhoto: req.forcePhoto,
+        photographyPreset: (visualIdentity.photography_preset as Record<string, unknown>) || null,
       });
       content.visual = visual;
       reasoning.visual_decision = {

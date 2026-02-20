@@ -27,8 +27,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Build clean prompt
-    const cleanPrompt = buildCleanImagePrompt({
+    // Build clean prompt (returns { prompt, negativePrompt })
+    const { prompt: cleanPrompt, negativePrompt } = buildCleanImagePrompt({
       rawPrompt: prompt,
       projectName: 'Test',
       platform,
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
 
     console.log('[test-imagen] Starting generation...');
     console.log('[test-imagen] Clean prompt:', cleanPrompt);
+    console.log('[test-imagen] Negative prompt:', negativePrompt);
     console.log('[test-imagen] Platform:', platform);
 
     const startTime = Date.now();
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ...result,
       clean_prompt: cleanPrompt,
+      negative_prompt: negativePrompt,
       platform,
       duration_ms: duration,
     });

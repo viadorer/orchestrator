@@ -12,7 +12,7 @@
 
 import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
-import { generateChartUrl, CHART_TEMPLATES, type ChartData, type VisualIdentity } from './quickchart';
+import { generateChartUrl, CHART_TEMPLATES, type ChartData, type VisualIdentity, type PhotographyPreset, DEFAULT_PHOTOGRAPHY_PRESET } from './quickchart';
 import { generateAndStoreImage, buildCleanImagePrompt } from './imagen';
 import { generateMediaEmbedding } from '@/lib/ai/vision-engine';
 import { supabase } from '@/lib/supabase/client';
@@ -38,12 +38,25 @@ interface VisualContext {
   projectId?: string;
   logoUrl?: string | null;
   forcePhoto?: boolean;
+  photographyPreset?: Partial<PhotographyPreset> | null;
 }
 
 /**
  * Hugo decides what visual the post needs and generates it
  */
 export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAssets> {
+  // Auto-generate photography preset if project doesn't have one yet
+  if (!ctx.photographyPreset && ctx.projectId) {
+    try {
+      const generated = await autoGeneratePhotographyPreset(ctx);
+      if (generated) {
+        ctx.photographyPreset = generated;
+      }
+    } catch (e) {
+      console.error('[visual-agent] Auto-generate preset failed:', e);
+    }
+  }
+
   // Force photo mode: skip Hugo's decision, generate image prompt and go straight to photo
   if (ctx.forcePhoto) {
     console.log('[visual-agent] forcePhoto mode — generating photo directly');
@@ -362,10 +375,12 @@ async function generatePhotoVisual(
   }
 
   // Build clean English prompt without marketing buzzwords
-  const cleanPrompt = buildCleanImagePrompt({
+  // Returns { prompt, negativePrompt } — negativePrompt sent separately to Imagen API
+  const { prompt: cleanPrompt, negativePrompt } = buildCleanImagePrompt({
     rawPrompt,
     projectName: ctx.projectName,
     platform: ctx.platform,
+    photographyPreset: ctx.photographyPreset,
     visualIdentity: ctx.visualIdentity,
   });
 
@@ -399,13 +414,14 @@ async function generatePhotoVisual(
     };
   }
 
-  // Step 2: Generate with Imagen 4
+  // Step 2: Generate with Imagen 4 (with per-project preset for quality control)
   console.log('[visual-agent] No library match, generating with Imagen 4...');
   const result = await generateAndStoreImage({
     projectId: ctx.projectId,
     imagePrompt: cleanPrompt,
     platform: ctx.platform,
     logoUrl: ctx.logoUrl,
+    photographyPreset: ctx.photographyPreset,
   });
 
   if (result.success && result.public_url) {
@@ -428,4 +444,102 @@ async function generatePhotoVisual(
     card_url: null,
     image_prompt: cleanPrompt,
   };
+}
+
+/**
+ * Auto-generate a PhotographyPreset for a project that doesn't have one yet.
+ * Uses Hugo AI to analyze the project's KB entries and create a tailored preset.
+ * Saves the preset to the project's visual_identity in the database.
+ * 
+ * This runs ONCE per project — after generation, the preset is stored and reused.
+ */
+async function autoGeneratePhotographyPreset(
+  ctx: VisualContext,
+): Promise<Partial<PhotographyPreset> | null> {
+  if (!supabase || !ctx.projectId) return null;
+
+  // Build context from KB entries for Hugo to understand the project
+  const kbSummary = ctx.kbEntries
+    .slice(0, 10)
+    .map(e => `[${e.category}] ${e.title}: ${e.content.substring(0, 200)}`)
+    .join('\n');
+
+  if (!kbSummary) return null;
+
+  console.log(`[visual-agent] Auto-generating photography preset for project "${ctx.projectName}"...`);
+
+  try {
+    const { text } = await generateText({
+      model: google('gemini-2.0-flash'),
+      prompt: `Jsi expert na vizuální identitu značek. Na základě informací o projektu vytvoř photography preset pro AI generování fotek na sociální sítě.
+
+PROJEKT: ${ctx.projectName}
+
+ZNALOSTNÍ BÁZE:
+${kbSummary}
+
+Vytvoř JSON preset, který definuje fotografický styl pro tento konkrétní projekt.
+Buď SPECIFICKÝ — ne generický. Přizpůsob styl oboru a cílové skupině projektu.
+
+Vrať POUZE validní JSON (žádný markdown, žádné komentáře):
+{
+  "style": "konkrétní fotografický styl (documentary/editorial/lifestyle/architectural/product/portrait/street)",
+  "mood": "nálada a atmosféra fotek",
+  "lighting": "typ osvětlení",
+  "color_grade": "barevné ladění",
+  "composition": "kompoziční pravidla",
+  "typical_subjects": "typické subjekty pro tento projekt",
+  "typical_settings": "typická prostředí a lokace",
+  "negative_prompt": "co se NESMÍ objevit na fotkách (anglicky, pro Imagen API)",
+  "camera_style": "technický styl fotoaparátu"
+}`,
+      temperature: 0.3,
+    });
+
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) {
+      console.error('[visual-agent] Auto-generate preset: no JSON in response');
+      return null;
+    }
+
+    const generated = JSON.parse(match[0]);
+
+    // Merge with defaults (generated values override defaults)
+    const preset: PhotographyPreset = {
+      ...DEFAULT_PHOTOGRAPHY_PRESET,
+      ...generated,
+      // Keep quality control defaults — don't let AI override these
+      sample_count: DEFAULT_PHOTOGRAPHY_PRESET.sample_count,
+      quality_threshold: DEFAULT_PHOTOGRAPHY_PRESET.quality_threshold,
+      max_retries: DEFAULT_PHOTOGRAPHY_PRESET.max_retries,
+      post_processing: DEFAULT_PHOTOGRAPHY_PRESET.post_processing,
+    };
+
+    // Save to project's visual_identity in database
+    const { data: project } = await supabase
+      .from('projects')
+      .select('visual_identity')
+      .eq('id', ctx.projectId)
+      .single();
+
+    if (project) {
+      const currentVI = (project.visual_identity as Record<string, unknown>) || {};
+      await supabase
+        .from('projects')
+        .update({
+          visual_identity: {
+            ...currentVI,
+            photography_preset: preset,
+          },
+        })
+        .eq('id', ctx.projectId);
+
+      console.log(`[visual-agent] Photography preset auto-generated and saved for "${ctx.projectName}": style=${preset.style}, mood=${preset.mood}`);
+    }
+
+    return preset;
+  } catch (err) {
+    console.error('[visual-agent] Auto-generate preset error:', err);
+    return null;
+  }
 }

@@ -112,15 +112,30 @@ interface TemplateProps {
   hasPhoto: boolean;
 }
 
+// ─── Shared sizing (all relative to image dimensions) ────────
+
+function getTemplateSizes(width: number, height: number) {
+  const base = Math.min(width, height);
+  return {
+    logo: Math.round(base * 0.07),
+    logoBorderRadius: Math.round(base * 0.01),
+    padding: Math.round(base * 0.03),
+    hookFont: Math.round(width * 0.045),
+    bodyFont: Math.round(width * 0.022),
+    subtitleFont: Math.round(width * 0.018),
+    accentBar: Math.round(base * 0.004),
+    dividerWidth: Math.round(base * 0.06),
+  };
+}
+
 // ─── Logo Component (vždy vpravo dole) ──────────────────────
 // Single component with early return — NO ternary in JSX (Satori bug workaround)
 
-function LogoBadge({ mode, logoUrl, project, accent, size = 'normal' }: { mode: 'img' | 'fallback'; logoUrl: string; project: string; accent: string; size?: 'normal' | 'small' }) {
-  const logoSize = size === 'small' ? 36 : 48;
+function LogoBadge({ mode, logoUrl, project, accent, logoSize, borderRadius }: { mode: 'img' | 'fallback'; logoUrl: string; project: string; accent: string; logoSize: number; borderRadius: number }) {
   if (mode === 'img') {
     return (
       <div style={{ display: 'flex', alignItems: 'center' }}>
-        <img src={logoUrl} width={logoSize} height={logoSize} style={{ borderRadius: '8px' }} />
+        <img src={logoUrl} width={logoSize} height={logoSize} style={{ borderRadius: `${borderRadius}px` }} />
       </div>
     );
   }
@@ -129,12 +144,12 @@ function LogoBadge({ mode, logoUrl, project, accent, size = 'normal' }: { mode: 
       <div style={{
         width: `${logoSize}px`,
         height: `${logoSize}px`,
-        borderRadius: '8px',
+        borderRadius: `${borderRadius}px`,
         backgroundColor: `#${accent}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: `${logoSize * 0.5}px`,
+        fontSize: `${Math.round(logoSize * 0.5)}px`,
         fontWeight: 900,
         color: '#ffffff',
       }}>
@@ -165,10 +180,11 @@ function PhotoFallback({ bg, accent, textColor }: { bg: string; accent: string; 
 // ─── Template 1: Bold Card (výrazné číslo s efekty) ─────────
 
 function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, width, height, logoMode }: TemplateProps) {
+  const s = getTemplateSizes(width, height);
   const isVertical = height > width;
-  const hookSize = Math.min(width * 0.18, isVertical ? 180 : 140);
-  const bodySize = Math.min(width * 0.04, 36);
-  const subtitleSize = Math.min(width * 0.028, 24);
+  const hookSize = Math.round(width * 0.18);
+  const bodySize = Math.round(width * 0.04);
+  const subtitleSize = Math.round(width * 0.028);
 
   return (
     <div style={{
@@ -207,22 +223,22 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
       {/* Decorative corner elements */}
       <div style={{
         position: 'absolute',
-        top: '30px',
-        left: '30px',
-        width: '60px',
-        height: '60px',
-        borderTop: `3px solid #${accent}`,
-        borderLeft: `3px solid #${accent}`,
+        top: `${s.padding}px`,
+        left: `${s.padding}px`,
+        width: `${s.dividerWidth}px`,
+        height: `${s.dividerWidth}px`,
+        borderTop: `${s.accentBar}px solid #${accent}`,
+        borderLeft: `${s.accentBar}px solid #${accent}`,
         opacity: 0.4,
       }} />
       <div style={{
         position: 'absolute',
-        bottom: '30px',
-        right: '30px',
-        width: '60px',
-        height: '60px',
-        borderBottom: `3px solid #${accent}`,
-        borderRight: `3px solid #${accent}`,
+        bottom: `${s.padding}px`,
+        right: `${s.padding}px`,
+        width: `${s.dividerWidth}px`,
+        height: `${s.dividerWidth}px`,
+        borderBottom: `${s.accentBar}px solid #${accent}`,
+        borderRight: `${s.accentBar}px solid #${accent}`,
         opacity: 0.4,
       }} />
 
@@ -244,11 +260,11 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
 
       {/* Accent divider */}
       <div style={{
-        width: '80px',
-        height: '4px',
+        width: `${s.dividerWidth}px`,
+        height: `${s.accentBar}px`,
         backgroundColor: `#${accent}`,
         borderRadius: '2px',
-        marginBottom: '20px',
+        marginBottom: `${s.padding}px`,
       }} />
 
       {/* Body text */}
@@ -284,11 +300,11 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
       {/* Logo — bottom right */}
       <div style={{
         position: 'absolute',
-        bottom: '24px',
-        right: '30px',
+        bottom: `${s.padding}px`,
+        right: `${s.padding}px`,
         display: 'flex',
       }}>
-        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} />
+        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={s.logo} borderRadius={s.logoBorderRadius} />
       </div>
 
       {/* Bottom accent bar */}
@@ -307,9 +323,10 @@ function BoldCardTemplate({ hook, body, subtitle, project, bg, accent, textColor
 // ─── Template 2: Photo + Brand Strip ────────────────────────
 // Split into two components to avoid ALL ternary JSX in Satori
 
-function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoUrl, project, logoMode }: { hook: string; body: string; accent: string; textColor: string; stripHeight: number; logoUrl: string; project: string; logoMode: 'img' | 'fallback' }) {
-  const hookSize = Math.min(stripHeight * 0.45, 52);
-  const bodySize = Math.min(stripHeight * 0.2, 22);
+function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoUrl, project, logoMode, width, height }: { hook: string; body: string; accent: string; textColor: string; stripHeight: number; logoUrl: string; project: string; logoMode: 'img' | 'fallback'; width: number; height: number }) {
+  const s = getTemplateSizes(width, height);
+  const hookSize = Math.round(stripHeight * 0.4);
+  const bodySize = Math.round(stripHeight * 0.18);
   return (
     <div style={{
       height: `${stripHeight}px`,
@@ -317,15 +334,15 @@ function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoU
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'center',
-      padding: '0 40px',
+      padding: `0 ${s.padding}px`,
       position: 'relative',
     }}>
       <div style={{
         position: 'absolute',
         top: 0,
-        left: '40px',
-        right: '40px',
-        height: '3px',
+        left: `${s.padding}px`,
+        right: `${s.padding}px`,
+        height: `${s.accentBar}px`,
         background: `linear-gradient(90deg, #${accent}, transparent)`,
       }} />
       {hook && (
@@ -354,11 +371,11 @@ function PhotoStripBrandArea({ hook, body, accent, textColor, stripHeight, logoU
       )}
       <div style={{
         position: 'absolute',
-        bottom: '16px',
-        right: '30px',
+        bottom: `${s.padding}px`,
+        right: `${s.padding}px`,
         display: 'flex',
       }}>
-        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} size="small" />
+        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={s.logo} borderRadius={s.logoBorderRadius} />
       </div>
     </div>
   );
@@ -373,7 +390,7 @@ function PhotoStripWithPhoto({ hook, body, project, bg, accent, textColor, logoU
         <img src={photoUrl} width={width} height={photoHeight} style={{ objectFit: 'cover' }} />
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px', background: `linear-gradient(transparent, #${bg})` }} />
       </div>
-      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} logoMode={logoMode} />
+      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} logoMode={logoMode} width={width} height={height} />
     </div>
   );
 }
@@ -393,7 +410,7 @@ function PhotoStripNoPhoto({ hook, body, project, bg, accent, textColor, logoUrl
         </div>
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px', background: `linear-gradient(transparent, #${bg})` }} />
       </div>
-      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} logoMode={logoMode} />
+      <PhotoStripBrandArea hook={hook} body={body} accent={accent} textColor={textColor} stripHeight={stripHeight} logoUrl={logoUrl} project={project} logoMode={logoMode} width={width} height={height} />
     </div>
   );
 }
@@ -401,9 +418,10 @@ function PhotoStripNoPhoto({ hook, body, project, bg, accent, textColor, logoUrl
 // ─── Template 3: Split Layout ───────────────────────────────
 
 function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
+  const s = getTemplateSizes(width, height);
   const isVertical = height > width;
-  const hookSize = isVertical ? 48 : 56;
-  const bodySize = isVertical ? 18 : 22;
+  const hookSize = s.hookFont;
+  const bodySize = s.bodyFont;
 
   return (
     <div style={{
@@ -443,16 +461,16 @@ function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, l
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        padding: '40px',
+        padding: `${s.padding}px`,
         position: 'relative',
       }}>
         {/* Accent vertical bar */}
         <div style={{
           position: 'absolute',
-          top: '40px',
-          left: isVertical ? '40px' : '0',
-          width: '4px',
-          height: '60px',
+          top: `${s.padding}px`,
+          left: isVertical ? `${s.padding}px` : '0',
+          width: `${s.accentBar}px`,
+          height: `${s.dividerWidth}px`,
           backgroundColor: `#${accent}`,
           borderRadius: '2px',
         }} />
@@ -500,11 +518,11 @@ function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, l
         {/* Logo — bottom right */}
         <div style={{
           position: 'absolute',
-          bottom: '24px',
-          right: '30px',
+          bottom: `${s.padding}px`,
+          right: `${s.padding}px`,
           display: 'flex',
         }}>
-          <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} size="small" />
+          <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={s.logo} borderRadius={s.logoBorderRadius} />
         </div>
       </div>
     </div>
@@ -514,8 +532,9 @@ function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, l
 // ─── Template 4: Gradient Overlay ───────────────────────────
 
 function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
-  const hookSize = Math.min(width * 0.065, 72);
-  const bodySize = Math.min(width * 0.03, 28);
+  const s = getTemplateSizes(width, height);
+  const hookSize = s.hookFont;
+  const bodySize = s.bodyFont;
 
   return (
     <div style={{
@@ -544,7 +563,7 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
         top: 0,
         left: 0,
         right: 0,
-        height: '4px',
+        height: `${s.accentBar}px`,
         backgroundColor: `#${accent}`,
       }} />
 
@@ -554,7 +573,7 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
         bottom: 0,
         left: 0,
         right: 0,
-        padding: '40px',
+        padding: `${s.padding}px`,
         display: 'flex',
         flexDirection: 'column',
       }}>
@@ -600,11 +619,11 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
         {/* Logo — bottom right */}
         <div style={{
           position: 'absolute',
-          bottom: '24px',
-          right: '30px',
+          bottom: `${s.padding}px`,
+          right: `${s.padding}px`,
           display: 'flex',
         }}>
-          <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} size="small" />
+          <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={s.logo} borderRadius={s.logoBorderRadius} />
         </div>
       </div>
     </div>
@@ -614,10 +633,10 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
 // ─── Template 6: Text Logo (text vlevo nahoře, logo vpravo dole) ────
 
 function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
-  const isVertical = height > width;
-  const hookSize = Math.min(width * 0.06, isVertical ? 64 : 56);
-  const bodySize = Math.min(width * 0.032, isVertical ? 28 : 24);
-  const subtitleSize = Math.min(width * 0.024, 20);
+  const s = getTemplateSizes(width, height);
+  const hookSize = s.hookFont;
+  const bodySize = s.bodyFont;
+  const subtitleSize = s.subtitleFont;
 
   return (
     <div style={{
@@ -645,24 +664,24 @@ function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor
         position: 'absolute',
         top: 0,
         left: 0,
-        width: '5px',
-        height: '120px',
+        width: `${s.accentBar}px`,
+        height: `${Math.round(height * 0.09)}px`,
         backgroundColor: `#${accent}`,
       }} />
       <div style={{
         position: 'absolute',
         top: 0,
         left: 0,
-        width: '120px',
-        height: '5px',
+        width: `${Math.round(width * 0.1)}px`,
+        height: `${s.accentBar}px`,
         backgroundColor: `#${accent}`,
       }} />
 
       {/* Text content — top left */}
       <div style={{
         position: 'absolute',
-        top: '40px',
-        left: '40px',
+        top: `${s.padding}px`,
+        left: `${s.padding}px`,
         right: '40%',
         display: 'flex',
         flexDirection: 'column',
@@ -682,11 +701,11 @@ function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor
 
         {/* Accent divider */}
         <div style={{
-          width: '50px',
-          height: '4px',
+          width: `${s.dividerWidth}px`,
+          height: `${s.accentBar}px`,
           backgroundColor: `#${accent}`,
           borderRadius: '2px',
-          marginBottom: '14px',
+          marginBottom: `${Math.round(s.padding * 0.5)}px`,
         }} />
 
         {body && (
@@ -721,27 +740,27 @@ function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor
         position: 'absolute',
         bottom: 0,
         right: 0,
-        width: '5px',
-        height: '80px',
+        width: `${s.accentBar}px`,
+        height: `${Math.round(height * 0.06)}px`,
         backgroundColor: `#${accent}`,
       }} />
       <div style={{
         position: 'absolute',
         bottom: 0,
         right: 0,
-        width: '80px',
-        height: '5px',
+        width: `${Math.round(width * 0.07)}px`,
+        height: `${s.accentBar}px`,
         backgroundColor: `#${accent}`,
       }} />
 
       {/* Logo — bottom right */}
       <div style={{
         position: 'absolute',
-        bottom: '24px',
-        right: '30px',
+        bottom: `${s.padding}px`,
+        right: `${s.padding}px`,
         display: 'flex',
       }}>
-        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} />
+        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={s.logo} borderRadius={s.logoBorderRadius} />
       </div>
     </div>
   );
@@ -750,6 +769,7 @@ function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor
 // ─── Template 5: Minimal Badge ──────────────────────────────
 
 function MinimalTemplate({ project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
+  const s = getTemplateSizes(width, height);
   return (
     <div style={{
       width: '100%',
@@ -767,18 +787,18 @@ function MinimalTemplate({ project, bg, accent, textColor, logoUrl, photoUrl, wi
         bottom: 0,
         left: 0,
         right: 0,
-        height: '120px',
+        height: `${Math.round(height * 0.1)}px`,
         background: `linear-gradient(transparent, rgba(0,0,0,0.5))`,
       }} />
 
       {/* Logo badge — bottom right */}
       <div style={{
         position: 'absolute',
-        bottom: '20px',
-        right: '20px',
+        bottom: `${s.padding}px`,
+        right: `${s.padding}px`,
         display: 'flex',
       }}>
-        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} size="small" />
+        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={s.logo} borderRadius={s.logoBorderRadius} />
       </div>
     </div>
   );

@@ -108,10 +108,15 @@ export async function generateAndStoreImage(options: {
   }
 
   try {
-    // 1. Generate image(s) via Imagen API — with negativePrompt and sampleCount from preset
+    // 1. Generate image(s) via Imagen API — negative prompt baked into prompt text
     const aspectRatio = getPlatformAspectRatio(platform);
     const sampleCount = Math.min(Math.max(preset.sample_count, 1), 4);
-    const allImages = await callImagenAPI(imagePrompt, aspectRatio, preset.negative_prompt, sampleCount);
+    // Imagen 4 no longer supports negativePrompt as API parameter — append to prompt instead
+    let fullPrompt = imagePrompt;
+    if (preset.negative_prompt) {
+      fullPrompt += `\n\nAvoid: ${preset.negative_prompt}`;
+    }
+    const allImages = await callImagenAPI(fullPrompt, aspectRatio, sampleCount);
     if (!allImages || allImages.length === 0) {
       return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: 'Imagen API returned no image' };
     }
@@ -292,12 +297,11 @@ export async function generateAndStoreImage(options: {
 /**
  * Call Imagen 4 REST API
  * Returns array of base64 image bytes (1-4 samples)
- * Uses negativePrompt as separate API parameter (not mixed into prompt)
+ * Note: negativePrompt API parameter removed (no longer supported) — baked into prompt text
  */
 async function callImagenAPI(
   prompt: string,
   aspectRatio: string,
-  negativePrompt?: string,
   sampleCount: number = 1,
 ): Promise<string[]> {
   const parameters: Record<string, unknown> = {
@@ -305,11 +309,6 @@ async function callImagenAPI(
     aspectRatio,
     personGeneration: 'allow_adult',
   };
-
-  // negativePrompt as separate API parameter — much more effective than mixing into prompt
-  if (negativePrompt) {
-    parameters.negativePrompt = negativePrompt;
-  }
 
   const response = await fetch(IMAGEN_API_URL, {
     method: 'POST',

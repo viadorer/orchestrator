@@ -163,17 +163,27 @@ POUZE když je v postu KONKRÉTNÍ ČÍSLO jako hlavní hook (statistika, procen
 Šablona: "bold_card" → Velké číslo uprostřed, glow efekt, dekorativní rohy.
 Použij JEN když číslo je skutečně hlavní sdělení postu. Jinak preferuj fotku.
 
-=== PRAVIDLA PRO PLATFORMY ===
-- Facebook: VŽDY vizuál. Portrait 4:5 (1080×1350) = nejlepší engagement.
-- Instagram: VŽDY vizuál. Portrait 4:5. NEPOŽÍVEJTE landscape.
-- LinkedIn: VŽDY vizuál. Landscape (1200×627). Split layout funguje dobře.
-- X/Twitter: Může být "none" (text stačí). Pokud vizuál, preferuj "minimal".
+=== POVINNÁ TABULKA: PLATFORMA → FORMÁT + ŠABLONA ===
+(MUSÍŠ dodržet aspect_ratio a preferované šablony pro danou platformu!)
 
-=== ASPECT RATIO ===
-- "portrait" (4:5) — Facebook, Instagram. Nejvíc místa na mobilu.
-- "square" (1:1) — Univerzální.
-- "landscape" (1.91:1) — LinkedIn, X/Twitter, sdílené odkazy.
-- "story" (9:16) — Stories, TikTok, Reels.
+| Platforma   | aspect_ratio | Rozměry      | Preferované šablony          | NEPOUŽÍVAT        |
+|-------------|-------------|--------------|------------------------------|--------------------|
+| facebook    | "portrait"  | 1080×1350    | gradient, text_logo, minimal | bold_card (slabý)  |
+| instagram   | "portrait"  | 1080×1350    | gradient, text_logo, minimal | split, landscape   |
+| linkedin    | "landscape" | 1200×627     | split, photo_strip           | story              |
+| x           | "landscape" | 1600×900     | minimal, photo_strip         | split              |
+| tiktok      | "story"     | 1080×1920    | gradient, text_logo          | split, landscape   |
+| pinterest   | "portrait"  | 1000×1500    | gradient, text_logo          | split, landscape   |
+| threads     | "square"    | 1080×1080    | gradient, minimal            | split              |
+| youtube     | "landscape" | 1280×720     | text_logo, photo_strip       | story              |
+| telegram    | "landscape" | 1280×720     | photo_strip, gradient        | story              |
+| bluesky     | "landscape" | 1200×675     | minimal, photo_strip         | split              |
+
+DŮLEŽITÉ:
+- aspect_ratio z tabulky je POVINNÝ pro danou platformu — neměň ho!
+- Imagen API podporuje jen: 1:1, 3:4, 4:3, 9:16, 16:9 — mapování je automatické
+- Pro portrait platformy (FB, IG): fotka MUSÍ mít volný prostor dole pro text overlay
+- Pro landscape platformy (LI, X): fotka MUSÍ mít volný prostor vlevo/vpravo
 
 === PRAVIDLA PRO image_prompt (KRITICKÉ) ===
 - VŽDY generuj image_prompt, i pro "bold_card" (použije se jako fallback)

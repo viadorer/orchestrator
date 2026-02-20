@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
+import { storage } from '@/lib/storage';
 import { NextResponse } from 'next/server';
 
 /**
@@ -36,10 +37,7 @@ export async function POST(request: Request) {
       // Read file as buffer
       const arrayBuf = await file.arrayBuffer();
       const buffer = new Uint8Array(arrayBuf);
-      const timestamp = Date.now();
-      const random = Math.random().toString(36).substring(2, 8);
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storagePath = `${projectId}/${timestamp}_${random}_${safeName}`;
 
       // Determine file type
       let fileType = 'image';
@@ -47,25 +45,20 @@ export async function POST(request: Request) {
       else if (file.type === 'application/pdf') fileType = 'document';
       else if (file.type.startsWith('image/svg') || file.type.includes('illustrator')) fileType = 'graphic';
 
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('media-assets')
-        .upload(storagePath, buffer, {
-          contentType: file.type,
-          upsert: false,
-        });
+      // Upload to storage (Cloudflare R2 or Supabase fallback)
+      const uploadResult = await storage.upload(Buffer.from(buffer), safeName, {
+        projectId,
+        folder: 'photos',
+        contentType: file.type,
+      });
 
-      if (uploadError) {
-        results.push({ file_name: file.name, success: false, error: uploadError.message });
+      if (!uploadResult.success) {
+        results.push({ file_name: file.name, success: false, error: uploadResult.error });
         continue;
       }
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('media-assets')
-        .getPublicUrl(storagePath);
-
-      const publicUrl = urlData.publicUrl;
+      const storagePath = uploadResult.key;
+      const publicUrl = uploadResult.public_url || '';
 
       // Insert into media_assets
       const { data: asset, error: dbError } = await supabase

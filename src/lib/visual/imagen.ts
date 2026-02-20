@@ -12,6 +12,7 @@
  */
 
 import { supabase } from '@/lib/supabase/client';
+import { storage } from '@/lib/storage';
 import { analyzeImage, generateMediaEmbedding } from '@/lib/ai/vision-engine';
 import { getDefaultImageSpec } from '@/lib/platforms';
 
@@ -140,31 +141,27 @@ export async function generateAndStoreImage(options: {
       }
     }
 
-    // 4. Upload to Supabase Storage
+    // 4. Upload to storage (Cloudflare R2 or Supabase fallback)
     const timestamp = Date.now();
     const fileName = `generated_${platform}_${timestamp}.png`;
-    const storagePath = `${projectId}/generated/${fileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('media-assets')
-      .upload(storagePath, finalImageBuffer, {
-        contentType: 'image/png',
-        upsert: false,
-      });
+    const uploadResult = await storage.upload(finalImageBuffer, fileName, {
+      projectId,
+      folder: 'generated',
+      contentType: 'image/png',
+    });
 
-    if (uploadError) {
-      return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: `Storage upload failed: ${uploadError.message}` };
+    if (!uploadResult.success) {
+      return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: `Storage upload failed: ${uploadResult.error}` };
     }
 
-    // 4. Get public URL
-    const { data: urlData } = supabase.storage
-      .from('media-assets')
-      .getPublicUrl(storagePath);
-
-    const publicUrl = urlData?.publicUrl || null;
+    const storagePath = uploadResult.key;
+    const publicUrl = uploadResult.public_url;
     if (!publicUrl) {
       return { success: false, public_url: null, media_asset_id: null, storage_path: null, error: 'Failed to get public URL' };
     }
+
+    console.log(`[imagen] Uploaded via ${uploadResult.provider}: ${storagePath}`);
 
     // 5. Analyze with Gemini Vision (tags, description, embedding)
     let aiDescription = imagePrompt;

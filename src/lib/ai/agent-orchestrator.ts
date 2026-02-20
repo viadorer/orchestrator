@@ -2394,8 +2394,9 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
       if (!hasDigest) {
         // Trigger feedback digest via API (not a task, but a direct call)
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+            || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+            || 'http://localhost:3000';
           await fetch(`${baseUrl}/api/agent/feedback-digest?projectId=${project.id}&days=7`);
         } catch {
           // Feedback digest fetch failed, continue

@@ -68,8 +68,10 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     previewAccent: '#1877F2',
     previewFont: 'system-ui, -apple-system, Helvetica, Arial, sans-serif',
     imageSpecs: [
+      { width: 1080, height: 1350, aspectRatio: '4:5', label: 'portrait' },
+      { width: 1200, height: 1200, aspectRatio: '1:1', label: 'square' },
       { width: 1200, height: 630, aspectRatio: '1.91:1', label: 'landscape' },
-      { width: 1080, height: 1080, aspectRatio: '1:1', label: 'square' },
+      { width: 1080, height: 1920, aspectRatio: '9:16', label: 'story' },
     ],
     videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 90, optimalDurationSec: 30, maxSizeMB: 4096, format: 'MP4' },
     maxImages: 10,
@@ -81,7 +83,7 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
       hashtagPlacement: 'end',
       emojiPolicy: 'none',
     },
-    aiPromptHint: 'Facebook: Krátký storytelling (ideál 80 znaků, max 477 viditelných). Emocionální hook. Obrázek 1200×630px landscape.',
+    aiPromptHint: 'Facebook: Krátký storytelling (ideál 80 znaků, max 477 viditelných). Emocionální hook. Obrázek: portrait 1080×1350 (4:5, nejlepší engagement), square 1200×1200 (1:1), landscape 1200×630 (1.91:1, pro sdílené odkazy).',
   },
   instagram: {
     name: 'Instagram',

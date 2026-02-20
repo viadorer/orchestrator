@@ -107,6 +107,7 @@ async function decideVisualType(ctx: VisualContext): Promise<{
   image_prompt?: string;
   template_key?: string;
   template_reason?: string;
+  aspect_ratio?: string;
 }> {
   // Build brand context for visual decision
   const vi = ctx.visualIdentity as Record<string, string>;
@@ -134,10 +135,16 @@ PLATFORMA: ${ctx.platform}
 ${brandBlock}
 
 PRAVIDLA PRO PLATFORMY:
-- LinkedIn: Preferuj "card" nebo "photo". Split layout funguje dobře.
-- Instagram: VŽDY potřebuje vizuál. Gradient overlay nebo text_logo pro engagement.
-- Facebook: "card" pokud jsou čísla, "photo" pro lifestyle, jinak "none".
+- LinkedIn: Preferuj "card" nebo "photo". Split layout funguje dobře. Landscape (1200×627).
+- Instagram: VŽDY potřebuje vizuál. Gradient overlay nebo text_logo pro engagement. Portrait (1080×1350).
+- Facebook: VŽDY potřebuje vizuál. Portrait 4:5 (1080×1350) = nejlepší engagement na mobilu. Square 1:1 pro univerzální. Landscape 1.91:1 jen pro sdílené odkazy.
 - X/Twitter: Většinou "none" (text stačí), "card" jen pro silná čísla.
+
+ASPECT RATIO (aspect_ratio) — vyber podle platformy a obsahu:
+- "portrait" (4:5) — Facebook feed, Instagram feed. Nejvíc místa na mobilu.
+- "square" (1:1) — Univerzální, funguje všude.
+- "landscape" (1.91:1) — LinkedIn, sdílené odkazy, X/Twitter.
+- "story" (9:16) — Stories, TikTok, Reels.
 
 TYPY VIZUÁLŮ:
 1. "card" – pokud post začíná VELKÝM ČÍSLEM (hook). Číslo se zobrazí velké.
@@ -175,6 +182,7 @@ Vrať POUZE JSON:
 {
   "visual_type": "card|photo|none",
   "template_key": "bold_card|photo_strip|split|gradient|text_logo|minimal",
+  "aspect_ratio": "portrait|square|landscape|story",
   "card_hook": "1,37" | null,
   "card_body": "dětí na ženu v ČR" | null,
   "card_subtitle": "Pro udržení populace je potřeba 2,1" | null,
@@ -245,7 +253,7 @@ function generateChartVisual(
  * Replaces the old /api/visual/card with richer, more branded design.
  */
 function generateCardVisual(
-  decision: { card_hook?: string; card_body?: string; card_subtitle?: string; template_key?: string },
+  decision: { card_hook?: string; card_body?: string; card_subtitle?: string; template_key?: string; aspect_ratio?: string },
   ctx: VisualContext,
 ): VisualAssets {
   const vi = ctx.visualIdentity;
@@ -256,13 +264,16 @@ function generateCardVisual(
     template = decision.template_key as TemplateKey;
   }
 
+  // Resolve platform variant from aspect_ratio (e.g. facebook_portrait)
+  const platformVariant = resolvePlatformVariant(ctx.platform, decision.aspect_ratio);
+
   const params = new URLSearchParams({
     t: template,
     hook: decision.card_hook || '',
     body: decision.card_body || '',
     subtitle: decision.card_subtitle || '',
     project: ctx.projectName,
-    platform: ctx.platform,
+    platform: platformVariant,
     bg: (vi.primary_color || '#0f0f23').replace('#', ''),
     accent: (vi.accent_color || '#e94560').replace('#', ''),
     text: (vi.text_color || '#ffffff').replace('#', ''),
@@ -290,13 +301,34 @@ const VALID_TEMPLATES = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_
 type TemplateKey = typeof VALID_TEMPLATES[number];
 
 /**
+ * Resolve platform variant string from base platform + aspect_ratio.
+ * E.g. ('facebook', 'portrait') → 'facebook_portrait'
+ * Falls back to base platform if no aspect_ratio.
+ */
+function resolvePlatformVariant(platform: string, aspectRatio?: string): string {
+  if (!aspectRatio) return platform;
+  const ASPECT_SUFFIX: Record<string, string> = {
+    portrait: '_portrait',
+    square: '_square',
+    landscape: '_landscape',
+    story: '_story',
+  };
+  const suffix = ASPECT_SUFFIX[aspectRatio];
+  if (!suffix) return platform;
+  // Only add suffix for platforms that have variants (facebook, instagram, linkedin)
+  const VARIANT_PLATFORMS = ['facebook', 'instagram', 'linkedin'];
+  if (!VARIANT_PLATFORMS.includes(platform)) return platform;
+  return `${platform}${suffix}`;
+}
+
+/**
  * Build a brand template URL for a photo visual.
  * Uses Hugo's dynamic template_key selection. Falls back to platform-based heuristic.
  */
 function buildPhotoTemplateUrl(
   photoUrl: string,
   ctx: VisualContext,
-  opts?: { hookText?: string; bodyText?: string; subtitleText?: string; templateKey?: string },
+  opts?: { hookText?: string; bodyText?: string; subtitleText?: string; templateKey?: string; aspectRatio?: string },
 ): string {
   const vi = ctx.visualIdentity;
 
@@ -309,9 +341,12 @@ function buildPhotoTemplateUrl(
     template = verticalPlatforms.includes(ctx.platform) ? 'gradient' : 'photo_strip';
   }
 
+  // Resolve platform variant from aspect_ratio
+  const platformVariant = resolvePlatformVariant(ctx.platform, opts?.aspectRatio);
+
   const params = new URLSearchParams({
     t: template,
-    platform: ctx.platform,
+    platform: platformVariant,
     photo: photoUrl,
     bg: (vi.primary_color || '#0f0f23').replace('#', ''),
     accent: (vi.accent_color || '#e94560').replace('#', ''),
@@ -393,7 +428,7 @@ async function matchMediaFromLibrary(
  * 3. Fallback → return image_prompt text only
  */
 async function generatePhotoVisual(
-  decision: { image_prompt?: string; template_key?: string },
+  decision: { image_prompt?: string; template_key?: string; aspect_ratio?: string },
   ctx: VisualContext,
 ): Promise<VisualAssets> {
   const rawPrompt = decision.image_prompt || '';
@@ -428,7 +463,7 @@ async function generatePhotoVisual(
   const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform);
   if (match) {
     console.log(`[visual-agent] Using library photo (similarity: ${match.similarity.toFixed(3)})`);
-    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, { hookText, templateKey: decision.template_key });
+    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, { hookText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
     return {
       visual_type: 'matched_photo',
       chart_url: null,
@@ -452,7 +487,7 @@ async function generatePhotoVisual(
   });
 
   if (result.success && result.public_url) {
-    const templateUrl = buildPhotoTemplateUrl(result.public_url, ctx, { hookText, templateKey: decision.template_key });
+    const templateUrl = buildPhotoTemplateUrl(result.public_url, ctx, { hookText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
     return {
       visual_type: 'generated_photo',
       chart_url: null,

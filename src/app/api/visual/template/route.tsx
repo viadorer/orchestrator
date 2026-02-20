@@ -72,9 +72,21 @@ export async function GET(request: NextRequest) {
 
 function getPlatformDimensions(platform: string): { w: number; h: number } {
   const dims: Record<string, { w: number; h: number }> = {
+    // Facebook variants (default = portrait 4:5 for best engagement)
+    facebook: { w: 1080, h: 1350 },
+    facebook_portrait: { w: 1080, h: 1350 },
+    facebook_square: { w: 1200, h: 1200 },
+    facebook_landscape: { w: 1200, h: 630 },
+    facebook_story: { w: 1080, h: 1920 },
+    // Instagram
     instagram: { w: 1080, h: 1350 },
-    facebook: { w: 1200, h: 630 },
+    instagram_square: { w: 1080, h: 1080 },
+    instagram_story: { w: 1080, h: 1920 },
+    // LinkedIn
     linkedin: { w: 1200, h: 627 },
+    linkedin_square: { w: 1080, h: 1080 },
+    linkedin_portrait: { w: 1080, h: 1350 },
+    // Others
     x: { w: 1200, h: 675 },
     tiktok: { w: 1080, h: 1920 },
     pinterest: { w: 1000, h: 1500 },

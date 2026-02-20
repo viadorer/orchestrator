@@ -99,7 +99,7 @@ interface TemplateProps {
 // ─── Logo Component (vždy vpravo dole) ──────────────────────
 
 function LogoBadge({ logoUrl, project, accent, size = 'normal' }: { logoUrl: string; project: string; textColor: string; accent: string; size?: 'normal' | 'small' }) {
-  const logoSize = size === 'small' ? 28 : 40;
+  const logoSize = size === 'small' ? 36 : 48;
   const hasLogo = logoUrl && logoUrl.length > 5;
 
   if (!hasLogo && !project) return null;
@@ -295,7 +295,7 @@ function PhotoStripTemplate({ hook, body, subtitle, project, bg, accent, textCol
         backgroundColor: `#${bg}`,
       }}>
         {photoUrl ? (
-          <img src={photoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={photoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }} />
         ) : (
           <div style={{
             width: '100%',
@@ -449,7 +449,7 @@ function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, l
           <div style={{
             fontSize: `${hookSize}px`,
             fontWeight: 900,
-            color: `#${accent}`,
+            color: `#${textColor}`,
             lineHeight: 1.1,
             marginBottom: '16px',
             marginLeft: isVertical ? '0' : '20px',
@@ -463,7 +463,7 @@ function SplitTemplate({ hook, body, subtitle, project, bg, accent, textColor, l
             fontSize: `${bodySize}px`,
             fontWeight: 500,
             color: `#${textColor}`,
-            opacity: 0.9,
+            opacity: 0.85,
             lineHeight: 1.5,
             marginBottom: '12px',
             marginLeft: isVertical ? '0' : '20px',

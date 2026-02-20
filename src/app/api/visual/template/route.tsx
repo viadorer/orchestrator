@@ -53,6 +53,9 @@ export async function GET(request: NextRequest) {
     case 'gradient':
       element = <GradientTemplate {...props} />;
       break;
+    case 'text_logo':
+      element = <TextLogoTemplate {...props} />;
+      break;
     case 'minimal':
       element = <MinimalTemplate {...props} />;
       break;
@@ -611,6 +614,157 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
         }}>
           <LogoBadge logoUrl={logoUrl} project={project} textColor="ffffff" accent={accent} size="small" />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Template 6: Text Logo (text vlevo nahoře, logo vpravo dole) ────
+
+function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height }: TemplateProps) {
+  const isVertical = height > width;
+  const hookSize = Math.min(width * 0.06, isVertical ? 64 : 56);
+  const bodySize = Math.min(width * 0.032, isVertical ? 28 : 24);
+  const subtitleSize = Math.min(width * 0.024, 20);
+
+  return (
+    <div style={{
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      {/* Full-bleed photo */}
+      {photoUrl ? (
+        <img src={photoUrl} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute' }} />
+      ) : (
+        <div style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          background: `linear-gradient(135deg, #${bg} 0%, #${accent}44 50%, #${bg} 100%)`,
+        }} />
+      )}
+
+      {/* Dark overlay for text readability */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: `linear-gradient(160deg, #${bg}dd 0%, #${bg}88 35%, transparent 65%, #${bg}cc 100%)`,
+      }} />
+
+      {/* Top-left accent corner */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '5px',
+        height: '120px',
+        backgroundColor: `#${accent}`,
+      }} />
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '120px',
+        height: '5px',
+        backgroundColor: `#${accent}`,
+      }} />
+
+      {/* Text content — top left */}
+      <div style={{
+        position: 'absolute',
+        top: '40px',
+        left: '40px',
+        right: '40%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {hook && (
+          <div style={{
+            fontSize: `${hookSize}px`,
+            fontWeight: 900,
+            color: `#${textColor}`,
+            lineHeight: 1.15,
+            marginBottom: '14px',
+            textShadow: `0 2px 30px #${accent}44, 0 2px 10px rgba(0,0,0,0.6)`,
+          }}>
+            {hook}
+          </div>
+        )}
+
+        {/* Accent divider */}
+        <div style={{
+          width: '50px',
+          height: '4px',
+          backgroundColor: `#${accent}`,
+          borderRadius: '2px',
+          marginBottom: '14px',
+        }} />
+
+        {body && (
+          <div style={{
+            fontSize: `${bodySize}px`,
+            fontWeight: 500,
+            color: `#${textColor}`,
+            opacity: 0.9,
+            lineHeight: 1.5,
+            marginBottom: '10px',
+            textShadow: '0 1px 8px rgba(0,0,0,0.5)',
+          }}>
+            {body}
+          </div>
+        )}
+
+        {subtitle && (
+          <div style={{
+            fontSize: `${subtitleSize}px`,
+            fontWeight: 400,
+            color: `#${accent}`,
+            lineHeight: 1.4,
+            textShadow: '0 1px 6px rgba(0,0,0,0.4)',
+          }}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom-right accent corner */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: '5px',
+        height: '80px',
+        backgroundColor: `#${accent}`,
+      }} />
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: '80px',
+        height: '5px',
+        backgroundColor: `#${accent}`,
+      }} />
+
+      {/* Logo — bottom right */}
+      <div style={{
+        position: 'absolute',
+        bottom: '24px',
+        right: '30px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        padding: '10px 16px',
+        borderRadius: '12px',
+        backgroundColor: `#${bg}aa`,
+        border: `1px solid #${accent}33`,
+      }}>
+        <LogoBadge logoUrl={logoUrl} project={project} textColor="ffffff" accent={accent} />
       </div>
     </div>
   );

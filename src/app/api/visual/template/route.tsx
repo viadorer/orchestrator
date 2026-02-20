@@ -103,7 +103,7 @@ function LogoBadge({ logoUrl, project, textColor, accent, size = 'normal' }: { l
   const fontSize = size === 'small' ? 12 : 16;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div style={{ display: 'flex', alignItems: 'center' }}>
       {logoUrl ? (
         <img src={logoUrl} width={logoSize} height={logoSize} style={{ borderRadius: '8px' }} />
       ) : project ? (
@@ -122,18 +122,6 @@ function LogoBadge({ logoUrl, project, textColor, accent, size = 'normal' }: { l
           {project[0]?.toUpperCase()}
         </div>
       ) : null}
-      {project && (
-        <span style={{
-          fontSize: `${fontSize}px`,
-          fontWeight: 700,
-          color: `#${textColor}`,
-          opacity: 0.7,
-          letterSpacing: '1.5px',
-          textTransform: 'uppercase',
-        }}>
-          {project}
-        </span>
-      )}
     </div>
   );
 }
@@ -756,12 +744,6 @@ function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor
         bottom: '24px',
         right: '30px',
         display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '10px 16px',
-        borderRadius: '12px',
-        backgroundColor: `#${bg}aa`,
-        border: `1px solid #${accent}33`,
       }}>
         <LogoBadge logoUrl={logoUrl} project={project} textColor="ffffff" accent={accent} />
       </div>
@@ -807,12 +789,6 @@ function MinimalTemplate({ project, bg, accent, textColor, logoUrl, photoUrl, wi
         bottom: '20px',
         right: '20px',
         display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '8px 14px',
-        borderRadius: '12px',
-        backgroundColor: `#${bg}cc`,
-        border: `1px solid #${accent}44`,
       }}>
         <LogoBadge logoUrl={logoUrl} project={project} textColor="ffffff" accent={accent} size="small" />
       </div>

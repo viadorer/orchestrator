@@ -1302,26 +1302,23 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Text overlay state
-  const defaultOverlay = {
-    enabled: false, position: 'bottom' as const, max_chars: 50, max_lines: 2,
-    uppercase: true, font_size_ratio: 0.045, font_weight: 'bold' as const,
-    bg_style: 'gradient' as const, bg_opacity: 0.6, text_color: '#FFFFFF',
-    accent_color: '#FACC15', padding_ratio: 0.06, highlight_numbers: true,
-  };
-  const overlayInit = vi.text_overlay || defaultOverlay;
-  const [olEnabled, setOlEnabled] = useState(overlayInit.enabled);
-  const [olPosition, setOlPosition] = useState(overlayInit.position);
-  const [olMaxChars, setOlMaxChars] = useState(overlayInit.max_chars);
-  const [olMaxLines, setOlMaxLines] = useState(overlayInit.max_lines);
-  const [olUppercase, setOlUppercase] = useState(overlayInit.uppercase);
-  const [olFontSize, setOlFontSize] = useState(overlayInit.font_size_ratio);
-  const [olFontWeight, setOlFontWeight] = useState(overlayInit.font_weight);
-  const [olBgStyle, setOlBgStyle] = useState(overlayInit.bg_style);
-  const [olBgOpacity, setOlBgOpacity] = useState(overlayInit.bg_opacity);
-  const [olTextColor, setOlTextColor] = useState(overlayInit.text_color);
-  const [olAccentColor, setOlAccentColor] = useState(overlayInit.accent_color);
-  const [olHighlightNumbers, setOlHighlightNumbers] = useState(overlayInit.highlight_numbers);
+  // Photography preset state (photography_preset is stored in visual_identity JSONB but not in the TS interface)
+  const presetInit = (vi as Record<string, unknown>).photography_preset as Record<string, unknown> | null ?? null;
+  const ppPost = (presetInit?.post_processing as Record<string, unknown>) ?? {};
+  const [ppStyle, setPpStyle] = useState<string>((presetInit?.style as string) || '');
+  const [ppMood, setPpMood] = useState<string>((presetInit?.mood as string) || '');
+  const [ppLighting, setPpLighting] = useState<string>((presetInit?.lighting as string) || '');
+  const [ppColorGrade, setPpColorGrade] = useState<string>((presetInit?.color_grade as string) || '');
+  const [ppComposition, setPpComposition] = useState<string>((presetInit?.composition as string) || '');
+  const [ppSubjects, setPpSubjects] = useState<string>((presetInit?.typical_subjects as string) || '');
+  const [ppSettings, setPpSettings] = useState<string>((presetInit?.typical_settings as string) || '');
+  const [ppNegative, setPpNegative] = useState<string>((presetInit?.negative_prompt as string) || '');
+  const [ppCamera, setPpCamera] = useState<string>((presetInit?.camera_style as string) || '');
+  const [ppSampleCount, setPpSampleCount] = useState<number>((presetInit?.sample_count as number) || 2);
+  const [ppQualityThreshold, setPpQualityThreshold] = useState<number>((presetInit?.quality_threshold as number) || 6);
+  const [ppGrain, setPpGrain] = useState<number>((ppPost.film_grain as number) ?? 0.15);
+  const [ppSharpen, setPpSharpen] = useState<boolean>((ppPost.sharpen as boolean) ?? true);
+  const [ppDenoise, setPpDenoise] = useState<boolean>((ppPost.denoise as boolean) ?? true);
 
   const uploadLogo = async (file: File) => {
     setUploading(true);
@@ -1495,164 +1492,127 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
         </p>
       </div>
 
-      {/* ---- Text Overlay Settings ---- */}
+      {/* ---- Photography Preset ---- */}
       <div className="border-t border-slate-700 pt-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <h3 className="text-sm font-medium text-white">Text overlay na fotkách</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Krátký hook/headline přes vygenerovanou nebo vybranou fotku.</p>
+            <h3 className="text-sm font-medium text-white">Fotografický preset</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Řídí styl AI generovaných fotek (Imagen 4). Pokud je prázdný, Hugo ho vygeneruje automaticky z KB.</p>
           </div>
-          <button
-            onClick={() => setOlEnabled(!olEnabled)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${
-              olEnabled ? 'bg-violet-600' : 'bg-slate-700'
-            }`}
-          >
-            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
-              olEnabled ? 'translate-x-5.5 left-[1px]' : 'left-[2px]'
-            }`} style={{ transform: olEnabled ? 'translateX(22px)' : 'translateX(0)' }} />
-          </button>
+          {!ppStyle && (
+            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400">Auto-generate při prvním postu</span>
+          )}
         </div>
 
-        {olEnabled && (
-          <div className="space-y-4 pl-0">
-            {/* Position */}
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Pozice textu</label>
-              <div className="flex gap-2">
-                {(['top', 'center', 'bottom'] as const).map(p => (
-                  <button key={p} onClick={() => setOlPosition(p)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${
-                      olPosition === p ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}>{p === 'top' ? 'Nahoře' : p === 'center' ? 'Uprostřed' : 'Dole'}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Background style */}
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Pozadí textu</label>
-              <div className="flex gap-2">
-                {(['gradient', 'box', 'shadow_only', 'none'] as const).map(s => (
-                  <button key={s} onClick={() => setOlBgStyle(s)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      olBgStyle === s ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}>{s === 'gradient' ? 'Gradient' : s === 'box' ? 'Box' : s === 'shadow_only' ? 'Jen stín' : 'Žádné'}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Opacity slider */}
-            {(olBgStyle === 'gradient' || olBgStyle === 'box') && (
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Průhlednost pozadí: {Math.round(olBgOpacity * 100)}%</label>
-                <input type="range" min="0.1" max="0.9" step="0.05" value={olBgOpacity}
-                  onChange={e => setOlBgOpacity(parseFloat(e.target.value))}
-                  className="w-full accent-violet-500" />
-              </div>
-            )}
-
-            {/* Font size */}
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1.5">Velikost písma: {Math.round(olFontSize * 1000) / 10}% šířky</label>
-              <input type="range" min="0.025" max="0.08" step="0.005" value={olFontSize}
-                onChange={e => setOlFontSize(parseFloat(e.target.value))}
-                className="w-full accent-violet-500" />
-            </div>
-
-            {/* Max chars + lines */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Max znaků</label>
-                <input type="number" min={10} max={120} value={olMaxChars}
-                  onChange={e => setOlMaxChars(parseInt(e.target.value) || 50)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Max řádků</label>
-                <input type="number" min={1} max={4} value={olMaxLines}
-                  onChange={e => setOlMaxLines(parseInt(e.target.value) || 2)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-              </div>
-            </div>
-
-            {/* Toggles row */}
-            <div className="flex flex-wrap gap-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={olUppercase} onChange={e => setOlUppercase(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500" />
-                <span className="text-xs text-slate-300">VELKÁ PÍSMENA</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={olFontWeight === 'bold'} onChange={e => setOlFontWeight(e.target.checked ? 'bold' : 'normal')}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500" />
-                <span className="text-xs text-slate-300">Tučné</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={olHighlightNumbers} onChange={e => setOlHighlightNumbers(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500" />
-                <span className="text-xs text-slate-300">Zvýraznit čísla</span>
-              </label>
-            </div>
-
-            {/* Colors */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Barva textu</label>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={olTextColor} onChange={e => setOlTextColor(e.target.value)}
-                    className="w-8 h-8 rounded border border-slate-700 cursor-pointer bg-transparent" />
-                  <input value={olTextColor} onChange={e => setOlTextColor(e.target.value)}
-                    className="flex-1 px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Barva čísel (accent)</label>
-                <div className="flex items-center gap-2">
-                  <input type="color" value={olAccentColor} onChange={e => setOlAccentColor(e.target.value)}
-                    className="w-8 h-8 rounded border border-slate-700 cursor-pointer bg-transparent" />
-                  <input value={olAccentColor} onChange={e => setOlAccentColor(e.target.value)}
-                    className="flex-1 px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-                </div>
-              </div>
-            </div>
-
-            {/* Preview */}
-            <div className="relative w-full aspect-[4/5] rounded-xl overflow-hidden border border-slate-700 bg-slate-800">
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900" />
-              {olBgStyle === 'gradient' && (
-                <div className={`absolute left-0 right-0 ${olPosition === 'top' ? 'top-0' : olPosition === 'center' ? 'top-1/3' : 'bottom-0'}`}
-                  style={{ height: '35%', background: olPosition === 'top' ? `linear-gradient(to bottom, rgba(0,0,0,${olBgOpacity}), transparent)` : `linear-gradient(to top, rgba(0,0,0,${olBgOpacity}), transparent)` }} />
-              )}
-              {olBgStyle === 'box' && (
-                <div className={`absolute left-0 right-0 ${olPosition === 'top' ? 'top-0' : olPosition === 'center' ? 'top-1/3' : 'bottom-0'}`}
-                  style={{ height: '20%', backgroundColor: `rgba(0,0,0,${olBgOpacity})` }} />
-              )}
-              <div className={`absolute left-4 right-4 ${olPosition === 'top' ? 'top-4' : olPosition === 'center' ? 'top-1/2 -translate-y-1/2' : 'bottom-4'}`}>
-                <p style={{ color: olTextColor, fontWeight: olFontWeight, fontSize: '14px', textTransform: olUppercase ? 'uppercase' : 'none' }}>
-                  {olHighlightNumbers
-                    ? <>{`Prodejte o `}<span style={{ color: olAccentColor }}>31 %</span>{` rychleji`}</>
-                    : 'Prodejte o 31 % rychleji'
-                  }
-                </p>
-              </div>
-            </div>
+        {ppStyle && (
+          <div className="mb-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+            <p className="text-xs text-emerald-400">Preset aktivní: <span className="font-medium">{ppStyle}</span> — {ppMood}</p>
           </div>
         )}
+
+        <div className="space-y-4">
+          {/* Core style fields */}
+          <div className="grid grid-cols-2 gap-3">
+            <PresetField label="Fotografický styl" placeholder="documentary, editorial, lifestyle..." value={ppStyle} onChange={setPpStyle} />
+            <PresetField label="Nálada / mood" placeholder="warm and authentic, professional..." value={ppMood} onChange={setPpMood} />
+            <PresetField label="Osvětlení" placeholder="natural daylight, golden hour..." value={ppLighting} onChange={setPpLighting} />
+            <PresetField label="Barevné ladění" placeholder="warm tones, slight film grain..." value={ppColorGrade} onChange={setPpColorGrade} />
+            <PresetField label="Kompozice" placeholder="rule of thirds, shallow DOF..." value={ppComposition} onChange={setPpComposition} />
+            <PresetField label="Styl fotoaparátu" placeholder="mirrorless 35mm f/2.0..." value={ppCamera} onChange={setPpCamera} />
+          </div>
+
+          {/* Subject & settings */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Typické subjekty</label>
+            <input value={ppSubjects} onChange={e => setPpSubjects(e.target.value)}
+              placeholder="Czech families, young couples, urban apartments..."
+              className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Typická prostředí</label>
+            <input value={ppSettings} onChange={e => setPpSettings(e.target.value)}
+              placeholder="modern apartments, Prague streets, office interiors..."
+              className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          </div>
+
+          {/* Negative prompt */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Negative prompt <span className="text-slate-600">(co se NESMÍ objevit, anglicky)</span></label>
+            <textarea value={ppNegative} onChange={e => setPpNegative(e.target.value)}
+              placeholder="stock photo poses, fake smiles, plastic skin, AI artifacts, text overlays, watermarks..."
+              rows={2}
+              className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
+          </div>
+
+          {/* Quality control */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Počet vzorků</label>
+              <div className="flex gap-1.5">
+                {[1, 2, 3, 4].map(n => (
+                  <button key={n} onClick={() => setPpSampleCount(n)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      ppSampleCount === n ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                    }`}>{n}</button>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-600 mt-0.5">Více = lepší výběr, dražší</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Min. kvalita: {ppQualityThreshold}/10</label>
+              <input type="range" min={3} max={9} step={1} value={ppQualityThreshold}
+                onChange={e => setPpQualityThreshold(parseInt(e.target.value))}
+                className="w-full accent-violet-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Film grain: {Math.round(ppGrain * 100)}%</label>
+              <input type="range" min={0} max={0.5} step={0.05} value={ppGrain}
+                onChange={e => setPpGrain(parseFloat(e.target.value))}
+                className="w-full accent-violet-500" />
+            </div>
+          </div>
+
+          {/* Post-processing toggles */}
+          <div className="flex flex-wrap gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={ppSharpen} onChange={e => setPpSharpen(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500" />
+              <span className="text-xs text-slate-300">Sharpen (ostření)</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={ppDenoise} onChange={e => setPpDenoise(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500" />
+              <span className="text-xs text-slate-300">Denoise (odstranit AI šum)</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       <SaveBtn onClick={() => onSave({
         visual_identity: {
           primary_color: primary, secondary_color: secondary, accent_color: accent,
           text_color: textColor, font, logo_url: logoUrl || null, style,
-          text_overlay: {
-            enabled: olEnabled, position: olPosition, max_chars: olMaxChars, max_lines: olMaxLines,
-            uppercase: olUppercase, font_size_ratio: olFontSize, font_weight: olFontWeight,
-            bg_style: olBgStyle, bg_opacity: olBgOpacity, text_color: olTextColor,
-            accent_color: olAccentColor, padding_ratio: 0.06, highlight_numbers: olHighlightNumbers,
-          },
+          ...(ppStyle ? {
+            photography_preset: {
+              style: ppStyle, mood: ppMood, lighting: ppLighting, color_grade: ppColorGrade,
+              composition: ppComposition, typical_subjects: ppSubjects, typical_settings: ppSettings,
+              negative_prompt: ppNegative, camera_style: ppCamera,
+              sample_count: ppSampleCount, quality_threshold: ppQualityThreshold, max_retries: 2,
+              post_processing: { sharpen: ppSharpen, denoise: ppDenoise, film_grain: ppGrain, saturation: 1.0, contrast: 1.05, warmth: 0.02 },
+            },
+          } : {}),
         },
       } as Partial<Project>)} />
+    </div>
+  );
+}
+
+function PresetField({ label, placeholder, value, onChange }: { label: string; placeholder: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-400 mb-1">{label}</label>
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-500" />
     </div>
   );
 }

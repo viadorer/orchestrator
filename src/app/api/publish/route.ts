@@ -67,24 +67,38 @@ export async function POST(request: Request) {
     try {
       // Build media items from visual assets
       const mediaItems: MediaItem[] = [];
+
+      // Helper: resolve relative URLs (e.g. /api/visual/template?...) to absolute
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+        || 'http://localhost:3000';
+      const resolveUrl = (url: string): string => {
+        if (url.startsWith('http')) return url;
+        if (url.startsWith('/')) return `${baseUrl}${url}`;
+        return url;
+      };
       
       // Priority 1: media_urls array (multiple images from manual post)
       if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
         for (const url of post.media_urls) {
-          if (typeof url === 'string' && url.startsWith('http')) {
-            mediaItems.push({ type: 'image', url });
+          if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) {
+            mediaItems.push({ type: 'image', url: resolveUrl(url) });
           }
         }
       } else {
-        // Priority 2: individual fields (backward compatibility)
-        if (post.chart_url) {
-          mediaItems.push({ type: 'image', url: post.chart_url });
-        }
-        if (post.card_url && post.card_url.startsWith('http')) {
-          mediaItems.push({ type: 'image', url: post.card_url });
-        }
+        // Priority 2: individual fields
+        // Imagen/Media Library photo (absolute URL)
         if (post.image_url) {
           mediaItems.push({ type: 'image', url: post.image_url });
+        }
+        // Brand template (may be relative /api/visual/template?...)
+        if (!post.image_url && (post.template_url || post.card_url)) {
+          const templateSrc = post.template_url || post.card_url;
+          mediaItems.push({ type: 'image', url: resolveUrl(templateSrc) });
+        }
+        // Chart (absolute URL from QuickChart.io)
+        if (post.chart_url) {
+          mediaItems.push({ type: 'image', url: post.chart_url });
         }
       }
 

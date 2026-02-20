@@ -1615,7 +1615,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
       }
 
       // Generate visual assets (chart/card/photo)
-      let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null; generated_image_url?: string | null; media_asset_id?: string | null } = {
+      let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null; generated_image_url?: string | null; media_asset_id?: string | null; template_url?: string | null } = {
         visual_type: 'none', chart_url: null, card_url: null, image_prompt: (result.image_prompt as string) || null,
       };
       try {
@@ -1657,7 +1657,9 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         }
       }
 
+      // Fallback chain: Imagen > Media Library > template_url (brand frame with photo)
       const finalImageUrl = matchedImageUrl || null;
+      const templateUrl = (visualData as Record<string, unknown>).template_url as string | null || null;
 
       // Determine post status: auto-publish or review
       const autoPublish = task.params?.auto_publish === true;
@@ -1761,7 +1763,8 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         editor_review: result.editor_review || null,
         visual_type: matchedImageUrl ? 'matched_photo' : visualData.visual_type,
         chart_url: visualData.chart_url || null,
-        card_url: visualData.card_url || null,
+        card_url: visualData.card_url || templateUrl || null,
+        template_url: templateUrl || null,
       };
       if (matchedImageUrl) fullInsert.image_url = matchedImageUrl;
       if (matchedMediaId) fullInsert.matched_media_id = matchedMediaId;

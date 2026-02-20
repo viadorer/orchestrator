@@ -2167,7 +2167,7 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
   // Get all active projects with their config
   const { data: projects } = await supabase
     .from('projects')
-    .select('id, name, platforms, is_active, orchestrator_config')
+    .select('id, name, platforms, is_active, orchestrator_config, late_accounts')
     .eq('is_active', true);
 
   if (!projects) return { scheduled: 0, projects_checked: 0, skipped_reasons: {} };
@@ -2237,9 +2237,19 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
     if ((todayCount || 0) >= config.max_posts_per_day) { skip('daily_limit_reached'); continue; }
 
     // 8. Schedule content generation – one task per platform, linked by content_group_id
-    const platforms = config.platforms_priority.length > 0
+    const allPlatforms = config.platforms_priority.length > 0
       ? config.platforms_priority
       : (project.platforms as string[]) || ['facebook'];
+
+    // Filter: only generate for platforms that have a getLate account configured
+    const lateAccounts = (project.late_accounts as Record<string, string>) || {};
+    const platforms = allPlatforms.filter(p => {
+      if (lateAccounts[p]) return true;
+      console.log(`[auto-schedule] Skipping platform "${p}" for project "${project.name}" — no late_account configured`);
+      return false;
+    });
+
+    if (platforms.length === 0) { skip('no_late_accounts'); continue; }
 
     // Check if we can generate at least one content group today
     const remainingSlots = config.max_posts_per_day - (todayCount || 0);

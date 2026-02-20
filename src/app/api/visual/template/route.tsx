@@ -535,14 +535,14 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
         }} />
       )}
 
-      {/* Heavy gradient overlay */}
+      {/* Dark gradient overlay — always dark for text readability */}
       <div style={{
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-        height: '70%',
-        background: `linear-gradient(transparent 0%, #${bg}cc 40%, #${bg}ee 100%)`,
+        height: '75%',
+        background: 'linear-gradient(transparent 0%, rgba(0,0,0,0.55) 35%, rgba(0,0,0,0.85) 70%, rgba(0,0,0,0.92) 100%)',
       }} />
 
       {/* Top accent line */}
@@ -569,7 +569,7 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
           <div style={{
             fontSize: `${hookSize}px`,
             fontWeight: 900,
-            color: `#${textColor}`,
+            color: '#ffffff',
             lineHeight: 1.15,
             marginBottom: '12px',
             textShadow: '0 2px 20px rgba(0,0,0,0.8)',
@@ -582,8 +582,7 @@ function GradientTemplate({ hook, body, subtitle, project, bg, accent, textColor
           <div style={{
             fontSize: `${bodySize}px`,
             fontWeight: 500,
-            color: `#${textColor}`,
-            opacity: 0.9,
+            color: '#ffffffee',
             lineHeight: 1.5,
             marginBottom: '8px',
             textShadow: '0 1px 10px rgba(0,0,0,0.6)',

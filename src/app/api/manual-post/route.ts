@@ -52,9 +52,7 @@ export async function POST(request: Request) {
     error?: string;
   }> = [];
 
-  // Primary image URL (first media item)
-  const imageUrl = media_urls?.[0] || null;
-  console.log('[manual-post] media_urls:', media_urls, 'imageUrl:', imageUrl);
+  console.log('[manual-post] media_urls:', media_urls, 'count:', media_urls?.length || 0);
 
   for (const proj of projects) {
     if (!proj.platforms || proj.platforms.length === 0) continue;
@@ -99,7 +97,12 @@ export async function POST(request: Request) {
           },
         };
 
-        if (imageUrl) insertData.image_url = imageUrl;
+        // Store all media URLs in media_urls array
+        if (media_urls && media_urls.length > 0) {
+          insertData.media_urls = media_urls;
+          // Also set first image to image_url for backward compatibility
+          insertData.image_url = media_urls[0];
+        }
 
         let { data: saved, error } = await supabase
           .from('content_queue')
@@ -173,7 +176,6 @@ export async function POST(request: Request) {
     debug: {
       media_urls_received: media_urls || [],
       media_count: media_urls?.length || 0,
-      image_url_used: imageUrl,
     },
   });
 }

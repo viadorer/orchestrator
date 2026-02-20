@@ -2692,9 +2692,20 @@ export async function publishApprovedPosts(): Promise<{
     try {
       // Build media items
       const mediaItems: Array<{ type: 'image' | 'video' | 'document'; url: string }> = [];
-      if (post.chart_url) mediaItems.push({ type: 'image', url: post.chart_url });
-      if (post.card_url && post.card_url.startsWith('http')) mediaItems.push({ type: 'image', url: post.card_url });
-      if (post.image_url) mediaItems.push({ type: 'image', url: post.image_url });
+      
+      // Priority 1: media_urls array (multiple images from manual post)
+      if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
+        for (const url of post.media_urls) {
+          if (typeof url === 'string' && url.startsWith('http')) {
+            mediaItems.push({ type: 'image', url });
+          }
+        }
+      } else {
+        // Priority 2: individual fields (backward compatibility)
+        if (post.chart_url) mediaItems.push({ type: 'image', url: post.chart_url });
+        if (post.card_url && post.card_url.startsWith('http')) mediaItems.push({ type: 'image', url: post.card_url });
+        if (post.image_url) mediaItems.push({ type: 'image', url: post.image_url });
+      }
 
       // Enforce aspect ratio for platform compliance (Instagram: 0.75-1.91)
       const { ensureImageAspectRatio } = await import('@/lib/visual/image-resize');

@@ -26,6 +26,7 @@ export interface VisualAssets {
   generated_image_url?: string | null;
   media_asset_id?: string | null;
   match_similarity?: number;
+  template_url?: string | null;
 }
 
 interface VisualContext {
@@ -191,7 +192,8 @@ function generateChartVisual(
 }
 
 /**
- * Generate text card visual using /api/visual/card endpoint
+ * Generate text card visual using /api/visual/template endpoint (Bold Card template)
+ * Replaces the old /api/visual/card with richer, more branded design.
  */
 function generateCardVisual(
   decision: { card_hook?: string; card_body?: string; card_subtitle?: string },
@@ -199,25 +201,22 @@ function generateCardVisual(
 ): VisualAssets {
   const vi = ctx.visualIdentity;
   const params = new URLSearchParams({
+    t: 'bold_card',
     hook: decision.card_hook || '',
     body: decision.card_body || '',
     subtitle: decision.card_subtitle || '',
     project: ctx.projectName,
-    bg: (vi.primary_color || '#1a1a2e').replace('#', ''),
+    platform: ctx.platform,
+    bg: (vi.primary_color || '#0f0f23').replace('#', ''),
     accent: (vi.accent_color || '#e94560').replace('#', ''),
     text: (vi.text_color || '#ffffff').replace('#', ''),
   });
 
-  // Platform-specific dimensions from PLATFORM_LIMITS
-  const imgSpec = getDefaultImageSpec(ctx.platform);
-  const dim = imgSpec
-    ? { w: imgSpec.width, h: imgSpec.height }
-    : { w: 1200, h: 630 }; // fallback
-  params.set('w', String(dim.w));
-  params.set('h', String(dim.h));
+  if (vi.logo_url) {
+    params.set('logo', vi.logo_url);
+  }
 
-  // This URL will be resolved by the app itself
-  const cardUrl = `/api/visual/card?${params.toString()}`;
+  const cardUrl = `/api/visual/template?${params.toString()}`;
 
   return {
     visual_type: 'card',
@@ -225,6 +224,43 @@ function generateCardVisual(
     card_url: cardUrl,
     image_prompt: null,
   };
+}
+
+/**
+ * Build a brand template URL for a photo visual.
+ * Picks the best template based on platform and whether we have hook text.
+ */
+function buildPhotoTemplateUrl(
+  photoUrl: string,
+  ctx: VisualContext,
+  hookText?: string,
+): string {
+  const vi = ctx.visualIdentity;
+  // Pick template: gradient for Instagram/TikTok (vertical), photo_strip for horizontal
+  const verticalPlatforms = ['instagram', 'tiktok', 'pinterest', 'threads'];
+  const template = verticalPlatforms.includes(ctx.platform) ? 'gradient' : 'photo_strip';
+
+  const params = new URLSearchParams({
+    t: template,
+    platform: ctx.platform,
+    photo: photoUrl,
+    bg: (vi.primary_color || '#0f0f23').replace('#', ''),
+    accent: (vi.accent_color || '#e94560').replace('#', ''),
+    text: (vi.text_color || '#ffffff').replace('#', ''),
+    project: ctx.projectName,
+  });
+
+  if (hookText) {
+    // Extract first sentence or first 60 chars as hook
+    const hook = hookText.split(/[.!?\n]/)[0]?.trim().substring(0, 60) || '';
+    params.set('hook', hook);
+  }
+
+  if (vi.logo_url) {
+    params.set('logo', vi.logo_url);
+  }
+
+  return `/api/visual/template?${params.toString()}`;
 }
 
 // ============================================
@@ -309,10 +345,14 @@ async function generatePhotoVisual(
     };
   }
 
+  // Extract hook text from post (first line or first sentence)
+  const hookText = ctx.text.split('\n')[0]?.trim();
+
   // Step 1: Try Media Library match (pgvector)
   const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform);
   if (match) {
     console.log(`[visual-agent] Using library photo (similarity: ${match.similarity.toFixed(3)})`);
+    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, hookText);
     return {
       visual_type: 'matched_photo',
       chart_url: null,
@@ -321,6 +361,7 @@ async function generatePhotoVisual(
       generated_image_url: match.public_url,
       media_asset_id: match.asset_id,
       match_similarity: match.similarity,
+      template_url: templateUrl,
     };
   }
 
@@ -334,6 +375,7 @@ async function generatePhotoVisual(
   });
 
   if (result.success && result.public_url) {
+    const templateUrl = buildPhotoTemplateUrl(result.public_url, ctx, hookText);
     return {
       visual_type: 'generated_photo',
       chart_url: null,
@@ -341,6 +383,7 @@ async function generatePhotoVisual(
       image_prompt: cleanPrompt,
       generated_image_url: result.public_url,
       media_asset_id: result.media_asset_id,
+      template_url: templateUrl,
     };
   }
 

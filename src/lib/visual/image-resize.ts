@@ -12,7 +12,7 @@
  * 5. Return new public URL
  */
 
-import { supabase } from '@/lib/supabase/client';
+import { storage } from '@/lib/storage';
 
 // Platform aspect ratio constraints (width / height)
 const ASPECT_CONSTRAINTS: Record<string, { min: number; max: number; target: number }> = {
@@ -119,29 +119,22 @@ export async function ensureImageAspectRatio(
       .png()
       .toBuffer() as Buffer;
 
-    // Upload cropped image to Supabase Storage
-    if (supabase && projectId) {
+    // Upload cropped image via unified storage adapter (R2 → Supabase fallback)
+    if (projectId) {
       const timestamp = Date.now();
-      const storagePath = `${projectId}/resized/cropped_${timestamp}.png`;
+      const fileName = `cropped_${timestamp}.png`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('media-assets')
-        .upload(storagePath, buffer, {
-          contentType: 'image/png',
-          upsert: false,
-        });
+      const uploadResult = await storage.upload(buffer, fileName, {
+        projectId,
+        folder: 'resized',
+        contentType: 'image/png',
+      });
 
-      if (!uploadError) {
-        const { data: urlData } = supabase.storage
-          .from('media-assets')
-          .getPublicUrl(storagePath);
-
-        if (urlData?.publicUrl) {
-          console.log(`[image-resize] Cropped image uploaded: ${urlData.publicUrl}`);
-          return urlData.publicUrl;
-        }
+      if (uploadResult.success && uploadResult.public_url) {
+        console.log(`[image-resize] Cropped image uploaded via ${uploadResult.provider}: ${uploadResult.public_url}`);
+        return uploadResult.public_url;
       } else {
-        console.error('[image-resize] Upload failed:', uploadError.message);
+        console.error('[image-resize] Upload failed:', uploadResult.error);
       }
     }
 

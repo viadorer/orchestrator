@@ -151,7 +151,7 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     name: 'X (Twitter)',
     maxChars: 280,
     visibleChars: 280,
-    maxHashtags: 5,
+    maxHashtags: 2,
     optimalChars: 200,
     hasImageSupport: true,
     hasVideoSupport: true,
@@ -168,14 +168,14 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     videoSpec: { width: 1920, height: 1080, aspectRatio: '16:9', maxDurationSec: 140, optimalDurationSec: 30, maxSizeMB: 512, format: 'MP4' },
     maxImages: 4,
     contentSpec: {
-      tone: 'punchy, direct, conversational, witty',
-      hookStrategy: 'Celý post = hook. Max 280 znaků. Každé slovo musí mít váhu.',
-      structureHint: 'Jedna myšlenka. Přímý a úderný. Pro delší sdělení použij vlákno (5-10 postů) — první post musí mít silný vizuál (16:9). Více fotek v postu: nejlépe stejný poměr stran (čtverce).',
-      ctaStyle: 'Repost bait, otázka, kontroverzní take',
+      tone: 'punchy, direct, conversational, witty, kondenzovaná moudrost',
+      hookStrategy: 'Celý post = hook. Max 280 znaků. Každé slovo musí vydělat právo na existenci.',
+      structureHint: 'Jedna myšlenka. Přímý a úderný. Pro delší sdělení: vlákno (5-10 tweetů), každý tweet musí stát samostatně. NIKDY odkaz v prvním tweetu vlákna. Obrázek s textem overlay dostává algoritmicky přednost.',
+      ctaStyle: 'Repost bait, otázka, kontroverzní take, výzva k follow',
       hashtagPlacement: 'inline',
       emojiPolicy: 'none',
     },
-    aiPromptHint: 'X: HARD LIMIT 280 znaků. Punchy, direct. Jedna myšlenka. Max 2 hashtagy inline. Obrázek: landscape 1600×900 (16:9, nejbezpečnější), square 1080×1080, portrait 1080×1350 (3:4, nově podporováno). Pro delší obsah: vlákno s vizuálem v 1. postu.',
+    aiPromptHint: 'X: HARD LIMIT 280 znaků. Každá věta musí vydělat právo na existenci. Kondenzovaná moudrost. Max 0–2 hashtagy. NIKDY odkaz v prvním tweetu. Obrázek: landscape 1600×900 (16:9), square 1080×1080. Cíl: profil visit nebo follow, ne lajk.',
   },
   tiktok: {
     name: 'TikTok',
@@ -647,6 +647,81 @@ BRIDGE: [co za tím stojí]
 - Správný čas? (pro B2C: út–čt 11:00–13:00 nebo 19:00–21:00)
 `;
 
+// ─── X/Twitter Cookbook (actionable sections only) ───────────
+// Injected into prompt when platform === 'x'.
+// Excludes: video, monetization, Premium, X Ads, profile, Musk's vision.
+const X_COOKBOOK = `
+X (TWITTER) KUCHAŘKA — KONDENZOVANÁ MOUDROST
+
+═══ KLÍČOVÝ PRINCIP ═══
+X oceňuje kondenzovanou moudrost. Každá věta musí vydělat právo na existenci.
+Cíl NENÍ lajk. Cíl je přimět lidi navštívit profil nebo tě sledovat.
+Kratší pozornost než LinkedIn — přímý, úderný, bez zbytečných slov.
+
+═══ ALGORITMUS — CO VÁŽÍ NEJVÍC ═══
+- Follow z postu: 8× váha (NEJSILNĚJŠÍ signál)
+- Profil visit z postu: 2.4× váha
+- Reply, Repost, Long click: 1× váha
+- Like: 0.5× váha (NEJSLABŠÍ)
+- Mute/Block: -74× (ZABIJE dosah)
+→ Piš tak, aby lidi chtěli navštívit profil a sledovat tě, ne jen lajknout.
+
+═══ TYPY POSTŮ ═══
+
+A) STANDALONE TWEET — jedna věta, velký nápad (pod 280 znaků):
+Kondenzovaná moudrost. Silné tvrzení. Zastaví scrollování.
+Příklady:
+"Lidé neprodávají nemovitosti. Prodávají rozhodnutí, co dál."
+"Průměrný inzerát na Sreality dostane 80 % kliknutí za první 3 dny. Po týdnu je mrtvý."
+
+B) VLÁKNO (Thread) — nejsilnější formát pro vzdělávací obsah:
+TWEET 1 (hook): Silné tvrzení nebo otázka. Bez kontextu. Číslo vlákna.
+TWEET 2: Kontext — proč je tohle důležité
+TWEET 3–N: Každý bod = jeden tweet. Každý tweet musí stát SAMOSTATNĚ.
+POSLEDNÍ TWEET: Závěr + CTA + výzva k RT nebo follow
+PRAVIDLO: NIKDY odkaz v prvním tweetu — algoritmus to trestá. Odkaz v posledním tweetu nebo v reply.
+
+C) QUOTE TWEET — cizí tweet + tvůj expertní komentář:
+Zprávy z trhu + tvůj pohled. Statistiky + vlastní zkušenost. Kontroverze + argument.
+
+D) OTÁZKA / POLL — engagement bez tvůrčí energie:
+Anketa s 2–4 možnostmi. Generuje data a engagement.
+
+E) OBRÁZEK S TEXTEM OVERLAY — algoritmicky preferovaný:
+Statistika, citát, infografika. Čitelný na mobilu. 1200×675 (16:9) nebo 1080×1350 (4:5).
+
+═══ DÉLKA A FORMÁTOVÁNÍ ═══
+- Krátký tweet (pod 280 znaků): silná tvrzení, statistiky, komentáře
+- Každé slovo musí mít váhu — žádné plnící fráze
+- Pro delší sdělení: vlákno, NE stěnový text v jednom tweetu
+- Pravidlo: X uživatelé mají kratší pozornost než LinkedIn
+
+═══ HASHTAGS ═══
+- 0–2 hashtags MAX
+- Pouze pokud jsou přirozenou součástí věty
+- Víc = spam, algoritmus penalizuje
+- X rozumí kontextu tweetu bez hashtagů
+
+═══ ODKAZ ═══
+- NIKDY odkaz v prvním tweetu vlákna (penalizace dosahu)
+- Odkaz v posledním tweetu nebo v reply na vlastní vlákno
+- Stejná logika jako LinkedIn
+
+═══ CONTENT MIX ═══
+- Standalone tweet: 3–5x denně
+- Vlákno: 3–4x týdně
+- Obrázek s textem: průběžně
+- Poll: 1–2x týdně
+- Životnost tweetu = hodiny, ne dny. Větší objem je norma.
+
+═══ NEJČASTĚJŠÍ CHYBY ═══
+1. Stěnový text místo vlákna — nečitelné
+2. Odkaz v prvním tweetu — penalizace
+3. Hashtag přetížení (víc než 2)
+4. Obecné sdělení bez konkrétního čísla nebo příkladu
+5. Tweeting bez interakce (zveřejnit a odejít)
+`;
+
 // ─── LinkedIn Cookbook (sections 1–5, 7–8, 13, 15) ──────────
 // Injected into prompt when platform === 'linkedin'.
 // LinkedIn = KVALITA JE PRIORITA. Delší posty, důkladně ověřené, konkrétní čísla.
@@ -900,6 +975,9 @@ export function buildPlatformPromptBlock(platform: string): string {
   }
   if (platform === 'linkedin' || platform.startsWith('linkedin_')) {
     lines.push(LINKEDIN_COOKBOOK);
+  }
+  if (platform === 'x') {
+    lines.push(X_COOKBOOK);
   }
 
   return lines.join('\n');

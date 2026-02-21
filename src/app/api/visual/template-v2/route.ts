@@ -1,5 +1,7 @@
 import sharp from 'sharp';
 import { NextRequest, NextResponse } from 'next/server';
+import opentype from 'opentype.js';
+import path from 'path';
 
 export const runtime = 'nodejs';
 export const maxDuration = 15;
@@ -181,10 +183,25 @@ function sizing(w: number, h: number): Sizing {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-const FONT = `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+let _fontBold: opentype.Font | null = null;
+let _fontReg: opentype.Font | null = null;
+function getFont(bold: boolean = false): opentype.Font {
+  if (bold) {
+    if (!_fontBold) {
+      _fontBold = opentype.loadSync(path.join(process.cwd(), 'fonts', 'Inter-Bold.ttf'));
+    }
+    return _fontBold;
+  }
+  if (!_fontReg) {
+    _fontReg = opentype.loadSync(path.join(process.cwd(), 'fonts', 'Inter-Regular.ttf'));
+  }
+  return _fontReg;
+}
 
-function esc(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+function textToPath(text: string, x: number, y: number, fontSize: number, fill: string, opacity: number = 1, bold: boolean = true): string {
+  const font = getFont(bold);
+  const p = font.getPath(text, x, y, fontSize);
+  return `<path d="${p.toPathData(2)}" fill="${fill}" opacity="${opacity}"/>`;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
@@ -217,7 +234,7 @@ function wrap(text: string, fontSize: number, maxPx: number, bold: boolean, maxL
   return lines;
 }
 
-/** Render SVG text lines. Returns { svg, totalH }. */
+/** Render SVG text lines using opentype.js paths. Returns { svg, totalH }. */
 function svgText(opts: {
   text: string; x: number; y: number; fs: number; bold?: boolean;
   fill: string; maxPx: number; maxLines?: number; opacity?: number;
@@ -228,8 +245,18 @@ function svgText(opts: {
   const lineH = Math.round(fs * lh);
   let svg = '';
   for (let i = 0; i < lines.length; i++) {
-    const escapedText = esc(lines[i]);
-    svg += `<text x="${x}" y="${y + i * lineH + fs}" font-family="${FONT}" font-size="${fs}px" font-weight="${bold ? '800' : '400'}" fill="${fill}" opacity="${opacity}" text-anchor="${anchor}">${escapedText}</text>\n`;
+    const lineY = y + i * lineH + fs;
+    let lineX = x;
+    if (anchor === 'middle') {
+      const font = getFont(bold);
+      const adv = font.getAdvanceWidth(lines[i], fs);
+      lineX = x - adv / 2;
+    } else if (anchor === 'end') {
+      const font = getFont(bold);
+      const adv = font.getAdvanceWidth(lines[i], fs);
+      lineX = x - adv;
+    }
+    svg += textToPath(lines[i], lineX, lineY, fs, fill, opacity, bold) + '\n';
   }
   return { svg, totalH: lines.length * lineH };
 }
@@ -545,7 +572,7 @@ async function renderQuoteCard(ctx: TemplateContext): Promise<Buffer> {
     const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${width}" height="${height}" fill="#0a0a0a"/>
       <rect x="${gap}" y="${gap}" width="${textW}" height="${innerH}" rx="${rad}" fill="#${bg}"/>
-      <text x="${gap + s.pad}" y="${gap + s.pad + quoteFs * 0.8}" font-family="Georgia,serif" font-size="${quoteFs}" font-weight="900" fill="#${textColor}" opacity="0.15">„</text>
+      ${textToPath('„', gap + s.pad, gap + s.pad + quoteFs * 0.8, quoteFs, `#${textColor}`, 0.15)}
       ${hookT.svg}${bodyT.svg}${subT.svg}
     </svg>`;
 
@@ -575,7 +602,7 @@ async function renderQuoteCard(ctx: TemplateContext): Promise<Buffer> {
     const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${width}" height="${height}" fill="#0a0a0a"/>
       <rect x="${gap}" y="${gap}" width="${innerW}" height="${textH}" rx="${rad}" fill="#${bg}"/>
-      <text x="${gap + s.pad}" y="${gap + s.pad + quoteFs * 0.8}" font-family="Georgia,serif" font-size="${quoteFs}" font-weight="900" fill="#${textColor}" opacity="0.15">„</text>
+      ${textToPath('„', gap + s.pad, gap + s.pad + quoteFs * 0.8, quoteFs, `#${textColor}`, 0.15)}
       ${hookT.svg}${bodyT.svg}${subT.svg}
     </svg>`;
 

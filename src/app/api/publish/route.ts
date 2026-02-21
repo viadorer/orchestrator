@@ -2,7 +2,66 @@ import { supabase } from '@/lib/supabase/client';
 import { getPublisher, buildPlatformsArray, type MediaItem } from '@/lib/publishers';
 import { validatePostMultiPlatform } from '@/lib/platforms';
 import { ensureImageAspectRatio } from '@/lib/visual/image-resize';
+import { storage } from '@/lib/storage';
 import { NextResponse } from 'next/server';
+
+/**
+ * Pre-render a dynamic template URL into a static PNG and upload to storage.
+ * getLate expects a stable, publicly-accessible image URL — not a dynamic endpoint
+ * that needs server-side rendering on fetch.
+ * 
+ * Returns the static public URL, or falls back to the original resolved URL on error.
+ */
+async function resolveTemplateToStaticUrl(
+  templateUrl: string,
+  postId: string,
+  projectId: string,
+  platform: string,
+): Promise<string> {
+  try {
+    console.log(`[publish] Pre-rendering template for post ${postId}...`);
+    const startTime = Date.now();
+
+    const response = await fetch(templateUrl, {
+      signal: AbortSignal.timeout(14000),
+    });
+
+    if (!response.ok) {
+      console.error(`[publish] Template render failed (${response.status}): ${await response.text().catch(() => 'no body')}`);
+      return templateUrl;
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('image/')) {
+      console.error(`[publish] Template returned non-image content-type: ${contentType}`);
+      return templateUrl;
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const renderMs = Date.now() - startTime;
+    console.log(`[publish] Template rendered: ${(buffer.length / 1024).toFixed(1)} KB in ${renderMs}ms`);
+
+    const timestamp = Date.now();
+    const fileName = `template_${platform}_${timestamp}.png`;
+
+    const uploadResult = await storage.upload(buffer, fileName, {
+      projectId,
+      folder: 'published-templates',
+      contentType: 'image/png',
+    });
+
+    if (uploadResult.success && uploadResult.public_url) {
+      console.log(`[publish] Template uploaded to ${uploadResult.provider}: ${uploadResult.public_url}`);
+      return uploadResult.public_url;
+    }
+
+    console.error(`[publish] Template upload failed: ${uploadResult.error}`);
+    return templateUrl;
+  } catch (err) {
+    console.error(`[publish] resolveTemplateToStaticUrl error:`, err instanceof Error ? err.message : err);
+    return templateUrl;
+  }
+}
 
 export async function POST(request: Request) {
   if (!supabase) {
@@ -93,8 +152,16 @@ export async function POST(request: Request) {
           } catch { /* keep original */ }
         }
         const resolvedTemplate = resolveUrl(templateSrc);
-        console.log(`[publish] Using template URL for post ${post.id}: ${resolvedTemplate.substring(0, 200)}...`);
-        mediaItems.push({ type: 'image', url: resolvedTemplate });
+        console.log(`[publish] Template URL (dynamic): ${resolvedTemplate.substring(0, 200)}...`);
+        // Pre-render template to static PNG and upload to storage
+        const staticUrl = await resolveTemplateToStaticUrl(
+          resolvedTemplate,
+          post.id,
+          post.project_id,
+          targetPlatforms[0] || 'facebook',
+        );
+        console.log(`[publish] Using static template URL for post ${post.id}: ${staticUrl.substring(0, 200)}`);
+        mediaItems.push({ type: 'image', url: staticUrl });
         usedTemplate = true;
       } else if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
         // Priority 2: media_urls array (multiple raw images from manual post)

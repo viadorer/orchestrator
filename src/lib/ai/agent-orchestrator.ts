@@ -2712,38 +2712,91 @@ export async function publishApprovedPosts(): Promise<{
     if (hasErrors) { skipped++; continue; }
 
     try {
-      // Build media items
+      // Build media items (same priority logic as /api/publish/route.ts)
       const mediaItems: Array<{ type: 'image' | 'video' | 'document'; url: string }> = [];
-      
-      // Priority 1: media_urls array (multiple images from manual post)
-      if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
+
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+        || 'http://localhost:3000';
+      const resolveUrl = (url: string): string => {
+        if (url.startsWith('http')) return url;
+        if (url.startsWith('/')) return `${baseUrl}${url}`;
+        return url;
+      };
+
+      // Priority 1: Brand template (photo + brand frame + logo + text)
+      let usedTemplate = false;
+      if (post.template_url || post.card_url) {
+        let templateSrc = post.template_url || post.card_url;
+        // Fix platform in template URL to match current target platform
+        if (templateSrc.includes('/api/visual/template') && targetPlatforms[0]) {
+          try {
+            const tUrl = new URL(templateSrc, baseUrl);
+            tUrl.searchParams.set('platform', targetPlatforms[0]);
+            tUrl.searchParams.delete('w');
+            tUrl.searchParams.delete('h');
+            templateSrc = tUrl.pathname + '?' + tUrl.searchParams.toString();
+          } catch { /* keep original */ }
+        }
+        const resolvedTemplate = resolveUrl(templateSrc);
+        // Pre-render template to static PNG and upload to storage
+        let staticUrl = resolvedTemplate;
+        try {
+          const { storage } = await import('@/lib/storage');
+          console.log(`[auto-publish] Pre-rendering template for post ${post.id}...`);
+          const resp = await fetch(resolvedTemplate, { signal: AbortSignal.timeout(14000) });
+          if (resp.ok && (resp.headers.get('content-type') || '').includes('image/')) {
+            const buf = Buffer.from(await resp.arrayBuffer());
+            const uploadResult = await storage.upload(buf, `template_${targetPlatforms[0]}_${Date.now()}.png`, {
+              projectId: post.project_id,
+              folder: 'published-templates',
+              contentType: 'image/png',
+            });
+            if (uploadResult.success && uploadResult.public_url) {
+              staticUrl = uploadResult.public_url;
+              console.log(`[auto-publish] Template uploaded: ${staticUrl}`);
+            }
+          }
+        } catch (e) {
+          console.error(`[auto-publish] Template pre-render failed:`, e instanceof Error ? e.message : e);
+        }
+        mediaItems.push({ type: 'image', url: staticUrl });
+        usedTemplate = true;
+      } else if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
+        // Priority 2: media_urls array (multiple images from manual post)
         for (const url of post.media_urls) {
-          if (typeof url === 'string' && url.startsWith('http')) {
-            mediaItems.push({ type: 'image', url });
+          if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) {
+            mediaItems.push({ type: 'image', url: resolveUrl(url) });
           }
         }
-      } else {
-        // Priority 2: individual fields (backward compatibility)
-        if (post.chart_url) mediaItems.push({ type: 'image', url: post.chart_url });
-        if (post.card_url && post.card_url.startsWith('http')) mediaItems.push({ type: 'image', url: post.card_url });
-        if (post.image_url) mediaItems.push({ type: 'image', url: post.image_url });
+      } else if (post.image_url) {
+        // Priority 3: single image fallback
+        mediaItems.push({ type: 'image', url: post.image_url });
+      }
+      // Chart (absolute URL from QuickChart.io)
+      if (post.chart_url) {
+        mediaItems.push({ type: 'image', url: post.chart_url });
       }
 
-      // Enforce aspect ratio for platform compliance (Instagram: 0.75-1.91)
-      const { ensureImageAspectRatio } = await import('@/lib/visual/image-resize');
-      for (let i = 0; i < mediaItems.length; i++) {
-        if (mediaItems[i].type === 'image') {
-          try {
-            mediaItems[i].url = await ensureImageAspectRatio(
-              mediaItems[i].url,
-              targetPlatforms,
-              post.project_id,
-            );
-          } catch {
-            // Continue with original URL if resize fails
+      // Enforce aspect ratio for platform compliance — skip for template URLs
+      if (!usedTemplate) {
+        const { ensureImageAspectRatio } = await import('@/lib/visual/image-resize');
+        for (let i = 0; i < mediaItems.length; i++) {
+          if (mediaItems[i].type === 'image') {
+            try {
+              mediaItems[i].url = await ensureImageAspectRatio(
+                mediaItems[i].url,
+                targetPlatforms,
+                post.project_id,
+              );
+            } catch {
+              // Continue with original URL if resize fails
+            }
           }
         }
       }
+
+      console.log(`[auto-publish] Post ${post.id} → platforms: ${targetPlatforms.join(',')}, media: ${mediaItems.length}, template: ${usedTemplate}`);
 
       const publishResult = await publisher.publish({
         content: post.text_content,

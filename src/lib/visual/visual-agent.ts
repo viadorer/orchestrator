@@ -445,6 +445,17 @@ const TEMPLATE_REGISTRY: TemplateEntry[] = [
     good_platforms: ['facebook', 'instagram', 'linkedin', 'threads'],
     avoid_platforms: [],
   },
+  {
+    key: 'cta_card',
+    label: 'CTA Card',
+    visual_type: 'photo',
+    tags: ['cta', 'download', 'lead_magnet', 'guide', 'ebook', 'webinar'],
+    best_for: 'Lead magnet, stažení průvodce, registrace na webinář. Fotka nahoře, accent panel dole s CTA.',
+    description: 'Fotka na pozadí nahoře, accent barevný panel dole se zaoblenými rohy, hook text + CTA tlačítko + logo.',
+    requires: ['photo', 'hook', 'body'],
+    good_platforms: ['facebook', 'instagram', 'linkedin', 'threads'],
+    avoid_platforms: [],
+  },
 ];
 
 const VALID_TEMPLATES = TEMPLATE_REGISTRY.map(t => t.key);

@@ -69,6 +69,9 @@ export async function GET(request: NextRequest) {
       case 'quote_overlay':
         buffer = await renderQuoteOverlay(ctx);
         break;
+      case 'cta_card':
+        buffer = await renderCtaCard(ctx);
+        break;
       case 'bold_card':
       default:
         buffer = await renderBoldCard(ctx);
@@ -735,4 +738,70 @@ async function renderQuoteOverlay(ctx: TemplateContext): Promise<Buffer> {
   if (logo) composite.push({ input: logo, top: s.pad, left: width - s.pad - logoSz });
 
   return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
+}
+
+// ─── Template 10: CTA Card ──────────────────────────────────
+// Deel style: photo on top, accent colored panel at bottom with rounded top corners,
+// large hook text + CTA button (body text) + logo bottom-right.
+
+async function renderCtaCard(ctx: TemplateContext): Promise<Buffer> {
+  const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const isLand = s.mode === 'landscape';
+
+  // Panel dimensions
+  const panelH = Math.round(height * (isLand ? 0.38 : 0.40));
+  const panelY = height - panelH;
+  const panelRad = Math.round(s.base * 0.03);
+  const panelPad = Math.round(s.pad * 1.3);
+
+  const photo = await fetchImg(photoUrl, width, height);
+
+  // Accent icon circle above panel (left side)
+  const iconR = Math.round(s.base * 0.04);
+  const iconCx = panelPad + iconR;
+  const iconCy = panelY - iconR - Math.round(s.pad * 0.3);
+
+  // Hook text on panel — dark text on accent bg
+  const hookFs = isLand ? Math.round(s.base * 0.075) : Math.round(s.base * 0.065);
+  const textMaxW = isLand ? Math.round(width * 0.65) : Math.round(width * 0.85);
+  const hookTextY = panelY + panelPad;
+  const hookT = svgText({ text: hook, x: panelPad, y: hookTextY, fs: hookFs, bold: true, fill: `#${bg}`, maxPx: textMaxW, maxLines: isLand ? 3 : 4, lh: 1.2 });
+
+  // CTA button (body text inside rounded rect)
+  const ctaFs = Math.round(s.base * 0.028);
+  const ctaH = Math.round(ctaFs * 2.8);
+  const ctaY = hookTextY + hookT.totalH + Math.round(s.pad * 0.6);
+  const ctaPadX = Math.round(ctaFs * 1.5);
+  const font = getFont(true);
+  const ctaTextW = Math.round(font.getAdvanceWidth(body || 'Více info', ctaFs));
+  const ctaW = ctaTextW + ctaPadX * 2;
+  const ctaRad = Math.round(ctaH / 2);
+  const ctaTextPath = textToPath(body || 'Více info', panelPad + ctaPadX, ctaY + ctaH * 0.65, ctaFs, `#${accent}`, 1, true);
+
+  // Logo bottom-right on panel
+  const logoSz = Math.round(s.base * 0.1);
+
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Accent panel with rounded top corners -->
+    <path d="M0,${panelY + panelRad} Q0,${panelY} ${panelRad},${panelY} L${width - panelRad},${panelY} Q${width},${panelY} ${width},${panelY + panelRad} L${width},${height} L0,${height} Z" fill="#${accent}"/>
+    <!-- Icon circle above panel -->
+    <circle cx="${iconCx}" cy="${iconCy}" r="${iconR}" fill="#${accent}"/>
+    ${textToPath('\u2193', iconCx - Math.round(iconR * 0.4), iconCy + Math.round(iconR * 0.4), Math.round(iconR * 1.2), `#${textColor}`, 1, true)}
+    <!-- Hook text -->
+    ${hookT.svg}
+    <!-- CTA button -->
+    <rect x="${panelPad}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${ctaRad}" fill="#${bg}"/>
+    ${ctaTextPath}
+  </svg>`;
+
+  const composite: sharp.OverlayOptions[] = [
+    { input: photo, top: 0, left: 0 },
+    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
+  ];
+
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
+  if (logo) composite.push({ input: logo, top: height - panelPad - logoSz, left: width - panelPad - logoSz });
+
+  return sharp({ create: { width, height, channels: 4, background: { r: 255, g: 255, b: 255 } } }).composite(composite).png().toBuffer();
 }

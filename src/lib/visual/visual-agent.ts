@@ -456,6 +456,17 @@ const TEMPLATE_REGISTRY: TemplateEntry[] = [
     good_platforms: ['facebook', 'instagram', 'linkedin', 'threads'],
     avoid_platforms: [],
   },
+  {
+    key: 'circle_cta',
+    label: 'Circle CTA',
+    visual_type: 'photo',
+    tags: ['cta', 'promo', 'bold', 'modern', 'real_estate'],
+    best_for: 'Reklamní post s výrazným CTA. Velký bílý kruh přes fotku s textem a tlačítkem.',
+    description: 'Fotka na pozadí, velký bílý kruh vlevo dole s hook textem + accent CTA tlačítko, logo badge vpravo nahoře.',
+    requires: ['photo', 'hook', 'body'],
+    good_platforms: ['facebook', 'instagram', 'linkedin', 'threads'],
+    avoid_platforms: [],
+  },
 ];
 
 const VALID_TEMPLATES = TEMPLATE_REGISTRY.map(t => t.key);

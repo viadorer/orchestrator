@@ -72,6 +72,9 @@ export async function GET(request: NextRequest) {
       case 'cta_card':
         buffer = await renderCtaCard(ctx);
         break;
+      case 'circle_cta':
+        buffer = await renderCircleCta(ctx);
+        break;
       case 'bold_card':
       default:
         buffer = await renderBoldCard(ctx);
@@ -804,4 +807,76 @@ async function renderCtaCard(ctx: TemplateContext): Promise<Buffer> {
   if (logo) composite.push({ input: logo, top: height - panelPad - logoSz, left: width - panelPad - logoSz });
 
   return sharp({ create: { width, height, channels: 4, background: { r: 255, g: 255, b: 255 } } }).composite(composite).png().toBuffer();
+}
+
+// ─── Template 11: Circle CTA ───────────────────────────────
+// odhad.online style: photo background, large white circle bottom-left with dark hook text,
+// accent CTA button inside circle, logo badge top-right on accent rect.
+
+async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
+  const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const isLand = s.mode === 'landscape';
+
+  const photo = await fetchImg(photoUrl, width, height);
+
+  // Circle dimensions — large, anchored bottom-left, overflows edges
+  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.42 : 0.45));
+  const circleCx = Math.round(width * (isLand ? 0.28 : 0.25));
+  const circleCy = Math.round(height * (isLand ? 0.62 : 0.65));
+
+  // Hook text inside circle — dark text on white
+  const hookFs = isLand ? Math.round(s.base * 0.07) : Math.round(s.base * 0.065);
+  const textMaxW = Math.round(circleR * 1.3);
+  const textX = Math.round(circleCx - circleR * 0.6);
+  const textY = Math.round(circleCy - circleR * 0.55);
+  const hookT = svgText({ text: hook, x: textX, y: textY, fs: hookFs, bold: true, fill: `#${bg}`, maxPx: textMaxW, maxLines: isLand ? 5 : 7, lh: 1.15 });
+
+  // CTA button (body text) — accent colored rounded rect inside circle
+  const ctaFs = Math.round(s.base * 0.035);
+  const ctaH = Math.round(ctaFs * 2.8);
+  const ctaY = textY + hookT.totalH + Math.round(s.pad * 0.5);
+  const ctaPadX = Math.round(ctaFs * 1.8);
+  const font = getFont(true);
+  const ctaLabel = body || 'Více info';
+  const ctaTextW = Math.round(font.getAdvanceWidth(ctaLabel, ctaFs));
+  const ctaW = ctaTextW + ctaPadX * 2;
+  const ctaRad = Math.round(ctaH / 2);
+  const ctaTextPath = textToPath(ctaLabel, textX + ctaPadX, ctaY + ctaH * 0.65, ctaFs, '#ffffff', 1, true);
+
+  // Logo badge top-right — accent rectangle with rounded corners
+  const logoSz = Math.round(s.base * 0.06);
+  const badgePad = Math.round(s.pad * 0.6);
+  const badgeH = Math.round(logoSz + badgePad * 2);
+
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- White circle -->
+    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#ffffff"/>
+    <!-- Hook text -->
+    ${hookT.svg}
+    <!-- CTA button -->
+    <rect x="${textX}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${ctaRad}" fill="#${accent}"/>
+    ${ctaTextPath}
+  </svg>`;
+
+  const composite: sharp.OverlayOptions[] = [
+    { input: photo, top: 0, left: 0 },
+    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
+  ];
+
+  // Logo badge top-right
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
+  if (logo) {
+    // Accent badge background
+    const badgeW = Math.round(logoSz + badgePad * 4 + s.base * 0.15);
+    const badgeX = width - badgeW - Math.round(s.pad * 0.5);
+    const badgeY = Math.round(s.pad * 0.5);
+    const badgeSvg = `<svg width="${badgeW}" height="${badgeH}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${badgeW}" height="${badgeH}" rx="${Math.round(badgeH * 0.2)}" fill="#${accent}"/>
+    </svg>`;
+    composite.push({ input: Buffer.from(badgeSvg, 'utf-8'), top: badgeY, left: badgeX });
+    composite.push({ input: logo, top: badgeY + Math.round((badgeH - logoSz) / 2), left: badgeX + badgePad });
+  }
+
+  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
 }

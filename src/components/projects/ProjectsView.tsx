@@ -1297,6 +1297,7 @@ const TEMPLATE_PREVIEWS: Array<{ key: string; label: string; desc: string; hook:
   { key: 'diagonal', label: 'Diagonal', desc: 'Diagonální split, CTA look', hook: 'Odhad ceny nemovitosti do 2 minut', body: 'Znáte hodnotu své nemovitosti?', subtitle: 'odhad.online', photo: SAMPLE_PHOTO },
   { key: 'quote_overlay', label: 'Quote Overlay', desc: 'Citát přes fotku osoby', hook: 'Dřív rodiče na tréninku nebyli. Byli v práci.', body: '– PhDr. Marian Jelínek', photo: SAMPLE_PHOTO },
   { key: 'cta_card', label: 'CTA Card', desc: 'Lead magnet, CTA tlačítko', hook: 'Průvodce financováním nemovitosti', body: 'Stáhnout zdarma', photo: SAMPLE_PHOTO },
+  { key: 'circle_cta', label: 'Circle CTA', desc: 'Kruh přes fotku, CTA', hook: '90% úspěšných prodejů bytů začíná správným odhadem', body: 'Spočítat zdarma', photo: SAMPLE_PHOTO },
 ];
 
 const PREVIEW_PLATFORMS: Array<{ key: string; label: string; w: number; h: number; aspect: string }> = [

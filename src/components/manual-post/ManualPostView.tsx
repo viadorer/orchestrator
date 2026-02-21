@@ -543,6 +543,7 @@ export function ManualPostView() {
                   { key: 'diagonal', label: 'Diagonal' },
                   { key: 'quote_overlay', label: 'Quote Overlay' },
                   { key: 'cta_card', label: 'CTA Card' },
+                  { key: 'circle_cta', label: 'Circle CTA' },
                 ].map(t => {
                   const isActive = selectedTemplate === t.key;
                   const previewUrl = selectedProjects.length > 0 ? getTemplatePreviewUrl(t.key) : null;

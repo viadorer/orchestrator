@@ -325,15 +325,20 @@ export function ReviewView() {
                 {selected.has(item.id) && <Check className="w-3 h-3 text-white" />}
               </button>
 
-              {/* Thumbnail – template > photo > chart > card */}
-              {(item.template_url || item.image_url || item.chart_url || item.card_url) && (
-                <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-slate-700 bg-slate-800">
+              {/* Thumbnail – template > photo > chart > card; multi-image badge */}
+              {(item.template_url || item.image_url || item.chart_url || item.card_url || (item.media_urls && item.media_urls.length > 0)) && (
+                <div className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-slate-700 bg-slate-800">
                   <img
-                    src={item.template_url || item.image_url || item.chart_url || item.card_url || ''}
+                    src={item.template_url || item.image_url || (item.media_urls?.[0]) || item.chart_url || item.card_url || ''}
                     alt=""
                     className="w-full h-full object-cover"
                     loading="lazy"
                   />
+                  {item.media_urls && item.media_urls.length > 1 && (
+                    <div className="absolute bottom-0.5 right-0.5 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-medium text-white">
+                      +{item.media_urls.length - 1}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -364,6 +369,9 @@ export function ReviewView() {
                   )}
                   {item.template_url && (
                     <span className="px-1.5 py-0.5 rounded bg-fuchsia-500/20 text-xs text-fuchsia-400" title="Brand template (fotka + logo + text)">🖼 template</span>
+                  )}
+                  {item.media_urls && item.media_urls.length > 1 && (
+                    <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-xs text-cyan-400" title={`${item.media_urls.length} fotek v carouselu`}>📷 {item.media_urls.length}x</span>
                   )}
                   {!item.template_url && !item.image_url && !item.chart_url && !item.card_url && item.image_prompt && (
                     <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-xs text-amber-400">🎨 prompt</span>
@@ -440,6 +448,7 @@ export function ReviewView() {
                       chartUrl={item.chart_url}
                       cardUrl={item.card_url}
                       templateUrl={item.template_url}
+                      mediaUrls={item.media_urls}
                     />
                   </div>
                 )}

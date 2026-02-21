@@ -12,9 +12,10 @@ interface PostPreviewProps {
   chartUrl?: string | null;
   cardUrl?: string | null;
   templateUrl?: string | null;
+  mediaUrls?: string[] | null;
 }
 
-export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, cardUrl, templateUrl }: PostPreviewProps) {
+export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, cardUrl, templateUrl, mediaUrls }: PostPreviewProps) {
   const [activePlatform, setActivePlatform] = useState(platforms[0] || 'facebook');
 
   const validation = validatePost(text, activePlatform);
@@ -24,6 +25,8 @@ export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, 
 
   // Template (photo + brand frame + logo + text) has priority over raw photo
   const mediaUrl = templateUrl || imageUrl || chartUrl || cardUrl;
+  // All media URLs for carousel display
+  const allMediaUrls = mediaUrls && mediaUrls.length > 1 ? mediaUrls : null;
   const handle = projectName?.toLowerCase().replace(/\s+/g, '') || 'projekt';
   const initial = (projectName || 'P')[0];
 
@@ -66,6 +69,7 @@ export function PostPreview({ text, platforms, projectName, imageUrl, chartUrl, 
           handle={handle}
           initial={initial}
           mediaUrl={mediaUrl}
+          allMediaUrls={allMediaUrls}
         />
       </div>
 
@@ -159,6 +163,7 @@ interface MockupProps {
   handle: string;
   initial: string;
   mediaUrl?: string | null;
+  allMediaUrls?: string[] | null;
 }
 
 function PlatformMockup(props: MockupProps) {
@@ -196,6 +201,28 @@ function MediaBlock({ url, aspect }: { url: string; aspect?: string }) {
   return <img src={url} alt="" className={`w-full ${aspect || ''}`} loading="lazy" />;
 }
 
+function CarouselBlock({ urls, aspect }: { urls: string[]; aspect?: string }) {
+  const [active, setActive] = useState(0);
+  return (
+    <div className="relative">
+      <img src={urls[active]} alt="" className={`w-full ${aspect || ''}`} loading="lazy" />
+      {urls.length > 1 && (
+        <>
+          <div className="absolute top-1/2 -translate-y-1/2 left-1 right-1 flex justify-between pointer-events-none">
+            <button onClick={() => setActive(Math.max(0, active - 1))} className={`pointer-events-auto w-7 h-7 rounded-full bg-black/50 text-white text-sm flex items-center justify-center ${active === 0 ? 'opacity-30' : 'hover:bg-black/70'}`}>&lt;</button>
+            <button onClick={() => setActive(Math.min(urls.length - 1, active + 1))} className={`pointer-events-auto w-7 h-7 rounded-full bg-black/50 text-white text-sm flex items-center justify-center ${active === urls.length - 1 ? 'opacity-30' : 'hover:bg-black/70'}`}>&gt;</button>
+          </div>
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+            {urls.map((_, i) => (
+              <div key={i} className={`w-1.5 h-1.5 rounded-full ${i === active ? 'bg-white' : 'bg-white/40'}`} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ErrorBar({ validation, name }: { validation: ValidationResult; name: string }) {
   if (validation.valid) return null;
   return (
@@ -208,7 +235,7 @@ function ErrorBar({ validation, name }: { validation: ValidationResult; name: st
 // ============================================
 // Facebook
 // ============================================
-function FacebookMockup({ text, validation, projectName, initial, mediaUrl }: MockupProps) {
+function FacebookMockup({ text, validation, projectName, initial, mediaUrl, allMediaUrls }: MockupProps) {
   return (
     <div style={{ backgroundColor: '#fff', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#1c1e21' }}>
       <div className="flex items-center gap-2.5 px-3 pt-3 pb-1.5">
@@ -218,7 +245,7 @@ function FacebookMockup({ text, validation, projectName, initial, mediaUrl }: Mo
       <div className="px-3 pb-2 text-[14px] leading-[1.35]">
         <TruncatedText text={text} visibleChars={477} truncationText="... Zobrazit více" linkColor="#385898" />
       </div>
-      {mediaUrl && <div style={{ borderTop: '1px solid #e4e6eb' }}><MediaBlock url={mediaUrl} /></div>}
+      {(allMediaUrls || mediaUrl) && <div style={{ borderTop: '1px solid #e4e6eb' }}>{allMediaUrls ? <CarouselBlock urls={allMediaUrls} /> : mediaUrl ? <MediaBlock url={mediaUrl} /> : null}</div>}
       <div className="flex justify-around py-1.5 text-[12px] font-medium" style={{ borderTop: '1px solid #e4e6eb', color: '#65676b' }}>
         <span>👍 To se mi líbí</span><span>💬 Komentář</span><span>↗ Sdílet</span>
       </div>
@@ -230,14 +257,14 @@ function FacebookMockup({ text, validation, projectName, initial, mediaUrl }: Mo
 // ============================================
 // Instagram
 // ============================================
-function InstagramMockup({ text, validation, projectName, handle, initial, mediaUrl }: MockupProps) {
+function InstagramMockup({ text, validation, projectName, handle, initial, mediaUrl, allMediaUrls }: MockupProps) {
   return (
     <div style={{ backgroundColor: '#000', fontFamily: '-apple-system, sans-serif', color: '#fff' }}>
       <div className="flex items-center gap-2.5 px-3 py-2.5">
         <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style={{ background: 'linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)' }}>{initial}</div>
         <span className="text-[13px] font-semibold">{handle}</span>
       </div>
-      {mediaUrl ? <MediaBlock url={mediaUrl} aspect="aspect-square object-cover" /> : (
+      {allMediaUrls ? <CarouselBlock urls={allMediaUrls} aspect="aspect-square object-cover" /> : mediaUrl ? <MediaBlock url={mediaUrl} aspect="aspect-square object-cover" /> : (
         <div className="w-full aspect-square flex items-center justify-center" style={{ backgroundColor: '#1a1a1a' }}>
           <span className="text-[13px]" style={{ color: '#555' }}>Obrázek povinný pro Instagram</span>
         </div>
@@ -257,7 +284,7 @@ function InstagramMockup({ text, validation, projectName, handle, initial, media
 // ============================================
 // LinkedIn
 // ============================================
-function LinkedInMockup({ text, validation, projectName, initial, mediaUrl }: MockupProps) {
+function LinkedInMockup({ text, validation, projectName, initial, mediaUrl, allMediaUrls }: MockupProps) {
   return (
     <div style={{ backgroundColor: '#fff', fontFamily: '-apple-system, system-ui, sans-serif', color: '#000000e6' }}>
       <div className="flex items-center gap-2.5 px-3 pt-3 pb-1.5">
@@ -267,7 +294,7 @@ function LinkedInMockup({ text, validation, projectName, initial, mediaUrl }: Mo
       <div className="px-3 pb-2 text-[13px] leading-[1.4]">
         <TruncatedText text={text} visibleChars={210} truncationText="...zobrazit více" linkColor="#0a66c2" />
       </div>
-      {mediaUrl && <div style={{ borderTop: '1px solid #e0e0e0' }}><MediaBlock url={mediaUrl} /></div>}
+      {(allMediaUrls || mediaUrl) && <div style={{ borderTop: '1px solid #e0e0e0' }}>{allMediaUrls ? <CarouselBlock urls={allMediaUrls} /> : mediaUrl ? <MediaBlock url={mediaUrl} /> : null}</div>}
       <div className="flex justify-around py-2 text-[11px] font-medium" style={{ borderTop: '1px solid #e0e0e0', color: '#00000099' }}>
         <span>👍 Líbí se mi</span><span>💬 Komentovat</span><span>🔄 Sdílet</span><span>📤 Odeslat</span>
       </div>
@@ -354,7 +381,7 @@ function YouTubeMockup({ text, validation, projectName, initial }: MockupProps) 
 // ============================================
 // Threads
 // ============================================
-function ThreadsMockup({ text, validation, projectName, handle, initial, mediaUrl }: MockupProps) {
+function ThreadsMockup({ text, validation, projectName, handle, initial, mediaUrl, allMediaUrls }: MockupProps) {
   return (
     <div style={{ backgroundColor: '#101010', fontFamily: '-apple-system, sans-serif', color: '#f5f5f5' }}>
       <div className="flex gap-2.5 p-3">
@@ -365,7 +392,7 @@ function ThreadsMockup({ text, validation, projectName, handle, initial, mediaUr
             <span style={{ color: '#777' }}>· 1m</span>
           </div>
           <div className="text-[14px] leading-[1.4]" style={{ whiteSpace: 'pre-wrap' }}>{text}</div>
-          {mediaUrl && <div className="mt-2 rounded-lg overflow-hidden"><MediaBlock url={mediaUrl} /></div>}
+          {(allMediaUrls || mediaUrl) && <div className="mt-2 rounded-lg overflow-hidden">{allMediaUrls ? <CarouselBlock urls={allMediaUrls} /> : mediaUrl ? <MediaBlock url={mediaUrl} /> : null}</div>}
           <div className="flex gap-5 mt-2 text-[18px]" style={{ color: '#777' }}>
             <span>♡</span><span>💬</span><span>🔄</span><span>📤</span>
           </div>

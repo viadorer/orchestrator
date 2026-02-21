@@ -81,35 +81,9 @@ export async function POST(request: Request) {
           }
         }
 
-        const insertData: Record<string, unknown> = {
-          project_id: proj.id,
-          text_content: finalText,
-          content_type: 'educational',
-          platforms: [platform],
-          target_platform: platform,
-          status,
-          source: 'manual',
-          ai_scores: { overall: 10, creativity: 10, tone_match: 10, hallucination_risk: 10, value_score: 10 },
-          generation_context: {
-            source: 'manual_post',
-            hugo_adapted: hugo_adapt && finalText !== text,
-            media_count: media_urls?.length || 0,
-            projects_count: projects.length,
-            template_key: template_key || null,
-            timestamp: new Date().toISOString(),
-          },
-        };
-
-        // Store all media URLs in media_urls array
-        if (media_urls && media_urls.length > 0) {
-          insertData.media_urls = media_urls;
-          // Also set first image to image_url for backward compatibility
-          insertData.image_url = media_urls[0];
-        }
-
-        // Build template_url if template_key is selected and we have a photo
+        // ---- Step 1: Build template_url if template_key is selected ----
+        let templateUrl: string | null = null;
         if (template_key && media_urls && media_urls.length > 0) {
-          // Load project visual identity for brand colors
           const vi = projectData?.visual_identity as Record<string, string> | null;
           const bgColor = (vi?.primary_color || '#0f0f23').replace('#', '');
           const accentColor = (vi?.accent_color || '#e94560').replace('#', '');
@@ -130,26 +104,100 @@ export async function POST(request: Request) {
             platform,
             project: projectName,
           });
-          insertData.template_url = `/api/visual/template-v2?${tParams.toString()}`;
+          templateUrl = `/api/visual/template-v2?${tParams.toString()}`;
+        }
+
+        console.log(`[manual-post] ${projectName}/${platform}: media_urls=${media_urls?.length || 0}, template_key=${template_key || 'none'}, template_url=${templateUrl ? 'yes' : 'no'}`);
+
+        // ---- Step 2: Insert with ALL columns (full insert) ----
+        const fullInsert: Record<string, unknown> = {
+          project_id: proj.id,
+          text_content: finalText,
+          content_type: 'educational',
+          platforms: [platform],
+          target_platform: platform,
+          status,
+          source: 'manual',
+          ai_scores: { overall: 10, creativity: 10, tone_match: 10, hallucination_risk: 10, value_score: 10 },
+          generation_context: {
+            source: 'manual_post',
+            hugo_adapted: hugo_adapt && finalText !== text,
+            media_count: media_urls?.length || 0,
+            projects_count: projects.length,
+            template_key: template_key || null,
+            timestamp: new Date().toISOString(),
+          },
+        };
+        if (media_urls && media_urls.length > 0) {
+          fullInsert.media_urls = media_urls;
+          fullInsert.image_url = media_urls[0];
+        }
+        if (templateUrl) {
+          fullInsert.template_url = templateUrl;
+          fullInsert.card_url = templateUrl;
         }
 
         let { data: saved, error } = await supabase
           .from('content_queue')
-          .insert(insertData)
+          .insert(fullInsert)
           .select('id')
           .single();
 
-        // Retry without optional columns
-        if (error && error.message.includes('column')) {
-          delete insertData.image_url;
-          delete insertData.generation_context;
-          const retry = await supabase
+        // ---- Step 3: If full insert fails, insert core + update optional ----
+        if (error) {
+          console.error(`[manual-post] Full insert failed: ${error.message}`);
+          const coreInsert: Record<string, unknown> = {
+            project_id: proj.id,
+            text_content: finalText,
+            content_type: 'educational',
+            platforms: [platform],
+            target_platform: platform,
+            status,
+            source: 'manual',
+            ai_scores: { overall: 10, creativity: 10, tone_match: 10, hallucination_risk: 10, value_score: 10 },
+          };
+          const coreResult = await supabase
             .from('content_queue')
-            .insert(insertData)
+            .insert(coreInsert)
             .select('id')
             .single();
-          saved = retry.data;
-          error = retry.error;
+          saved = coreResult.data;
+          error = coreResult.error;
+
+          // If core insert succeeded, try to update with optional columns one by one
+          if (!error && saved?.id) {
+            console.log(`[manual-post] Core insert OK (${saved.id}), updating optional columns...`);
+            const optionalUpdates: Record<string, unknown> = {};
+            if (media_urls && media_urls.length > 0) optionalUpdates.media_urls = media_urls;
+            if (media_urls && media_urls.length > 0) optionalUpdates.image_url = media_urls[0];
+            if (templateUrl) optionalUpdates.template_url = templateUrl;
+            if (templateUrl) optionalUpdates.card_url = templateUrl;
+
+            // Try updating all optional columns at once
+            if (Object.keys(optionalUpdates).length > 0) {
+              const { error: updateError } = await supabase
+                .from('content_queue')
+                .update(optionalUpdates)
+                .eq('id', saved.id);
+              if (updateError) {
+                console.error(`[manual-post] Optional update failed: ${updateError.message}`);
+                // Try each column individually
+                for (const [key, value] of Object.entries(optionalUpdates)) {
+                  const { error: singleError } = await supabase
+                    .from('content_queue')
+                    .update({ [key]: value })
+                    .eq('id', saved.id);
+                  if (singleError) {
+                    console.error(`[manual-post] Column ${key} update failed: ${singleError.message}`);
+                  } else {
+                    console.log(`[manual-post] Column ${key} updated OK`);
+                  }
+                }
+              } else {
+                console.log(`[manual-post] Optional columns updated OK: ${Object.keys(optionalUpdates).join(',')}`);
+              }
+            }
+          }
         }
 
         if (error) {

@@ -71,7 +71,14 @@ export function ReviewView() {
     setLoading(true);
     const res = await fetch(`/api/queue?status=${statusFilter}`);
     const data = await res.json();
-    setItems(Array.isArray(data) ? data : []);
+    // Fallback: if template_url column is empty, read from generation_context
+    const items = (Array.isArray(data) ? data : []).map((item: QueueItem) => {
+      if (!item.template_url && item.generation_context?.template_url_value) {
+        item.template_url = item.generation_context.template_url_value as string;
+      }
+      return item;
+    });
+    setItems(items);
     setLoading(false);
   }, [statusFilter]);
 

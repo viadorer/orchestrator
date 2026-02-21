@@ -109,8 +109,8 @@ export async function POST(request: Request) {
 
         console.log(`[manual-post] ${projectName}/${platform}: media_urls=${media_urls?.length || 0}, template_key=${template_key || 'none'}, template_url=${templateUrl ? 'yes' : 'no'}`);
 
-        // ---- Step 2: Insert with ALL columns (full insert) ----
-        const fullInsert: Record<string, unknown> = {
+        // ---- Step 2: Insert with ALL columns ----
+        const insertData: Record<string, unknown> = {
           project_id: proj.id,
           text_content: finalText,
           content_type: 'educational',
@@ -125,78 +125,66 @@ export async function POST(request: Request) {
             media_count: media_urls?.length || 0,
             projects_count: projects.length,
             template_key: template_key || null,
+            template_url_value: templateUrl || null,
             timestamp: new Date().toISOString(),
           },
         };
         if (media_urls && media_urls.length > 0) {
-          fullInsert.media_urls = media_urls;
-          fullInsert.image_url = media_urls[0];
+          insertData.media_urls = media_urls;
+          insertData.image_url = media_urls[0];
         }
         if (templateUrl) {
-          fullInsert.template_url = templateUrl;
-          fullInsert.card_url = templateUrl;
+          insertData.template_url = templateUrl;
+          insertData.card_url = templateUrl;
         }
+
+        console.log(`[manual-post] INSERT keys: ${Object.keys(insertData).join(',')}, template_url length: ${templateUrl?.length || 0}`);
 
         let { data: saved, error } = await supabase
           .from('content_queue')
-          .insert(fullInsert)
+          .insert(insertData)
           .select('id')
           .single();
 
-        // ---- Step 3: If full insert fails, insert core + update optional ----
+        // ---- Step 3: If insert fails, try without generation_context ----
         if (error) {
-          console.error(`[manual-post] Full insert failed: ${error.message}`);
-          const coreInsert: Record<string, unknown> = {
-            project_id: proj.id,
-            text_content: finalText,
-            content_type: 'educational',
-            platforms: [platform],
-            target_platform: platform,
-            status,
-            source: 'manual',
-            ai_scores: { overall: 10, creativity: 10, tone_match: 10, hallucination_risk: 10, value_score: 10 },
-          };
-          const coreResult = await supabase
+          console.error(`[manual-post] Full insert FAILED: ${error.message}`);
+          delete insertData.generation_context;
+          const retry1 = await supabase
             .from('content_queue')
-            .insert(coreInsert)
+            .insert(insertData)
             .select('id')
             .single();
-          saved = coreResult.data;
-          error = coreResult.error;
-
-          // If core insert succeeded, try to update with optional columns one by one
-          if (!error && saved?.id) {
-            console.log(`[manual-post] Core insert OK (${saved.id}), updating optional columns...`);
-            const optionalUpdates: Record<string, unknown> = {};
-            if (media_urls && media_urls.length > 0) optionalUpdates.media_urls = media_urls;
-            if (media_urls && media_urls.length > 0) optionalUpdates.image_url = media_urls[0];
-            if (templateUrl) optionalUpdates.template_url = templateUrl;
-            if (templateUrl) optionalUpdates.card_url = templateUrl;
-
-            // Try updating all optional columns at once
-            if (Object.keys(optionalUpdates).length > 0) {
-              const { error: updateError } = await supabase
-                .from('content_queue')
-                .update(optionalUpdates)
-                .eq('id', saved.id);
-              if (updateError) {
-                console.error(`[manual-post] Optional update failed: ${updateError.message}`);
-                // Try each column individually
-                for (const [key, value] of Object.entries(optionalUpdates)) {
-                  const { error: singleError } = await supabase
-                    .from('content_queue')
-                    .update({ [key]: value })
-                    .eq('id', saved.id);
-                  if (singleError) {
-                    console.error(`[manual-post] Column ${key} update failed: ${singleError.message}`);
-                  } else {
-                    console.log(`[manual-post] Column ${key} updated OK`);
-                  }
-                }
-              } else {
-                console.log(`[manual-post] Optional columns updated OK: ${Object.keys(optionalUpdates).join(',')}`);
+          saved = retry1.data;
+          error = retry1.error;
+          if (error) {
+            console.error(`[manual-post] Retry1 FAILED: ${error.message}`);
+            // Last resort: minimal insert + separate update for media/template
+            delete insertData.media_urls;
+            delete insertData.image_url;
+            delete insertData.template_url;
+            delete insertData.card_url;
+            const retry2 = await supabase
+              .from('content_queue')
+              .insert(insertData)
+              .select('id')
+              .single();
+            saved = retry2.data;
+            error = retry2.error;
+            if (!error && saved?.id) {
+              console.log(`[manual-post] Minimal insert OK (${saved.id}), patching media+template...`);
+              // Patch media_urls
+              if (media_urls && media_urls.length > 0) {
+                await supabase.from('content_queue').update({ media_urls, image_url: media_urls[0] }).eq('id', saved.id);
+              }
+              // Patch template_url
+              if (templateUrl) {
+                const { error: tErr } = await supabase.from('content_queue').update({ template_url: templateUrl, card_url: templateUrl }).eq('id', saved.id);
+                console.log(`[manual-post] Template patch: ${tErr ? 'FAILED ' + tErr.message : 'OK'}`);
               }
             }
+          } else {
+            console.log(`[manual-post] Retry1 OK (without generation_context)`);
           }
         }
 

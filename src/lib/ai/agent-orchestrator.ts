@@ -2712,6 +2712,14 @@ export async function publishApprovedPosts(): Promise<{
     if (hasErrors) { skipped++; continue; }
 
     try {
+      // Fallback: read template_url from generation_context if column is empty
+      if (!post.template_url && !post.card_url && (post as Record<string, unknown>).generation_context) {
+        const gc = (post as Record<string, unknown>).generation_context as Record<string, unknown> | null;
+        if (gc?.template_url_value) {
+          (post as Record<string, unknown>).template_url = gc.template_url_value;
+        }
+      }
+
       // Build media items (same priority logic as /api/publish/route.ts)
       const mediaItems: Array<{ type: 'image' | 'video' | 'document'; url: string }> = [];
 

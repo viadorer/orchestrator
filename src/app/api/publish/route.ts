@@ -137,6 +137,12 @@ export async function POST(request: Request) {
         return url;
       };
       
+      // Fallback: read template_url from generation_context if column is empty
+      if (!post.template_url && !post.card_url && post.generation_context?.template_url_value) {
+        post.template_url = post.generation_context.template_url_value;
+        console.log(`[publish] Using template_url from generation_context for post ${post.id}`);
+      }
+
       // Priority 1: Brand template (photo + brand frame + logo + text)
       // If template_url exists AND media_urls has multiple photos → carousel with brand templates
       let usedTemplate = false;

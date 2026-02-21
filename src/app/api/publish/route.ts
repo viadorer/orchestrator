@@ -78,27 +78,24 @@ export async function POST(request: Request) {
         return url;
       };
       
-      // Priority 1: media_urls array (multiple images from manual post)
-      if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
+      // Priority 1: Brand template (photo + brand frame + logo + text)
+      if (post.template_url || post.card_url) {
+        const templateSrc = post.template_url || post.card_url;
+        mediaItems.push({ type: 'image', url: resolveUrl(templateSrc) });
+      } else if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
+        // Priority 2: media_urls array (multiple raw images from manual post)
         for (const url of post.media_urls) {
           if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) {
             mediaItems.push({ type: 'image', url: resolveUrl(url) });
           }
         }
-      } else {
-        // Priority 2: individual fields
-        // Brand template has priority (photo + brand frame + logo + text)
-        if (post.template_url || post.card_url) {
-          const templateSrc = post.template_url || post.card_url;
-          mediaItems.push({ type: 'image', url: resolveUrl(templateSrc) });
-        } else if (post.image_url) {
-          // Fallback: raw photo without brand frame (Imagen/Media Library)
-          mediaItems.push({ type: 'image', url: post.image_url });
-        }
-        // Chart (absolute URL from QuickChart.io)
-        if (post.chart_url) {
-          mediaItems.push({ type: 'image', url: post.chart_url });
-        }
+      } else if (post.image_url) {
+        // Priority 3: single image fallback
+        mediaItems.push({ type: 'image', url: post.image_url });
+      }
+      // Chart (absolute URL from QuickChart.io)
+      if (post.chart_url) {
+        mediaItems.push({ type: 'image', url: post.chart_url });
       }
 
       // Enforce aspect ratio for platform compliance (Instagram: 0.75-1.91)

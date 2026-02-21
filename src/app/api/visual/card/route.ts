@@ -15,6 +15,6 @@ export async function GET(request: NextRequest) {
     newParams.set('t', 'bold_card');
   }
 
-  const redirectUrl = `/api/visual/template?${newParams.toString()}`;
+  const redirectUrl = `/api/visual/template-v2?${newParams.toString()}`;
   return NextResponse.redirect(new URL(redirectUrl, request.url), 301);
 }

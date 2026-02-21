@@ -303,7 +303,7 @@ function generateCardVisual(
     params.set('logo', vi.logo_url);
   }
 
-  const cardUrl = `/api/visual/template?${params.toString()}`;
+  const cardUrl = `/api/visual/template-v2?${params.toString()}`;
 
   return {
     visual_type: 'card',
@@ -389,7 +389,7 @@ function buildPhotoTemplateUrl(
     params.set('logo', vi.logo_url);
   }
 
-  return `/api/visual/template?${params.toString()}`;
+  return `/api/visual/template-v2?${params.toString()}`;
 }
 
 // ============================================

@@ -1323,7 +1323,7 @@ function TemplateGallery({ project, primary, accent, textColor, logoUrl, preview
 
   const buildUrl = (t: typeof TEMPLATE_PREVIEWS[0], p: typeof PREVIEW_PLATFORMS[0]) => {
     const photoUrl = previewPhoto || t.photo || SAMPLE_PHOTO;
-    return `${baseUrl}/api/visual/template?t=${t.key}&hook=${encodeURIComponent(t.hook)}&body=${encodeURIComponent(t.body)}&subtitle=${encodeURIComponent(t.subtitle || '')}&project=${encodeURIComponent(project.name)}&bg=${bgHex}&accent=${accentHex}&text=${textHex}&logo=${encodeURIComponent(logoUrl || '')}&photo=${encodeURIComponent(photoUrl)}&platform=${p.key}&w=${p.w}&h=${p.h}`;
+    return `${baseUrl}/api/visual/template-v2?t=${t.key}&hook=${encodeURIComponent(t.hook)}&body=${encodeURIComponent(t.body)}&subtitle=${encodeURIComponent(t.subtitle || '')}&project=${encodeURIComponent(project.name)}&bg=${bgHex}&accent=${accentHex}&text=${textHex}&logo=${encodeURIComponent(logoUrl || '')}&photo=${encodeURIComponent(photoUrl)}&platform=${p.key}&w=${p.w}&h=${p.h}`;
   };
 
   return (

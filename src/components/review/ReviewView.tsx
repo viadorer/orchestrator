@@ -434,6 +434,25 @@ export function ReviewView() {
                         {expanded === item.id ? 'Méně' : 'Více'}
                       </button>
                     )}
+
+                    {/* Inline media gallery – show all photos from media_urls */}
+                    {item.media_urls && item.media_urls.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {item.media_urls.map((url, idx) => (
+                          <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-700 bg-slate-800 flex-shrink-0">
+                            <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                            {idx === 0 && item.template_url && (
+                              <div className="absolute inset-0 ring-2 ring-inset ring-fuchsia-500/60 rounded-lg" title="Šablona z této fotky" />
+                            )}
+                          </div>
+                        ))}
+                        {item.template_url && (
+                          <div className="w-14 h-14 rounded-lg overflow-hidden border-2 border-fuchsia-500/40 bg-slate-800 flex-shrink-0" title="Brand template preview">
+                            <img src={item.template_url} alt="template" className="w-full h-full object-cover" loading="lazy" />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
 

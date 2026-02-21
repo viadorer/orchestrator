@@ -79,9 +79,23 @@ export async function POST(request: Request) {
       };
       
       // Priority 1: Brand template (photo + brand frame + logo + text)
+      let usedTemplate = false;
       if (post.template_url || post.card_url) {
-        const templateSrc = post.template_url || post.card_url;
-        mediaItems.push({ type: 'image', url: resolveUrl(templateSrc) });
+        let templateSrc = post.template_url || post.card_url;
+        // Fix platform in template URL to match current target platform
+        if (templateSrc.includes('/api/visual/template') && targetPlatforms[0]) {
+          try {
+            const tUrl = new URL(templateSrc, baseUrl);
+            tUrl.searchParams.set('platform', targetPlatforms[0]);
+            tUrl.searchParams.delete('w');
+            tUrl.searchParams.delete('h');
+            templateSrc = tUrl.pathname + '?' + tUrl.searchParams.toString();
+          } catch { /* keep original */ }
+        }
+        const resolvedTemplate = resolveUrl(templateSrc);
+        console.log(`[publish] Using template URL for post ${post.id}: ${resolvedTemplate.substring(0, 200)}...`);
+        mediaItems.push({ type: 'image', url: resolvedTemplate });
+        usedTemplate = true;
       } else if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
         // Priority 2: media_urls array (multiple raw images from manual post)
         for (const url of post.media_urls) {
@@ -99,19 +113,24 @@ export async function POST(request: Request) {
       }
 
       // Enforce aspect ratio for platform compliance (Instagram: 0.75-1.91)
-      for (let i = 0; i < mediaItems.length; i++) {
-        if (mediaItems[i].type === 'image') {
-          try {
-            mediaItems[i].url = await ensureImageAspectRatio(
-              mediaItems[i].url,
-              targetPlatforms,
-              post.project_id,
-            );
-          } catch {
-            // Continue with original URL if resize fails
+      // Skip for template URLs — they already generate correct dimensions per platform
+      if (!usedTemplate) {
+        for (let i = 0; i < mediaItems.length; i++) {
+          if (mediaItems[i].type === 'image') {
+            try {
+              mediaItems[i].url = await ensureImageAspectRatio(
+                mediaItems[i].url,
+                targetPlatforms,
+                post.project_id,
+              );
+            } catch {
+              // Continue with original URL if resize fails
+            }
           }
         }
       }
+
+      console.log(`[publish] Post ${post.id} → platforms: ${targetPlatforms.join(',')}, mediaItems: ${JSON.stringify(mediaItems.map(m => ({ type: m.type, url: m.url.substring(0, 150) })))}, template: ${usedTemplate}`);
 
       const publisher = getPublisher();
       const publishResult = await publisher.publish({
@@ -123,8 +142,10 @@ export async function POST(request: Request) {
       });
 
       if (!publishResult.ok) {
+        console.error(`[publish] getLate error for post ${post.id}:`, publishResult.error);
         throw new Error(publishResult.error);
       }
+      console.log(`[publish] Post ${post.id} published OK: status=${publishResult.data.status}, externalId=${publishResult.data.externalId}`);
 
       // Update status in DB
       await supabase
@@ -161,10 +182,19 @@ export async function POST(request: Request) {
       results.push({ id: post.id, status: publishResult.data.status, late_post_id: publishResult.data.externalId });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error(`[publish] FAILED post ${post.id}:`, message);
       await supabase
         .from('content_queue')
         .update({ status: 'failed' })
         .eq('id', post.id);
+      // Also log to agent_log for visibility in admin
+      try {
+        await supabase.from('agent_log').insert({
+          project_id: post.project_id,
+          action: 'publish_failed',
+          details: { post_id: post.id, error: message, platforms: targetPlatforms, template_url: post.template_url || null },
+        });
+      } catch { /* logging should not fail main flow */ }
       results.push({ id: post.id, status: 'failed', error: message });
     }
   }

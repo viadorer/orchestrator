@@ -145,11 +145,16 @@ export function ReviewView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platforms: selectedPlatforms }),
       });
-      await fetch('/api/publish', {
+      const pubRes = await fetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: [postId] }),
       });
+      const pubData = await pubRes.json();
+      const failed = pubData.results?.filter((r: { status: string; error?: string }) => r.status === 'failed');
+      if (failed?.length > 0) {
+        alert(`Chyba při odesílání: ${failed.map((f: { error?: string }) => f.error).join(', ')}`);
+      }
     }
     setPlatformPicker(null);
     loadItems();

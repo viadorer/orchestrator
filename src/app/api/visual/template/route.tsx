@@ -64,6 +64,9 @@ export async function GET(request: NextRequest) {
     case 'quote_card':
       element = <QuoteCardTemplate {...props} />;
       break;
+    case 'diagonal':
+      element = <DiagonalTemplate {...props} />;
+      break;
     case 'bold_card':
     default:
       element = <BoldCardTemplate {...props} />;
@@ -1011,6 +1014,149 @@ function QuoteCardTemplate({ hook, body, subtitle, project, bg, accent, textColo
         marginTop: `${gap}px`,
       }}>
         {hasPhoto ? <PhotoFull photoUrl={photoUrl} /> : <PhotoFallback bg={bg} accent={accent} textColor={textColor} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── Template 8: Diagonal (diagonální split, inspirace RE/MAX) ──────
+
+function DiagonalTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
+  const s = getTemplateSizes(width, height);
+  const isLandscape = width > height * 1.3;
+  const base = isLandscape ? height : width;
+  const hookSize = Math.round(base * (isLandscape ? 0.1 : 0.07));
+  const bodySize = Math.round(base * (isLandscape ? 0.045 : 0.032));
+  const subtitleSize = Math.round(base * (isLandscape ? 0.035 : 0.024));
+  const logoStripHeight = Math.round(height * 0.1);
+  const logoSize = Math.round(logoStripHeight * 0.6);
+  const pad = Math.round(s.padding * 1.2);
+
+  // Diagonal angle — the colored panel covers top-left, photo peeks through bottom-right
+  // We achieve this with a full-bleed photo + a colored overlay with a diagonal cut
+  // Satori doesn't support clip-path, so we use a rotated rectangle trick
+
+  return (
+    <div style={{
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      position: 'relative',
+      overflow: 'hidden',
+      backgroundColor: `#${bg}`,
+    }}>
+      {/* Full-bleed photo behind everything */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+      }}>
+        {hasPhoto ? <PhotoFull photoUrl={photoUrl} /> : <PhotoFallback bg={bg} accent={accent} textColor={textColor} />}
+      </div>
+
+      {/* Diagonal colored overlay — two layers creating the angled cut */}
+      {/* Layer 1: solid block covering top portion */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: `${Math.round(height * 0.42)}px`,
+        backgroundColor: `#${bg}`,
+      }} />
+      {/* Layer 2: left-side block covering bottom-left below the diagonal */}
+      <div style={{
+        position: 'absolute',
+        top: `${Math.round(height * 0.42)}px`,
+        left: 0,
+        width: `${Math.round(width * 0.15)}px`,
+        height: `${Math.round(height * 0.48)}px`,
+        backgroundColor: `#${bg}`,
+      }} />
+      {/* Layer 3: skewed parallelogram creating the diagonal edge */}
+      <div style={{
+        position: 'absolute',
+        top: `${Math.round(height * 0.38)}px`,
+        left: 0,
+        width: `${Math.round(width * 0.95)}px`,
+        height: `${Math.round(height * 0.25)}px`,
+        backgroundColor: `#${bg}`,
+        transform: `skewY(-${isLandscape ? '12' : '20'}deg)`,
+        transformOrigin: 'top left',
+      }} />
+
+      {/* Text content — top left */}
+      <div style={{
+        position: 'absolute',
+        top: `${pad}px`,
+        left: `${pad}px`,
+        right: `${Math.round(width * (isLandscape ? 0.4 : 0.15))}px`,
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {hook && (
+          <div style={{
+            fontSize: `${hookSize}px`,
+            fontWeight: 900,
+            color: `#${textColor}`,
+            lineHeight: 1.15,
+            marginBottom: `${Math.round(pad * 0.5)}px`,
+          }}>
+            {hook}
+          </div>
+        )}
+
+        {/* Accent divider bar */}
+        <div style={{
+          width: `${Math.round(base * 0.08)}px`,
+          height: `${Math.round(base * 0.008)}px`,
+          backgroundColor: `#${accent}`,
+          borderRadius: '2px',
+          marginBottom: `${Math.round(pad * 0.5)}px`,
+        }} />
+
+        {body && (
+          <div style={{
+            fontSize: `${bodySize}px`,
+            fontWeight: 500,
+            color: `#${textColor}`,
+            opacity: 0.85,
+            lineHeight: 1.4,
+            marginBottom: `${Math.round(pad * 0.3)}px`,
+          }}>
+            {body}
+          </div>
+        )}
+
+        {subtitle && (
+          <div style={{
+            fontSize: `${subtitleSize}px`,
+            fontWeight: 400,
+            color: `#${accent}`,
+            lineHeight: 1.4,
+          }}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom logo strip — white/light bar */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: `${logoStripHeight}px`,
+        backgroundColor: '#ffffff',
+        display: 'flex',
+        alignItems: 'center',
+        padding: `0 ${pad}px`,
+      }}>
+        <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={logoSize} borderRadius={s.logoBorderRadius} />
       </div>
     </div>
   );

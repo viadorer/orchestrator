@@ -154,6 +154,7 @@ VŽDY preferuj reálnou fotku s textem. Toto je DEFAULTNÍ volba.
 - "text_logo" → Fotka na pozadí, text vlevo nahoře, logo vpravo dole. PRO: krátký výrazný headline, branding.
 - "split" → Půlka fotka, půlka text vedle sebe + logo. PRO: LinkedIn, profesionální obsah, delší text.
 - "quote_card" → Barevný panel s citátem nahoře + fotka dole. PRO: citáty, výroky, silné tvrzení. Elegantní, čistý look.
+- "diagonal" → Diagonální split: barevný panel s textem vlevo nahoře, fotka prosvitá vpravo dole, logo pás dole. PRO: dynamický, reklamní look, CTA posty.
 
 🥈 PRIORITA 2 — FOTKA + LOGO (visual_type: "photo")
 Když fotka mluví sama a text by rušil.
@@ -169,9 +170,9 @@ Použij JEN když číslo je skutečně hlavní sdělení postu. Jinak preferuj 
 
 | Platforma   | aspect_ratio | Rozměry      | Preferované šablony          | NEPOUŽÍVAT        |
 |-------------|-------------|--------------|------------------------------|--------------------|
-| facebook    | "portrait"  | 1080×1350    | gradient, quote_card, text_logo | bold_card (slabý)  |
-| instagram   | "portrait"  | 1080×1350    | gradient, quote_card, text_logo | split, landscape   |
-| linkedin    | "landscape" | 1200×627     | split, photo_strip, quote_card  | story              |
+| facebook    | "portrait"  | 1080×1350    | gradient, quote_card, diagonal, text_logo | bold_card (slabý)  |
+| instagram   | "portrait"  | 1080×1350    | gradient, quote_card, diagonal, text_logo | split, landscape   |
+| linkedin    | "landscape" | 1200×627     | split, diagonal, photo_strip, quote_card  | story              |
 | x           | "landscape" | 1600×900     | minimal, photo_strip            | split              |
 | tiktok      | "story"     | 1080×1920    | gradient, text_logo          | split, landscape   |
 | pinterest   | "portrait"  | 1000×1500    | gradient, text_logo          | split, landscape   |
@@ -200,7 +201,7 @@ DŮLEŽITÉ:
 Vrať POUZE JSON:
 {
   "visual_type": "photo|card|none",
-  "template_key": "photo_strip|gradient|text_logo|split|minimal|bold_card|quote_card",
+  "template_key": "photo_strip|gradient|text_logo|split|minimal|bold_card|quote_card|diagonal",
   "aspect_ratio": "portrait|square|landscape|story",
   "card_hook": "krátký hook text pro šablonu (1. řádek)" | null,
   "card_body": "druhý řádek textu pro šablonu" | null,
@@ -316,7 +317,7 @@ function generateCardVisual(
 /**
  * Valid template keys for brand frame templates.
  */
-const VALID_TEMPLATES = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'minimal', 'quote_card'] as const;
+const VALID_TEMPLATES = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'minimal', 'quote_card', 'diagonal'] as const;
 type TemplateKey = typeof VALID_TEMPLATES[number];
 
 /**

@@ -61,6 +61,9 @@ export async function GET(request: NextRequest) {
     case 'minimal':
       element = <MinimalTemplate {...props} />;
       break;
+    case 'quote_card':
+      element = <QuoteCardTemplate {...props} />;
+      break;
     case 'bold_card':
     default:
       element = <BoldCardTemplate {...props} />;
@@ -759,6 +762,255 @@ function TextLogoTemplate({ hook, body, subtitle, project, bg, accent, textColor
         display: 'flex',
       }}>
         <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={s.logo} borderRadius={s.logoBorderRadius} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Template 7: Quote Card (citát nahoře, fotka dole) ──────
+
+function QuoteCardTemplate({ hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height, logoMode, hasPhoto }: TemplateProps) {
+  const s = getTemplateSizes(width, height);
+  const isVertical = height > width;
+  const isLandscape = width > height * 1.3;
+
+  // For landscape: side-by-side layout (text left, photo right)
+  // For portrait/square: stacked layout (text top, photo bottom)
+  const gap = Math.round(s.padding * 0.4);
+  const innerRadius = Math.round(s.padding * 0.6);
+
+  // Font sizes adapt to available space
+  const base = isLandscape ? height : width;
+  const hookSize = Math.round(base * (isLandscape ? 0.09 : 0.058));
+  const bodySize = Math.round(base * (isLandscape ? 0.045 : 0.03));
+  const subtitleSize = Math.round(base * (isLandscape ? 0.035 : 0.024));
+  const logoSize = Math.round(Math.min(width, height) * 0.08);
+
+  if (isLandscape) {
+    // Landscape: text panel LEFT, photo RIGHT
+    const textPanelWidth = Math.round(width * 0.55);
+    const photoPanelWidth = width - textPanelWidth;
+
+    return (
+      <div style={{
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'row',
+        backgroundColor: '#0a0a0a',
+        padding: `${gap}px`,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Text panel — left */}
+        <div style={{
+          width: `${textPanelWidth - gap}px`,
+          height: '100%',
+          backgroundColor: `#${bg}`,
+          borderRadius: `${innerRadius}px`,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          padding: `${s.padding}px ${s.padding * 1.2}px`,
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: '-20%',
+            right: '-10%',
+            width: `${Math.round(height * 0.8)}px`,
+            height: `${Math.round(height * 0.8)}px`,
+            borderRadius: '50%',
+            background: `radial-gradient(circle, #${accent}15 0%, transparent 70%)`,
+          }} />
+
+          <div style={{
+            fontSize: `${Math.round(hookSize * 0.5)}px`,
+            fontWeight: 900,
+            color: `#${textColor}`,
+            opacity: 0.2,
+            lineHeight: 1,
+            marginBottom: `${Math.round(s.padding * 0.2)}px`,
+          }}>
+            {"\u201E"}
+          </div>
+
+          {hook && (
+            <div style={{
+              fontSize: `${hookSize}px`,
+              fontWeight: 900,
+              color: `#${textColor}`,
+              lineHeight: 1.2,
+              marginBottom: `${Math.round(s.padding * 0.6)}px`,
+            }}>
+              {hook}
+            </div>
+          )}
+
+          {body && (
+            <div style={{
+              fontSize: `${bodySize}px`,
+              fontWeight: 400,
+              color: `#${textColor}`,
+              opacity: 0.7,
+              lineHeight: 1.4,
+              marginBottom: `${Math.round(s.padding * 0.3)}px`,
+            }}>
+              {body}
+            </div>
+          )}
+
+          {subtitle && (
+            <div style={{
+              fontSize: `${subtitleSize}px`,
+              fontWeight: 400,
+              color: `#${accent}`,
+              lineHeight: 1.4,
+            }}>
+              {subtitle}
+            </div>
+          )}
+
+          <div style={{
+            position: 'absolute',
+            bottom: `${Math.round(s.padding * 0.8)}px`,
+            left: `${Math.round(s.padding * 1.2)}px`,
+            display: 'flex',
+          }}>
+            <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={logoSize} borderRadius={s.logoBorderRadius} />
+          </div>
+        </div>
+
+        {/* Photo panel — right */}
+        <div style={{
+          width: `${photoPanelWidth - gap}px`,
+          height: '100%',
+          borderRadius: `${innerRadius}px`,
+          display: 'flex',
+          position: 'relative',
+          overflow: 'hidden',
+          marginLeft: `${gap}px`,
+        }}>
+          {hasPhoto ? <PhotoFull photoUrl={photoUrl} /> : <PhotoFallback bg={bg} accent={accent} textColor={textColor} />}
+        </div>
+      </div>
+    );
+  }
+
+  // Portrait / square: stacked layout (text top, photo bottom)
+  const textPanelRatio = 0.55;
+  const textPanelHeight = Math.round(height * textPanelRatio);
+  const photoHeight = height - textPanelHeight;
+
+  return (
+    <div style={{
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      backgroundColor: '#0a0a0a',
+      padding: `${gap}px`,
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      {/* Text panel — colored background with rounded corners */}
+      <div style={{
+        width: '100%',
+        height: `${textPanelHeight - gap}px`,
+        backgroundColor: `#${bg}`,
+        borderRadius: `${innerRadius}px`,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        padding: `${s.padding * 1.5}px ${s.padding * 1.2}px`,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Subtle accent glow */}
+        <div style={{
+          position: 'absolute',
+          top: '-20%',
+          right: '-10%',
+          width: `${Math.round(width * 0.5)}px`,
+          height: `${Math.round(width * 0.5)}px`,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, #${accent}15 0%, transparent 70%)`,
+        }} />
+
+        {/* Quote mark */}
+        <div style={{
+          fontSize: `${Math.round(hookSize * 0.6)}px`,
+          fontWeight: 900,
+          color: `#${textColor}`,
+          opacity: 0.2,
+          lineHeight: 1,
+          marginBottom: `${Math.round(s.padding * 0.3)}px`,
+        }}>
+          {"\u201E"}
+        </div>
+
+        {/* Hook — main quote text */}
+        {hook && (
+          <div style={{
+            fontSize: `${hookSize}px`,
+            fontWeight: 900,
+            color: `#${textColor}`,
+            lineHeight: 1.2,
+            marginBottom: `${s.padding}px`,
+          }}>
+            {hook}
+          </div>
+        )}
+
+        {/* Body — author / attribution */}
+        {body && (
+          <div style={{
+            fontSize: `${bodySize}px`,
+            fontWeight: 400,
+            color: `#${textColor}`,
+            opacity: 0.7,
+            lineHeight: 1.4,
+            marginBottom: `${Math.round(s.padding * 0.5)}px`,
+          }}>
+            {body}
+          </div>
+        )}
+
+        {/* Subtitle */}
+        {subtitle && (
+          <div style={{
+            fontSize: `${subtitleSize}px`,
+            fontWeight: 400,
+            color: `#${accent}`,
+            lineHeight: 1.4,
+          }}>
+            {subtitle}
+          </div>
+        )}
+
+        {/* Logo — bottom left of text panel */}
+        <div style={{
+          position: 'absolute',
+          bottom: `${s.padding}px`,
+          left: `${Math.round(s.padding * 1.2)}px`,
+          display: 'flex',
+        }}>
+          <LogoBadge mode={logoMode} logoUrl={logoUrl} project={project} accent={accent} logoSize={logoSize} borderRadius={s.logoBorderRadius} />
+        </div>
+      </div>
+
+      {/* Photo panel — bottom, rounded corners */}
+      <div style={{
+        width: '100%',
+        height: `${photoHeight - gap}px`,
+        borderRadius: `${innerRadius}px`,
+        display: 'flex',
+        position: 'relative',
+        overflow: 'hidden',
+        marginTop: `${gap}px`,
+      }}>
+        {hasPhoto ? <PhotoFull photoUrl={photoUrl} /> : <PhotoFallback bg={bg} accent={accent} textColor={textColor} />}
       </div>
     </div>
   );

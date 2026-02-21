@@ -148,11 +148,12 @@ ${brandBlock}
 
 🥇 PRIORITA 1 — FOTKA + TEXT + LOGO (visual_type: "photo")
 VŽDY preferuj reálnou fotku s textem. Toto je DEFAULTNÍ volba.
-Šablony: "photo_strip", "split", "gradient", "text_logo"
+Šablony: "photo_strip", "split", "gradient", "text_logo", "quote_card"
 - "photo_strip" → Fotka nahoře (72%), brand pás dole s hook textem + logo. UNIVERZÁLNÍ, funguje vždy.
 - "gradient" → Fotka přes celou plochu, tmavý gradient overlay, bold text dole + logo. PRO: Instagram, atmosférické, emocionální.
 - "text_logo" → Fotka na pozadí, text vlevo nahoře, logo vpravo dole. PRO: krátký výrazný headline, branding.
 - "split" → Půlka fotka, půlka text vedle sebe + logo. PRO: LinkedIn, profesionální obsah, delší text.
+- "quote_card" → Barevný panel s citátem nahoře + fotka dole. PRO: citáty, výroky, silné tvrzení. Elegantní, čistý look.
 
 🥈 PRIORITA 2 — FOTKA + LOGO (visual_type: "photo")
 Když fotka mluví sama a text by rušil.
@@ -168,10 +169,10 @@ Použij JEN když číslo je skutečně hlavní sdělení postu. Jinak preferuj 
 
 | Platforma   | aspect_ratio | Rozměry      | Preferované šablony          | NEPOUŽÍVAT        |
 |-------------|-------------|--------------|------------------------------|--------------------|
-| facebook    | "portrait"  | 1080×1350    | gradient, text_logo, minimal | bold_card (slabý)  |
-| instagram   | "portrait"  | 1080×1350    | gradient, text_logo, minimal | split, landscape   |
-| linkedin    | "landscape" | 1200×627     | split, photo_strip           | story              |
-| x           | "landscape" | 1600×900     | minimal, photo_strip         | split              |
+| facebook    | "portrait"  | 1080×1350    | gradient, quote_card, text_logo | bold_card (slabý)  |
+| instagram   | "portrait"  | 1080×1350    | gradient, quote_card, text_logo | split, landscape   |
+| linkedin    | "landscape" | 1200×627     | split, photo_strip, quote_card  | story              |
+| x           | "landscape" | 1600×900     | minimal, photo_strip            | split              |
 | tiktok      | "story"     | 1080×1920    | gradient, text_logo          | split, landscape   |
 | pinterest   | "portrait"  | 1000×1500    | gradient, text_logo          | split, landscape   |
 | threads     | "square"    | 1080×1080    | gradient, minimal            | split              |
@@ -199,7 +200,7 @@ DŮLEŽITÉ:
 Vrať POUZE JSON:
 {
   "visual_type": "photo|card|none",
-  "template_key": "photo_strip|gradient|text_logo|split|minimal|bold_card",
+  "template_key": "photo_strip|gradient|text_logo|split|minimal|bold_card|quote_card",
   "aspect_ratio": "portrait|square|landscape|story",
   "card_hook": "krátký hook text pro šablonu (1. řádek)" | null,
   "card_body": "druhý řádek textu pro šablonu" | null,
@@ -315,7 +316,7 @@ function generateCardVisual(
 /**
  * Valid template keys for brand frame templates.
  */
-const VALID_TEMPLATES = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'minimal'] as const;
+const VALID_TEMPLATES = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'minimal', 'quote_card'] as const;
 type TemplateKey = typeof VALID_TEMPLATES[number];
 
 /**

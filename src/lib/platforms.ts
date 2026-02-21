@@ -561,16 +561,16 @@ Každý post má 4 vrstvy v tomto pořadí:
 4. HASHTAGS → 3–5 max, relevantní, ne spam
 
 ═══ HOOK FORMULE (vyber jednu) ═══
-1. Kontroverze — "Makléři nechtějí, abyste tohle věděli."
-2. Číslo + příslib — "7 chyb, které stojí prodávající 200 000 Kč."
-3. Otázka — "Víte, kolik vaše nemovitost opravdu stojí?"
-4. Příběh — "Klient chtěl prodat za 4M. Prodali jsme za 4,85M. Tady je jak."
-5. Negace — "Nestahujte žádnou hypoteční kalkulačku."
-6. Časové napětí — "Do konce dubna se změní podmínky hypoték."
-7. Výzva k identifikaci — "Pokud vlastníte byt v Plzni, čtěte dál."
-8. Šokující fakt — "Průměrný inzerát na Sreality dostane 80 % zobrazení za první 3 dny."
-9. Slib výsledku — "Takhle vypadá příprava bytu, která zvedne cenu o 15 %."
-10. Anti-hype — "Žádné tajemství. Jen 3 věci, které fungují."
+1. Kontroverze — "[Odborníci v oboru] nechtějí, abyste tohle věděli."
+2. Číslo + příslib — "[N] chyb, které stojí [cílovou skupinu] [konkrétní ztrátu]."
+3. Otázka — "Víte, kolik [váš produkt/služba] opravdu [stojí/vydělá/ušetří]?"
+4. Příběh — "Klient chtěl [výchozí stav]. Dosáhli jsme [lepší výsledek]. Tady je jak."
+5. Negace — "Nedělejte [běžnou akci] — tady je proč."
+6. Časové napětí — "Do [termínu] se změní [podmínky v oboru]."
+7. Výzva k identifikaci — "Pokud [jste v konkrétní situaci], čtěte dál."
+8. Šokující fakt — "[Konkrétní statistika z oboru, která překvapí]."
+9. Slib výsledku — "Takhle vypadá [proces], který [zlepší výsledek o X %]."
+10. Anti-hype — "Žádné tajemství. Jen [N] věcí, které fungují."
 
 ═══ TYPY POSTŮ ═══
 
@@ -604,7 +604,7 @@ E) LOKÁLNÍ OBSAH — algoritmus miluje lokální relevanci:
 Vývoj cen v čtvrti, nová výstavba, změna územního plánu, tip na místo v lokalitě.
 
 F) QUICK TIP — jeden tip, jedna věta, sdílení bez přemýšlení:
-"Tip na dnes: Fotky nemovitosti dělejte vždy dopoledne. Přirozené světlo = 30 % lepší konverze."
+"Tip na dnes: [Jeden konkrétní tip z oboru]. [Proč to funguje — číslo nebo fakt]."
 
 ═══ CONTENT MIX ═══
 - Vzdělávací: 2x týdně (dosah, autorita)
@@ -637,7 +637,7 @@ BRIDGE: [co za tím stojí]
 - Vlastní fotky vždy vyhrají nad stock fotkami.
 - Tváře v kreativě zvedají CTR o 20–40 %.
 - Text v obrázku max 20 % plochy (jinak FB omezí dosah).
-- Carousel = ideální pro nemovitosti (fotky místností) nebo výčet benefitů.
+- Carousel = ideální pro ukázky produktu/služby nebo výčet benefitů.
 
 ═══ CHECKLIST PŘED PUBLIKACÍ ═══
 - Hook funguje bez kontextu? (test: přečti jen první větu)
@@ -761,8 +761,8 @@ Kratší pozornost než LinkedIn — přímý, úderný, bez zbytečných slov.
 A) STANDALONE TWEET — jedna věta, velký nápad (pod 280 znaků):
 Kondenzovaná moudrost. Silné tvrzení. Zastaví scrollování.
 Příklady:
-"Lidé neprodávají nemovitosti. Prodávají rozhodnutí, co dál."
-"Průměrný inzerát na Sreality dostane 80 % kliknutí za první 3 dny. Po týdnu je mrtvý."
+"[Lidé nedělají X. Dělají Y.]" — přeformuluj běžnou akci jako hlubší rozhodnutí.
+"[Konkrétní statistika z oboru, která překvapí]."
 
 B) VLÁKNO (Thread) — nejsilnější formát pro vzdělávací obsah:
 TWEET 1 (hook): Silné tvrzení nebo otázka. Bez kontextu. Číslo vlákna.
@@ -841,18 +841,18 @@ Prázdné řádky jsou KLÍČOVÉ. Zvyšují čitelnost a dwell time.
 Délka: 1200–1800 znaků optimum. Kratší jen pro quick insighty.
 
 ═══ HOOK FORMULE (vyber jednu — musí být SILNĚJŠÍ než na jiných platformách) ═══
-1. Kontroverze v oboru — "Většina realitních makléřů dělá marketing špatně. A vědí to."
-2. Číslo + neočekávaný výsledek — "Prodali jsme nemovitost za 8,5M. Původní odhad byl 7,2M. Tady je co rozhodlo."
-3. Osobní selhání / poučení — "Před 10 lety jsem podepsal smlouvu, které jsem nerozuměl. Stálo mě to 400 000 Kč."
-4. Přímé zpochybnění konvence — "Nejlepší čas prodávat nemovitost není jaro. Data říkají něco jiného."
-5. Věc, která se změnila — "Hypoteční trh se za posledních 18 měsíců změnil víc než za předchozích 10 let."
-6. Osobní pozorování — "Po 25 letech v realitách jsem si všiml jedné věci, která odděluje rychlé prodeje od zaseklých."
-7. Otázka bez snadné odpovědi — "Jak poznáte, že je cena nemovitosti správná — a ne jen ta, kterou chce slyšet makléř?"
-8. Nepopulární pravda — "Home staging není o vkusu. Je to matematika."
-9. Srovnání dvou světů — "Klient A prodal za 3 týdny. Klient B prodával 8 měsíců. Nemovitosti byly ve stejné čtvrti."
-10. Specifické číslo z praxe — "73 % kupujících rozhoduje o prohlídce podle titulní fotky inzerátu. Ne podle ceny."
-11. Začátek příběhu — "Bylo pondělí ráno a klient mi volal, že ruší spolupráci."
-12. Výzva k přehodnocení — "Pokud si myslíte, že prémiová nemovitost se prodá sama — přečtěte si toto."
+1. Kontroverze v oboru — "Většina [odborníků v oboru] dělá [klíčovou činnost] špatně. A vědí to."
+2. Číslo + neočekávaný výsledek — "Dosáhli jsme [výsledek]. Původní očekávání bylo [nižší]. Tady je co rozhodlo."
+3. Osobní selhání / poučení — "Před [N] lety jsem udělal chybu, která mě stala [konkrétní ztrátu]."
+4. Přímé zpochybnění konvence — "[Běžná představa v oboru] není pravda. Data říkají něco jiného."
+5. Věc, která se změnila — "[Obor/trh] se za posledních [N] měsíců změnil víc než za předchozích [N] let."
+6. Osobní pozorování — "Po [N] letech v oboru jsem si všiml jedné věci, která odděluje [úspěšné] od [neúspěšných]."
+7. Otázka bez snadné odpovědi — "Jak poznáte, že [klíčové rozhodnutí] je správné — a ne jen to, co chcete slyšet?"
+8. Nepopulární pravda — "[Věc, kterou všichni považují za subjektivní] není o [subjektivní kvalitě]. Je to matematika."
+9. Srovnání dvou světů — "Klient A dosáhl [výsledku] za [krátkou dobu]. Klient B čekal [dlouhou dobu]. Podmínky byly stejné."
+10. Specifické číslo z praxe — "[X] % [cílové skupiny] rozhoduje na základě [neočekávaného faktoru]. Ne podle [očekávaného]."
+11. Začátek příběhu — "Bylo [den/čas] a klient mi volal, že [nečekaná situace]."
+12. Výzva k přehodnocení — "Pokud si myslíte, že [kvalitní produkt/služba] se prodá [sama] — přečtěte si toto."
 
 ═══ TYPY POSTŮ ═══
 
@@ -980,21 +980,19 @@ Struktura:
 - POSLEDNÍ SLIDE: CTA + "Uložte si tento post" nebo "Přepošlete kolegovi, který..."
 
 Šablona vzdělávacího carousel:
-SLIDE 1: "5 otázek, které musíte položit makléři před podpisem smlouvy"
-SLIDE 2: "1. Kolik nemovitostí jste prodali za posledních 12 měsíců?" (Proč: průměr říká víc než reference)
-SLIDE 3: "2. Jaký je váš průměrný čas prodeje?" (Proč: benchmark 30–60 dní)
-SLIDE 4: "3. Jak vypadá váš marketingový plán?" (Proč: portály nestačí)
-SLIDE 5: "4. Jak stanovíte cenu?" (Proč: intuice nestačí, chcete data)
-SLIDE 6: "5. Kdo platí za fotografa a přípravu?" (Proč: amatérské fotky = ztráta 100–300 tisíc)
-SLIDE 7: "Uložte si pro příště. A pokud chcete makléře, který odpoví správně — napište nám."
+SLIDE 1: "[N] otázek, které musíte položit [odborníkovi] před [klíčovým rozhodnutím]"
+SLIDE 2: "1. [Otázka]" (Proč: [stručné vysvětlení])
+SLIDE 3: "2. [Otázka]" (Proč: [stručné vysvětlení])
+SLIDE 4–N: Každý slide = jeden bod + proč je důležitý
+POSLEDNÍ SLIDE: "Uložte si pro příště. A pokud [CTA relevantní pro obor] — napište nám."
 
 ═══ HASHTAG STRATEGIE ═══
-Nepoužívej mega-hashtags (#realitky — 5M příspěvků = tvůj post zmizí za 3 minuty).
+Nepoužívej mega-hashtags (miliony příspěvků = tvůj post zmizí za 3 minuty).
 
 Správný mix (celkem 8–15):
-- Niche (1K–50K příspěvků): 3–5 ks — např. #realitkyplzen #prodejbytu
-- Střední (50K–500K): 3–5 ks — např. #nemovitosti #makler
-- Lokální: 2–3 ks — např. #plzen #praha9
+- Niche (1K–50K příspěvků): 3–5 ks — specifické pro obor a téma
+- Střední (50K–500K): 3–5 ks — obecnější kategorie oboru
+- Lokální: 2–3 ks — město, region, lokalita
 - Branded: 1 ks — vlastní hashtag projektu
 
 Více než 15 hashtagů = Instagram penalizuje jako spam.

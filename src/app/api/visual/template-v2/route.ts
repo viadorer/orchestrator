@@ -813,22 +813,23 @@ async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Circle dimensions — large, anchored bottom-left, overflows edges
+  // Circle dimensions — large, positioned so text stays inside visible area
   const circleR = Math.round(Math.min(width, height) * (isLand ? 0.42 : 0.45));
-  const circleCx = Math.round(width * (isLand ? 0.28 : 0.25));
+  const circleCx = Math.round(width * (isLand ? 0.35 : 0.35));
   const circleCy = Math.round(height * (isLand ? 0.62 : 0.65));
 
-  // Hook text inside circle — dark text on white
-  const hookFs = isLand ? Math.round(s.base * 0.07) : Math.round(s.base * 0.065);
-  const textMaxW = Math.round(circleR * 1.3);
-  const textX = Math.round(circleCx - circleR * 0.6);
-  const textY = Math.round(circleCy - circleR * 0.55);
+  // Hook text inside circle — ensure textX has enough padding from left edge
+  const hookFs = isLand ? Math.round(s.base * 0.06) : Math.round(s.base * 0.055);
+  const textPad = Math.round(s.pad * 1.2);
+  const textMaxW = Math.round(circleR * 1.2);
+  const textX = Math.max(textPad, Math.round(circleCx - circleR * 0.45));
+  const textY = Math.round(circleCy - circleR * 0.45);
   const hookT = svgText({ text: hook, x: textX, y: textY, fs: hookFs, bold: true, fill: `#${bg}`, maxPx: textMaxW, maxLines: isLand ? 5 : 7, lh: 1.15 });
 
   // CTA button (body text) — accent colored rounded rect inside circle
-  const ctaFs = Math.round(s.base * 0.035);
+  const ctaFs = Math.round(s.base * 0.03);
   const ctaH = Math.round(ctaFs * 2.8);
-  const ctaY = textY + hookT.totalH + Math.round(s.pad * 0.5);
+  const ctaY = textY + hookT.totalH + Math.round(s.pad * 0.4);
   const ctaPadX = Math.round(ctaFs * 1.8);
   const font = getFont(true);
   const ctaLabel = body || 'Více info';
@@ -837,10 +838,8 @@ async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
   const ctaRad = Math.round(ctaH / 2);
   const ctaTextPath = textToPath(ctaLabel, textX + ctaPadX, ctaY + ctaH * 0.65, ctaFs, '#ffffff', 1, true);
 
-  // Logo badge top-right — accent rectangle with rounded corners
-  const logoSz = Math.round(s.base * 0.06);
-  const badgePad = Math.round(s.pad * 0.6);
-  const badgeH = Math.round(logoSz + badgePad * 2);
+  // Logo — clean, top-right, no frame
+  const logoSz = Math.round(s.base * 0.07);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
     <!-- White circle -->
@@ -857,18 +856,14 @@ async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
 
-  // Logo badge top-right
+  // Logo clean, top-right
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
   if (logo) {
-    // Accent badge background
-    const badgeW = Math.round(logoSz + badgePad * 4 + s.base * 0.15);
-    const badgeX = width - badgeW - Math.round(s.pad * 0.5);
-    const badgeY = Math.round(s.pad * 0.5);
-    const badgeSvg = `<svg width="${badgeW}" height="${badgeH}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${badgeW}" height="${badgeH}" rx="${Math.round(badgeH * 0.2)}" fill="#${accent}"/>
-    </svg>`;
-    composite.push({ input: Buffer.from(badgeSvg, 'utf-8'), top: badgeY, left: badgeX });
-    composite.push({ input: logo, top: badgeY + Math.round((badgeH - logoSz) / 2), left: badgeX + badgePad });
+    composite.push({
+      input: logo,
+      top: Math.round(s.pad * 0.8),
+      left: width - logoSz - Math.round(s.pad * 0.8),
+    });
   }
 
   return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();

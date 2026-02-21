@@ -627,65 +627,65 @@ async function renderQuoteCard(ctx: TemplateContext): Promise<Buffer> {
 }
 
 // ─── Template 8: Diagonal ────────────────────────────────────
-// RE/MAX style: large colored panel top-left with text, diagonal cut reveals photo bottom-right,
-// white logo strip at bottom with subtle curve transition.
+// Photo background, large bg-colored circle top-right, bold hook text top-left,
+// body text below hook, logo in circular accent-bordered frame bottom-right.
 
 async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, subtitle, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const { hook, body, bg, accent, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
   const isLand = s.mode === 'landscape';
 
-  // Logo strip at bottom
-  const logoStripH = Math.round(height * 0.12);
-  const logoSz = Math.round(logoStripH * 0.55);
-
-  // Arc cut — color panel covers top-left, curved edge reveals photo bottom-right
-  const arcLeftY = Math.round(height * (isLand ? 0.82 : 0.75));
-  const arcRightY = Math.round(height * (isLand ? 0.15 : 0.18));
-  // Control point for the quadratic bezier — pulls the curve into an arc
-  const arcCtrlX = Math.round(width * 0.55);
-  const arcCtrlY = Math.round(height * (isLand ? 0.35 : 0.32));
-
-  // Curve transition above logo strip
-  const curveY = height - logoStripH;
-  const curveCtrl = Math.round(width * 0.35);
-
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Text layout — large hook, accent bar, body, subtitle
-  const hookFs = isLand ? Math.round(s.base * 0.11) : Math.round(s.base * 0.085);
-  const textMaxW = isLand ? Math.round(width * 0.48) : Math.round(width * 0.82);
-  const textPad = Math.round(s.pad * 1.5);
+  // Large circle — bg color, positioned top-right, overflows edges
+  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.5 : 0.55));
+  const circleCx = Math.round(width * (isLand ? 0.72 : 0.7));
+  const circleCy = Math.round(height * (isLand ? 0.25 : 0.22));
 
-  const hookT = svgText({ text: hook, x: textPad, y: textPad, fs: hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: isLand ? 4 : 6 });
-  const barY = textPad + hookT.totalH + Math.round(s.pad * 0.5);
-  const barW = Math.round(s.base * 0.08);
-  const barH = Math.round(s.base * 0.006);
-  const bodyY = barY + barH + Math.round(s.pad * 0.5);
-  const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
-  const subY = bodyY + bodyT.totalH + Math.round(s.pad * 0.3);
-  const subT = svgText({ text: subtitle, x: textPad, y: subY, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
+  // Text layout — large hook + body, top-left
+  const textPad = Math.round(s.pad * 1.5);
+  const hookFs = isLand ? Math.round(s.base * 0.1) : Math.round(s.base * 0.085);
+  const textMaxW = isLand ? Math.round(width * 0.5) : Math.round(width * 0.85);
+
+  const hookT = svgText({ text: hook, x: textPad, y: textPad, fs: hookFs, bold: true, fill: '#1a1a2e', maxPx: textMaxW, maxLines: isLand ? 3 : 5, lh: 1.1 });
+  const bodyY = textPad + hookT.totalH + Math.round(s.pad * 0.4);
+  const bodyFs = isLand ? Math.round(s.base * 0.04) : Math.round(s.base * 0.038);
+  const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: bodyFs, bold: true, fill: '#1a1a2e', maxPx: textMaxW, maxLines: isLand ? 2 : 3, opacity: 0.7 });
+
+  // Logo circle frame — bottom-right, accent border
+  const logoSz = Math.round(s.base * 0.1);
+  const logoFrameR = Math.round(logoSz * 0.65);
+  const logoBorder = Math.round(logoSz * 0.08);
+  const logoCx = Math.round(width - textPad - logoFrameR);
+  const logoCy = Math.round(height - textPad - logoFrameR);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Colored arc panel — bezier curve from left to right -->
-    <path d="M0,0 L${width},0 L${width},${arcRightY} Q${arcCtrlX},${arcCtrlY} 0,${arcLeftY} Z" fill="#${bg}"/>
-    <!-- White logo strip with curve transition -->
-    <path d="M0,${curveY} Q${curveCtrl},${curveY - Math.round(logoStripH * 0.5)} ${width},${curveY} L${width},${height} L0,${height} Z" fill="#ffffff"/>
+    <!-- Large bg-colored circle top-right -->
+    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${bg}" opacity="0.85"/>
     <!-- Text -->
     ${hookT.svg}
-    <!-- Accent bar -->
-    <rect x="${textPad}" y="${barY}" width="${barW}" height="${barH}" rx="1" fill="#${accent}"/>
-    ${bodyT.svg}${subT.svg}
+    ${bodyT.svg}
+    <!-- Logo accent circle border -->
+    <circle cx="${logoCx}" cy="${logoCy}" r="${logoFrameR + logoBorder}" fill="#${accent}"/>
+    <circle cx="${logoCx}" cy="${logoCy}" r="${logoFrameR}" fill="#1a1a2e"/>
   </svg>`;
 
   const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
-  const logo = await fetchLogo(ctx.logoUrl, logoSz);
-  if (logo) composite.push({ input: logo, top: height - logoStripH + Math.round((logoStripH - logoSz) / 2), left: textPad });
 
-  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
+  // Place logo inside the circle frame
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
+  if (logo) {
+    composite.push({
+      input: logo,
+      top: Math.round(logoCy - logoSz / 2),
+      left: Math.round(logoCx - logoSz / 2),
+    });
+  }
+
+  return sharp({ create: { width, height, channels: 4, background: { r: 240, g: 240, b: 244 } } }).composite(composite).png().toBuffer();
 }
 
 // ─── Template 9: Quote Overlay ──────────────────────────────

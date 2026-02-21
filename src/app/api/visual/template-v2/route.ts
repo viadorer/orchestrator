@@ -7,9 +7,11 @@ export const maxDuration = 15;
 /**
  * Sharp-based Brand Template Engine (v2)
  * 
- * Same query params as v1 (Satori), but renders via Sharp + SVG overlays.
- * Produces much higher quality output with proper text rendering,
- * diagonal masks, rounded corners, and gradient overlays.
+ * Adaptive sizing: all fonts/padding relative to min(width, height).
+ * Portrait gets larger text (more vertical space).
+ * Landscape gets compact layout.
+ * Logo always bottom-right with padding.
+ * Word-wrap with max line limits.
  * 
  * GET /api/visual/template-v2?t=quote_card&hook=...&body=...&bg=1a1a2e&accent=e94560&...
  */
@@ -68,7 +70,7 @@ export async function GET(request: NextRequest) {
         break;
     }
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'image/png',
         'Cache-Control': 'public, max-age=3600, s-maxage=86400',
@@ -123,586 +125,517 @@ function getPlatformDimensions(platform: string): { w: number; h: number } {
   return dims[platform] || { w: 1200, h: 630 };
 }
 
+// ─── Adaptive Sizing ─────────────────────────────────────────
+
+type AspectMode = 'portrait' | 'square' | 'landscape' | 'story';
+
+interface Sizing {
+  mode: AspectMode;
+  base: number;       // min(w, h) — all sizes relative to this
+  pad: number;        // consistent padding
+  hookFs: number;     // hook font size
+  bodyFs: number;     // body font size
+  subFs: number;      // subtitle font size
+  logoSz: number;     // logo size
+  barH: number;       // accent bar height
+  divW: number;       // divider width
+  hookMax: number;    // max lines for hook
+  bodyMax: number;    // max lines for body
+  textW: number;      // max text width (for word-wrap)
+}
+
+function sizing(w: number, h: number): Sizing {
+  const ratio = w / h;
+  let mode: AspectMode;
+  if (ratio < 0.7) mode = 'story';
+  else if (ratio < 0.95) mode = 'portrait';
+  else if (ratio <= 1.1) mode = 'square';
+  else mode = 'landscape';
+
+  const base = Math.min(w, h);
+  const pad = Math.round(base * 0.05);
+
+  // Font sizes: landscape uses smaller fonts (less vertical space)
+  // Story/portrait uses larger fonts (more vertical space)
+  const scale: Record<AspectMode, { hook: number; body: number; sub: number }> = {
+    story:     { hook: 0.075, body: 0.038, sub: 0.030 },
+    portrait:  { hook: 0.070, body: 0.035, sub: 0.028 },
+    square:    { hook: 0.065, body: 0.033, sub: 0.026 },
+    landscape: { hook: 0.090, body: 0.042, sub: 0.034 },
+  };
+  const s = scale[mode];
+
+  return {
+    mode, base, pad,
+    hookFs: Math.round(base * s.hook),
+    bodyFs: Math.round(base * s.body),
+    subFs:  Math.round(base * s.sub),
+    logoSz: Math.round(base * 0.09),
+    barH:   Math.round(base * 0.005),
+    divW:   Math.round(base * 0.07),
+    hookMax: mode === 'landscape' ? 3 : 5,
+    bodyMax: mode === 'landscape' ? 2 : 3,
+    textW:   mode === 'landscape' ? Math.round(w * 0.55) : Math.round(w * 0.85),
+  };
+}
+
 // ─── Helpers ─────────────────────────────────────────────────
 
-function escapeXml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
+const FONT = `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
 
-/** Fetch an image from URL and return as Sharp buffer, resized to fit */
-async function fetchImage(url: string, w: number, h: number): Promise<Buffer> {
-  if (!url || url.length < 5) {
-    // Return a solid gray placeholder
-    return sharp({ create: { width: w, height: h, channels: 3, background: { r: 40, g: 40, b: 40 } } })
-      .png()
-      .toBuffer();
-  }
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    const arrayBuf = await res.arrayBuffer();
-    return sharp(Buffer.from(arrayBuf))
-      .resize(w, h, { fit: 'cover', position: 'centre' })
-      .png()
-      .toBuffer();
-  } catch {
-    return sharp({ create: { width: w, height: h, channels: 3, background: { r: 40, g: 40, b: 40 } } })
-      .png()
-      .toBuffer();
-  }
-}
-
-/** Fetch logo and return resized buffer, or null */
-async function fetchLogo(url: string, size: number): Promise<Buffer | null> {
-  if (!url || url.length < 5) return null;
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    const arrayBuf = await res.arrayBuffer();
-    return sharp(Buffer.from(arrayBuf))
-      .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .png()
-      .toBuffer();
-  } catch {
-    return null;
-  }
+function esc(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const h = hex.replace('#', '');
-  return {
-    r: parseInt(h.substring(0, 2), 16) || 0,
-    g: parseInt(h.substring(2, 4), 16) || 0,
-    b: parseInt(h.substring(4, 6), 16) || 0,
-  };
+  return { r: parseInt(h.substring(0, 2), 16) || 0, g: parseInt(h.substring(2, 4), 16) || 0, b: parseInt(h.substring(4, 6), 16) || 0 };
 }
 
-/** Word-wrap text to fit within maxWidth at given fontSize (approximate) */
-function wrapText(text: string, fontSize: number, maxWidth: number, fontWeight: string = 'bold'): string[] {
+/** Word-wrap text, clamped to maxLines. Last line gets "…" if truncated. */
+function wrap(text: string, fontSize: number, maxPx: number, bold: boolean, maxLines: number): string[] {
   if (!text) return [];
-  // Approximate character width: bold ~0.6em, normal ~0.5em
-  const charWidth = fontSize * (fontWeight === 'bold' || fontWeight === '900' ? 0.58 : 0.48);
-  const maxChars = Math.floor(maxWidth / charWidth);
-  
+  const cw = fontSize * (bold ? 0.57 : 0.47);
+  const maxChars = Math.max(6, Math.floor(maxPx / cw));
   const words = text.split(' ');
   const lines: string[] = [];
-  let currentLine = '';
-
+  let cur = '';
   for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    if (testLine.length > maxChars && currentLine) {
-      lines.push(currentLine);
-      currentLine = word;
+    const test = cur ? `${cur} ${word}` : word;
+    if (test.length > maxChars && cur) {
+      lines.push(cur);
+      if (lines.length >= maxLines) { lines[lines.length - 1] += '…'; return lines; }
+      cur = word;
     } else {
-      currentLine = testLine;
+      cur = test;
     }
   }
-  if (currentLine) lines.push(currentLine);
+  if (cur) {
+    if (lines.length >= maxLines) { lines[lines.length - 1] += '…'; }
+    else lines.push(cur);
+  }
   return lines;
 }
 
-/** Generate SVG text block with word wrapping */
-function svgTextBlock(opts: {
-  text: string;
-  x: number;
-  y: number;
-  fontSize: number;
-  fontWeight?: string;
-  fill: string;
-  maxWidth: number;
-  opacity?: number;
-  lineHeight?: number;
-  anchor?: string;
-}): { svg: string; height: number } {
-  const { text, x, y, fontSize, fontWeight = 'bold', fill, maxWidth, opacity = 1, lineHeight = 1.25, anchor = 'start' } = opts;
-  const lines = wrapText(text, fontSize, maxWidth, fontWeight);
-  const lh = fontSize * lineHeight;
-  
+/** Render SVG text lines. Returns { svg, totalH }. */
+function svgText(opts: {
+  text: string; x: number; y: number; fs: number; bold?: boolean;
+  fill: string; maxPx: number; maxLines?: number; opacity?: number;
+  lh?: number; anchor?: string;
+}): { svg: string; totalH: number } {
+  const { text, x, y, fs, bold = true, fill, maxPx, maxLines = 5, opacity = 1, lh = 1.3, anchor = 'start' } = opts;
+  const lines = wrap(text, fs, maxPx, bold, maxLines);
+  const lineH = Math.round(fs * lh);
   let svg = '';
   for (let i = 0; i < lines.length; i++) {
-    svg += `<text x="${x}" y="${y + i * lh}" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${fill}" opacity="${opacity}" text-anchor="${anchor}">${escapeXml(lines[i])}</text>\n`;
+    svg += `<text x="${x}" y="${y + i * lineH + fs}" font-family="${FONT}" font-size="${fs}" font-weight="${bold ? '800' : '400'}" fill="${fill}" opacity="${opacity}" text-anchor="${anchor}">${esc(lines[i])}</text>\n`;
   }
-  return { svg, height: lines.length * lh };
+  return { svg, totalH: lines.length * lineH };
 }
 
-/** Create a rounded rectangle SVG mask */
-function roundedRectMask(w: number, h: number, r: number): Buffer {
-  const svg = `<svg width="${w}" height="${h}"><rect x="0" y="0" width="${w}" height="${h}" rx="${r}" ry="${r}" fill="white"/></svg>`;
-  return Buffer.from(svg);
+async function fetchImg(url: string, w: number, h: number): Promise<Buffer> {
+  if (!url || url.length < 5) {
+    return sharp({ create: { width: w, height: h, channels: 3, background: { r: 40, g: 40, b: 40 } } }).png().toBuffer();
+  }
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    return sharp(Buffer.from(await res.arrayBuffer())).resize(w, h, { fit: 'cover', position: 'centre' }).png().toBuffer();
+  } catch {
+    return sharp({ create: { width: w, height: h, channels: 3, background: { r: 40, g: 40, b: 40 } } }).png().toBuffer();
+  }
 }
 
-// ─── Template: Bold Card ─────────────────────────────────────
+async function fetchLogo(url: string, size: number): Promise<Buffer | null> {
+  if (!url || url.length < 5) return null;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    return sharp(Buffer.from(await res.arrayBuffer())).resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+  } catch { return null; }
+}
+
+/** SVG for logo background circle (for contrast on photos) */
+function logoBgCircle(x: number, y: number, r: number): string {
+  return `<circle cx="${x}" cy="${y}" r="${r}" fill="rgba(0,0,0,0.45)"/>`;
+}
+
+function rrMask(w: number, h: number, r: number): Buffer {
+  return Buffer.from(`<svg width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${r}" ry="${r}" fill="white"/></svg>`);
+}
+
+/** Add logo to composite array — always bottom-right with padding, optional bg circle */
+async function addLogo(composite: sharp.OverlayOptions[], ctx: TemplateContext, s: Sizing, withBg: boolean = false): Promise<string> {
+  const logo = await fetchLogo(ctx.logoUrl, s.logoSz);
+  let logoBgSvg = '';
+  if (logo) {
+    const lx = ctx.width - s.pad - s.logoSz;
+    const ly = ctx.height - s.pad - s.logoSz;
+    if (withBg) {
+      const cx = lx + s.logoSz / 2;
+      const cy = ly + s.logoSz / 2;
+      logoBgSvg = logoBgCircle(cx, cy, Math.round(s.logoSz * 0.7));
+    }
+    composite.push({ input: logo, top: ly, left: lx });
+  }
+  return logoBgSvg;
+}
+
+// ─── Template 1: Bold Card ───────────────────────────────────
+// Clean minimalist: UPPERCASE hook top-left, body below, logo circle bottom-right.
 
 async function renderBoldCard(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, subtitle, project, bg, accent, textColor, logoUrl, width, height } = ctx;
-  const rgb = hexToRgb(bg);
-  const accentRgb = hexToRgb(accent);
-  const pad = Math.round(Math.min(width, height) * 0.06);
-  const hookSize = Math.round(width * 0.16);
-  const bodySize = Math.round(width * 0.038);
-  const subtitleSize = Math.round(width * 0.028);
-  const barH = Math.round(Math.min(width, height) * 0.005);
-  const divW = Math.round(Math.min(width, height) * 0.07);
-  const logoSize = Math.round(Math.min(width, height) * 0.1);
+  const { hook, body, bg, accent, textColor, width, height } = ctx;
+  const s = sizing(width, height);
 
-  // Build SVG overlay
-  const hookBlock = svgTextBlock({ text: hook, x: width / 2, y: height * 0.35, fontSize: hookSize, fontWeight: '900', fill: `#${textColor}`, maxWidth: width * 0.8, anchor: 'middle' });
-  const bodyBlock = svgTextBlock({ text: body, x: width / 2, y: height * 0.35 + hookBlock.height + pad, fontSize: bodySize, fontWeight: '500', fill: `#${textColor}`, maxWidth: width * 0.75, opacity: 0.9, anchor: 'middle' });
-  const subY = height * 0.35 + hookBlock.height + bodyBlock.height + pad * 1.5;
-  const subBlock = svgTextBlock({ text: subtitle, x: width / 2, y: subY, fontSize: subtitleSize, fontWeight: '400', fill: `#${accent}`, maxWidth: width * 0.65, anchor: 'middle' });
+  // Hook: massive UPPERCASE, left-aligned
+  const hookUpper = (hook || '').toUpperCase();
+  const bigHookFs = Math.round(s.base * 0.16);
+  const textMaxW = width - s.pad * 2;
+
+  const hookT = svgText({ text: hookUpper, x: s.pad, y: s.pad, fs: bigHookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 4, lh: 1.1 });
+
+  // Body: smaller bold text below hook
+  const bodyFs = Math.round(s.base * 0.042);
+  const bodyY = s.pad + hookT.totalH + s.pad * 0.8;
+  const bodyMaxW = s.mode === 'landscape' ? Math.round(width * 0.55) : Math.round(width * 0.8);
+  const bodyT = svgText({ text: body, x: s.pad, y: bodyY, fs: bodyFs, bold: true, fill: `#${textColor}`, maxPx: bodyMaxW, maxLines: s.bodyMax, lh: 1.35 });
+
+  // Logo: circular with accent border, bottom-right (bigger for landscape)
+  const logoR = Math.round(s.mode === 'landscape' ? height * 0.14 : s.base * 0.11);
+  const logoCx = width - s.pad - logoR;
+  const logoCy = height - s.pad - logoR;
+  const borderW = Math.round(logoR * 0.12);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Background -->
     <rect width="${width}" height="${height}" fill="#${bg}"/>
-    <!-- Glow -->
-    <defs>
-      <radialGradient id="glow" cx="50%" cy="50%" r="40%">
-        <stop offset="0%" stop-color="rgb(${accentRgb.r},${accentRgb.g},${accentRgb.b})" stop-opacity="0.2"/>
-        <stop offset="100%" stop-color="rgb(${accentRgb.r},${accentRgb.g},${accentRgb.b})" stop-opacity="0"/>
-      </radialGradient>
-    </defs>
-    <ellipse cx="${width / 2}" cy="${height / 2}" rx="${width * 0.35}" ry="${width * 0.35}" fill="url(#glow)"/>
-    <!-- Top bar -->
-    <rect x="0" y="0" width="${width}" height="${barH}" fill="#${accent}"/>
-    <!-- Corner accents -->
-    <rect x="${pad}" y="${pad}" width="${divW}" height="${barH}" fill="#${accent}" opacity="0.4"/>
-    <rect x="${pad}" y="${pad}" width="${barH}" height="${divW}" fill="#${accent}" opacity="0.4"/>
-    <rect x="${width - pad - divW}" y="${height - pad - barH}" width="${divW}" height="${barH}" fill="#${accent}" opacity="0.4"/>
-    <rect x="${width - pad - barH}" y="${height - pad - divW}" width="${barH}" height="${divW}" fill="#${accent}" opacity="0.4"/>
-    <!-- Divider -->
-    <rect x="${(width - divW) / 2}" y="${height * 0.35 + hookBlock.height + pad * 0.3}" width="${divW}" height="${barH}" rx="2" fill="#${accent}"/>
-    <!-- Text -->
-    ${hookBlock.svg}
-    ${bodyBlock.svg}
-    ${subBlock.svg}
-    <!-- Bottom bar -->
-    <rect x="0" y="${height - barH}" width="${width}" height="${barH}" fill="#${accent}"/>
+    ${hookT.svg}${bodyT.svg}
+    <circle cx="${logoCx}" cy="${logoCy}" r="${logoR + borderW}" fill="#${accent}"/>
+    <circle cx="${logoCx}" cy="${logoCy}" r="${logoR}" fill="#${bg}"/>
   </svg>`;
 
-  let composite: sharp.OverlayOptions[] = [
-    { input: Buffer.from(svg), top: 0, left: 0 },
-  ];
+  const composite: sharp.OverlayOptions[] = [{ input: Buffer.from(svg), top: 0, left: 0 }];
 
-  // Logo
-  const logo = await fetchLogo(logoUrl, logoSize);
+  // Fetch logo and clip to circle, place inside the accent ring
+  const logo = await fetchLogo(ctx.logoUrl, logoR * 2);
   if (logo) {
-    composite.push({ input: logo, top: height - pad - logoSize, left: width - pad - logoSize });
-  }
-
-  return sharp({ create: { width, height, channels: 4, background: { ...rgb, alpha: 255 } } })
-    .composite(composite)
-    .png()
-    .toBuffer();
-}
-
-// ─── Template: Photo Strip ───────────────────────────────────
-
-async function renderPhotoStrip(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, bg, accent, textColor, logoUrl, photoUrl, width, height } = ctx;
-  const stripH = Math.round(height * 0.22);
-  const photoH = height - stripH;
-  const pad = Math.round(Math.min(width, height) * 0.04);
-  const hookSize = Math.round(stripH * 0.28);
-  const bodySize = Math.round(stripH * 0.15);
-  const logoSize = Math.round(Math.min(width, height) * 0.1);
-  const barH = Math.round(Math.min(width, height) * 0.005);
-
-  const photo = await fetchImage(photoUrl, width, photoH);
-  const logo = await fetchLogo(logoUrl, logoSize);
-
-  // Strip SVG overlay
-  const hookBlock = svgTextBlock({ text: hook, x: pad, y: photoH + pad + hookSize, fontSize: hookSize, fontWeight: '900', fill: `#${textColor}`, maxWidth: width - pad * 2 - logoSize - pad });
-  const bodyBlock = svgTextBlock({ text: body, x: pad, y: photoH + pad + hookSize + hookBlock.height + 4, fontSize: bodySize, fontWeight: '400', fill: `#${textColor}`, maxWidth: width - pad * 2 - logoSize - pad, opacity: 0.7 });
-
-  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Strip background -->
-    <rect x="0" y="${photoH}" width="${width}" height="${stripH}" fill="#${bg}"/>
-    <!-- Accent line -->
-    <rect x="${pad}" y="${photoH}" width="${width - pad * 2}" height="${barH}" fill="#${accent}"/>
-    <!-- Gradient fade from photo to strip -->
-    <defs>
-      <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#${bg}" stop-opacity="0"/>
-        <stop offset="100%" stop-color="#${bg}" stop-opacity="1"/>
-      </linearGradient>
-    </defs>
-    <rect x="0" y="${photoH - 60}" width="${width}" height="60" fill="url(#fade)"/>
-    ${hookBlock.svg}
-    ${bodyBlock.svg}
-  </svg>`;
-
-  let composite: sharp.OverlayOptions[] = [
-    { input: photo, top: 0, left: 0 },
-    { input: Buffer.from(svg), top: 0, left: 0 },
-  ];
-
-  if (logo) {
-    composite.push({ input: logo, top: photoH + Math.round((stripH - logoSize) / 2), left: width - pad - logoSize });
+    // Clip logo to circle
+    const circleMask = Buffer.from(`<svg width="${logoR * 2}" height="${logoR * 2}"><circle cx="${logoR}" cy="${logoR}" r="${logoR}" fill="white"/></svg>`);
+    const logoCircle = await sharp(logo)
+      .resize(logoR * 2, logoR * 2, { fit: 'cover' })
+      .composite([{ input: circleMask, blend: 'dest-in' }])
+      .png().toBuffer();
+    composite.push({ input: logoCircle, top: logoCy - logoR, left: logoCx - logoR });
   }
 
   return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } })
-    .composite(composite)
-    .png()
-    .toBuffer();
+    .composite(composite).png().toBuffer();
 }
 
-// ─── Template: Gradient ──────────────────────────────────────
+// ─── Template 2: Photo Strip ─────────────────────────────────
+// Photo on top (~75%), brand strip at bottom with hook + logo.
 
-async function renderGradient(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, subtitle, accent, textColor, logoUrl, photoUrl, width, height } = ctx;
-  const pad = Math.round(Math.min(width, height) * 0.05);
-  const hookSize = Math.round(width * 0.055);
-  const bodySize = Math.round(width * 0.028);
-  const logoSize = Math.round(Math.min(width, height) * 0.1);
-  const barH = Math.round(Math.min(width, height) * 0.005);
+async function renderPhotoStrip(ctx: TemplateContext): Promise<Buffer> {
+  const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const stripRatio = s.mode === 'landscape' ? 0.30 : s.mode === 'story' ? 0.22 : 0.25;
+  const stripH = Math.round(height * stripRatio);
+  const photoH = height - stripH;
+  const fadeH = Math.round(s.base * 0.06);
+  const textMaxW = width - s.pad * 2 - s.logoSz - s.pad;
+  // Font sizes relative to strip height so text always fits
+  const stripHookFs = Math.round(stripH * 0.22);
+  const stripBodyFs = Math.round(stripH * 0.13);
 
-  const photo = await fetchImage(photoUrl, width, height);
-  const logo = await fetchLogo(logoUrl, logoSize);
+  const photo = await fetchImg(photoUrl, width, photoH);
 
-  const hookBlock = svgTextBlock({ text: hook, x: pad, y: height * 0.62, fontSize: hookSize, fontWeight: '900', fill: '#ffffff', maxWidth: width - pad * 2 });
-  const bodyBlock = svgTextBlock({ text: body, x: pad, y: height * 0.62 + hookBlock.height + 12, fontSize: bodySize, fontWeight: '500', fill: '#ffffffee', maxWidth: width * 0.8 });
-  const subBlock = svgTextBlock({ text: subtitle, x: pad, y: height * 0.62 + hookBlock.height + bodyBlock.height + 24, fontSize: bodySize - 4, fontWeight: '400', fill: `#${accent}`, maxWidth: width * 0.7 });
+  const hookT = svgText({ text: hook, x: s.pad, y: photoH + s.pad, fs: stripHookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 2 });
+  const bodyT = svgText({ text: body, x: s.pad, y: photoH + s.pad + hookT.totalH + 4, fs: stripBodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 2, opacity: 0.7 });
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
-        <stop offset="35%" stop-color="#000000" stop-opacity="0.55"/>
-        <stop offset="70%" stop-color="#000000" stop-opacity="0.85"/>
-        <stop offset="100%" stop-color="#000000" stop-opacity="0.92"/>
-      </linearGradient>
-    </defs>
-    <rect x="0" y="${height * 0.25}" width="${width}" height="${height * 0.75}" fill="url(#grad)"/>
-    <rect x="0" y="0" width="${width}" height="${barH}" fill="#${accent}"/>
-    ${hookBlock.svg}
-    ${bodyBlock.svg}
-    ${subBlock.svg}
+    <rect x="0" y="${photoH}" width="${width}" height="${stripH}" fill="#${bg}"/>
+    <rect x="0" y="${photoH}" width="${width}" height="${s.barH}" fill="#${accent}"/>
+    <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#${bg}" stop-opacity="0"/><stop offset="100%" stop-color="#${bg}" stop-opacity="1"/></linearGradient></defs>
+    <rect x="0" y="${photoH - fadeH}" width="${width}" height="${fadeH}" fill="url(#fade)"/>
+    ${hookT.svg}${bodyT.svg}
   </svg>`;
 
-  let composite: sharp.OverlayOptions[] = [
+  const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg), top: 0, left: 0 },
   ];
+  // Logo vertically centered in strip, right side
+  const logo = await fetchLogo(ctx.logoUrl, s.logoSz);
+  if (logo) composite.push({ input: logo, top: photoH + Math.round((stripH - s.logoSz) / 2), left: width - s.pad - s.logoSz });
 
-  if (logo) {
-    composite.push({ input: logo, top: height - pad - logoSize, left: width - pad - logoSize });
-  }
-
-  return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } })
-    .composite(composite)
-    .png()
-    .toBuffer();
+  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } })
+    .composite(composite).png().toBuffer();
 }
 
-// ─── Template: Split ─────────────────────────────────────────
+// ─── Template 3: Gradient ────────────────────────────────────
+// Full-bleed photo, dark gradient from bottom, text at bottom, logo bottom-right.
+
+async function renderGradient(ctx: TemplateContext): Promise<Buffer> {
+  const { hook, body, subtitle, accent, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const textMaxW = width - s.pad * 2 - s.logoSz - s.pad;
+
+  // Text starts higher in landscape (less vertical space)
+  const textStartY = s.mode === 'landscape' ? height * 0.38 : height * 0.55;
+  const gradStart = s.mode === 'landscape' ? '15%' : '25%';
+
+  const photo = await fetchImg(photoUrl, width, height);
+
+  const hookT = svgText({ text: hook, x: s.pad, y: textStartY, fs: s.hookFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: s.hookMax });
+  const bodyT = svgText({ text: body, x: s.pad, y: textStartY + hookT.totalH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: '#ffffff', maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
+  const subT = svgText({ text: subtitle, x: s.pad, y: textStartY + hookT.totalH + bodyT.totalH + s.pad * 0.5, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
+
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="${gradStart}" stop-color="#000" stop-opacity="0.3"/>
+      <stop offset="65%" stop-color="#000" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.92"/>
+    </linearGradient></defs>
+    <rect width="${width}" height="${height}" fill="url(#grad)"/>
+    ${hookT.svg}${bodyT.svg}${subT.svg}
+  </svg>`;
+
+  const composite: sharp.OverlayOptions[] = [
+    { input: photo, top: 0, left: 0 },
+    { input: Buffer.from(svg), top: 0, left: 0 },
+  ];
+  await addLogo(composite, ctx, s, true);
+
+  return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } })
+    .composite(composite).png().toBuffer();
+}
+
+// ─── Template 4: Split ───────────────────────────────────────
+// Portrait/square: photo top, text bottom. Landscape: photo left, text right.
 
 async function renderSplit(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, subtitle, bg, accent, textColor, logoUrl, photoUrl, width, height } = ctx;
-  const isVertical = height > width;
-  const pad = Math.round(Math.min(width, height) * 0.05);
-  const hookSize = Math.round(width * 0.055);
-  const bodySize = Math.round(width * 0.028);
-  const logoSize = Math.round(Math.min(width, height) * 0.1);
-  const barH = Math.round(Math.min(width, height) * 0.005);
-  const divW = Math.round(Math.min(width, height) * 0.07);
+  const { hook, body, subtitle, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const isLand = s.mode === 'landscape';
+  const fadeSize = Math.round(s.base * 0.04);
 
-  if (isVertical) {
-    // Top: photo, Bottom: text
-    const photoH = Math.round(height * 0.5);
-    const photo = await fetchImage(photoUrl, width, photoH);
-    const logo = await fetchLogo(logoUrl, logoSize);
+  if (isLand) {
+    const photoW = Math.round(width * 0.48);
+    const textX = photoW + s.pad;
+    const textMaxW = width - photoW - s.pad * 2;
+    const photo = await fetchImg(photoUrl, photoW, height);
 
-    const textY = photoH + pad * 1.5;
-    const hookBlock = svgTextBlock({ text: hook, x: pad, y: textY + hookSize, fontSize: hookSize, fontWeight: '900', fill: `#${textColor}`, maxWidth: width - pad * 2 });
-    const bodyBlock = svgTextBlock({ text: body, x: pad, y: textY + hookSize + hookBlock.height + 12, fontSize: bodySize, fontWeight: '500', fill: `#${textColor}`, maxWidth: width - pad * 2, opacity: 0.85 });
-    const subBlock = svgTextBlock({ text: subtitle, x: pad, y: textY + hookSize + hookBlock.height + bodyBlock.height + 24, fontSize: bodySize - 4, fontWeight: '400', fill: `#${textColor}`, maxWidth: width - pad * 2, opacity: 0.6 });
-
-    const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="${photoH}" width="${width}" height="${height - photoH}" fill="#${bg}"/>
-      <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#${bg}" stop-opacity="0"/><stop offset="100%" stop-color="#${bg}" stop-opacity="1"/></linearGradient></defs>
-      <rect x="0" y="${photoH - 40}" width="${width}" height="40" fill="url(#fade)"/>
-      <rect x="${pad}" y="${photoH + pad * 0.5}" width="${barH}" height="${divW}" fill="#${accent}"/>
-      ${hookBlock.svg}
-      ${bodyBlock.svg}
-      ${subBlock.svg}
-    </svg>`;
-
-    let composite: sharp.OverlayOptions[] = [
-      { input: photo, top: 0, left: 0 },
-      { input: Buffer.from(svg), top: 0, left: 0 },
-    ];
-    if (logo) composite.push({ input: logo, top: height - pad - logoSize, left: width - pad - logoSize });
-
-    return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } })
-      .composite(composite)
-      .png()
-      .toBuffer();
-  } else {
-    // Left: photo, Right: text
-    const photoW = Math.round(width * 0.5);
-    const photo = await fetchImage(photoUrl, photoW, height);
-    const logo = await fetchLogo(logoUrl, logoSize);
-
-    const textX = photoW + pad;
-    const hookBlock = svgTextBlock({ text: hook, x: textX + 20, y: height * 0.3, fontSize: hookSize, fontWeight: '900', fill: `#${textColor}`, maxWidth: width - photoW - pad * 2 });
-    const bodyBlock = svgTextBlock({ text: body, x: textX + 20, y: height * 0.3 + hookBlock.height + 16, fontSize: bodySize, fontWeight: '500', fill: `#${textColor}`, maxWidth: width - photoW - pad * 2, opacity: 0.85 });
-    const subBlock = svgTextBlock({ text: subtitle, x: textX + 20, y: height * 0.3 + hookBlock.height + bodyBlock.height + 28, fontSize: bodySize - 4, fontWeight: '400', fill: `#${textColor}`, maxWidth: width - photoW - pad * 2, opacity: 0.6 });
+    const hookT = svgText({ text: hook, x: textX, y: s.pad, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
+    const bodyT = svgText({ text: body, x: textX, y: s.pad + hookT.totalH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
+    const subT = svgText({ text: subtitle, x: textX, y: s.pad + hookT.totalH + bodyT.totalH + s.pad * 0.5, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
 
     const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <rect x="${photoW}" y="0" width="${width - photoW}" height="${height}" fill="#${bg}"/>
       <defs><linearGradient id="fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#${bg}" stop-opacity="0"/><stop offset="100%" stop-color="#${bg}" stop-opacity="1"/></linearGradient></defs>
-      <rect x="${photoW - 40}" y="0" width="40" height="${height}" fill="url(#fade)"/>
-      <rect x="${textX}" y="${pad}" width="${barH}" height="${divW}" fill="#${accent}"/>
-      ${hookBlock.svg}
-      ${bodyBlock.svg}
-      ${subBlock.svg}
+      <rect x="${photoW - fadeSize}" y="0" width="${fadeSize}" height="${height}" fill="url(#fade)"/>
+      <rect x="${textX}" y="${s.pad}" width="${s.barH}" height="${s.divW}" fill="#${accent}"/>
+      ${hookT.svg}${bodyT.svg}${subT.svg}
     </svg>`;
 
-    let composite: sharp.OverlayOptions[] = [
+    const composite: sharp.OverlayOptions[] = [
       { input: photo, top: 0, left: 0 },
       { input: Buffer.from(svg), top: 0, left: 0 },
     ];
-    if (logo) composite.push({ input: logo, top: height - pad - logoSize, left: width - pad - logoSize });
+    await addLogo(composite, ctx, s);
+    return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
+  } else {
+    const photoH = Math.round(height * 0.5);
+    const textY = photoH + s.pad;
+    const textMaxW = width - s.pad * 2;
+    const photo = await fetchImg(photoUrl, width, photoH);
 
-    return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } })
-      .composite(composite)
-      .png()
-      .toBuffer();
+    const hookT = svgText({ text: hook, x: s.pad, y: textY, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
+    const bodyT = svgText({ text: body, x: s.pad, y: textY + hookT.totalH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
+    const subT = svgText({ text: subtitle, x: s.pad, y: textY + hookT.totalH + bodyT.totalH + s.pad * 0.5, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
+
+    const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="${photoH}" width="${width}" height="${height - photoH}" fill="#${bg}"/>
+      <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#${bg}" stop-opacity="0"/><stop offset="100%" stop-color="#${bg}" stop-opacity="1"/></linearGradient></defs>
+      <rect x="0" y="${photoH - fadeSize}" width="${width}" height="${fadeSize}" fill="url(#fade)"/>
+      <rect x="${s.pad}" y="${photoH + s.pad * 0.3}" width="${s.barH}" height="${s.divW}" fill="#${accent}"/>
+      ${hookT.svg}${bodyT.svg}${subT.svg}
+    </svg>`;
+
+    const composite: sharp.OverlayOptions[] = [
+      { input: photo, top: 0, left: 0 },
+      { input: Buffer.from(svg), top: 0, left: 0 },
+    ];
+    await addLogo(composite, ctx, s);
+    return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
   }
 }
 
-// ─── Template: Text + Logo ───────────────────────────────────
+// ─── Template 5: Text + Logo ─────────────────────────────────
+// Photo background, diagonal gradient overlay, text top-left, logo bottom-right.
 
 async function renderTextLogo(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, subtitle, bg, accent, textColor, logoUrl, photoUrl, width, height } = ctx;
-  const pad = Math.round(Math.min(width, height) * 0.05);
-  const hookSize = Math.round(width * 0.055);
-  const bodySize = Math.round(width * 0.028);
-  const subtitleSize = Math.round(width * 0.022);
-  const logoSize = Math.round(Math.min(width, height) * 0.1);
-  const barH = Math.round(Math.min(width, height) * 0.005);
-  const divW = Math.round(Math.min(width, height) * 0.07);
+  const { hook, body, subtitle, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const textMaxW = s.mode === 'landscape' ? Math.round(width * 0.55) : Math.round(width * 0.7);
 
-  const photo = await fetchImage(photoUrl, width, height);
-  const logo = await fetchLogo(logoUrl, logoSize);
+  const photo = await fetchImg(photoUrl, width, height);
 
-  const hookBlock = svgTextBlock({ text: hook, x: pad, y: pad + hookSize, fontSize: hookSize, fontWeight: '900', fill: `#${textColor}`, maxWidth: width * 0.6 });
-  const bodyBlock = svgTextBlock({ text: body, x: pad, y: pad + hookSize + hookBlock.height + divW * 0.3 + barH + 14, fontSize: bodySize, fontWeight: '500', fill: `#${textColor}`, maxWidth: width * 0.6, opacity: 0.9 });
-  const subBlock = svgTextBlock({ text: subtitle, x: pad, y: pad + hookSize + hookBlock.height + bodyBlock.height + divW * 0.3 + barH + 24, fontSize: subtitleSize, fontWeight: '400', fill: `#${accent}`, maxWidth: width * 0.6 });
+  const hookT = svgText({ text: hook, x: s.pad, y: s.pad, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
+  const divY = s.pad + hookT.totalH + s.pad * 0.2;
+  const bodyT = svgText({ text: body, x: s.pad, y: divY + s.barH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.9 });
+  const subT = svgText({ text: subtitle, x: s.pad, y: divY + s.barH + s.pad * 0.3 + bodyT.totalH + s.pad * 0.2, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="overlay" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#${bg}" stop-opacity="0.87"/>
-        <stop offset="35%" stop-color="#${bg}" stop-opacity="0.55"/>
-        <stop offset="65%" stop-color="#${bg}" stop-opacity="0"/>
-        <stop offset="100%" stop-color="#${bg}" stop-opacity="0.8"/>
-      </linearGradient>
-    </defs>
-    <rect width="${width}" height="${height}" fill="url(#overlay)"/>
-    <!-- Corner accent -->
-    <rect x="0" y="0" width="${barH}" height="${Math.round(height * 0.09)}" fill="#${accent}"/>
-    <rect x="0" y="0" width="${Math.round(width * 0.1)}" height="${barH}" fill="#${accent}"/>
-    <!-- Divider -->
-    <rect x="${pad}" y="${pad + hookSize + hookBlock.height + 6}" width="${divW}" height="${barH}" rx="2" fill="#${accent}"/>
-    ${hookBlock.svg}
-    ${bodyBlock.svg}
-    ${subBlock.svg}
-    <!-- Bottom corner -->
-    <rect x="${width - barH}" y="${height - Math.round(height * 0.06)}" width="${barH}" height="${Math.round(height * 0.06)}" fill="#${accent}"/>
-    <rect x="${width - Math.round(width * 0.07)}" y="${height - barH}" width="${Math.round(width * 0.07)}" height="${barH}" fill="#${accent}"/>
+    <defs><linearGradient id="ov" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#${bg}" stop-opacity="0.88"/>
+      <stop offset="40%" stop-color="#${bg}" stop-opacity="0.5"/>
+      <stop offset="70%" stop-color="#${bg}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <rect width="${width}" height="${height}" fill="url(#ov)"/>
+    <rect x="0" y="0" width="${s.barH}" height="${Math.round(height * 0.08)}" fill="#${accent}"/>
+    <rect x="0" y="0" width="${Math.round(width * 0.08)}" height="${s.barH}" fill="#${accent}"/>
+    <rect x="${s.pad}" y="${divY}" width="${s.divW}" height="${s.barH}" rx="2" fill="#${accent}"/>
+    ${hookT.svg}${bodyT.svg}${subT.svg}
   </svg>`;
 
-  let composite: sharp.OverlayOptions[] = [
+  const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg), top: 0, left: 0 },
   ];
-  if (logo) composite.push({ input: logo, top: height - pad - logoSize, left: width - pad - logoSize });
-
-  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } })
-    .composite(composite)
-    .png()
-    .toBuffer();
+  await addLogo(composite, ctx, s, true);
+  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
 }
 
-// ─── Template: Minimal ───────────────────────────────────────
+// ─── Template 6: Minimal ─────────────────────────────────────
+// Full photo, subtle bottom gradient, logo badge bottom-right.
 
 async function renderMinimal(ctx: TemplateContext): Promise<Buffer> {
-  const { accent, logoUrl, photoUrl, width, height } = ctx;
-  const pad = Math.round(Math.min(width, height) * 0.04);
-  const logoSize = Math.round(Math.min(width, height) * 0.1);
+  const { photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
 
-  const photo = await fetchImage(photoUrl, width, height);
-  const logo = await fetchLogo(logoUrl, logoSize);
+  const photo = await fetchImg(photoUrl, width, height);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
-        <stop offset="100%" stop-color="#000000" stop-opacity="0.5"/>
-      </linearGradient>
-    </defs>
-    <rect x="0" y="${height - Math.round(height * 0.15)}" width="${width}" height="${Math.round(height * 0.15)}" fill="url(#grad)"/>
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.5"/></linearGradient></defs>
+    <rect x="0" y="${height - Math.round(height * 0.18)}" width="${width}" height="${Math.round(height * 0.18)}" fill="url(#g)"/>
   </svg>`;
 
-  let composite: sharp.OverlayOptions[] = [
+  const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg), top: 0, left: 0 },
   ];
-  if (logo) composite.push({ input: logo, top: height - pad - logoSize, left: width - pad - logoSize });
-
-  return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } })
-    .composite(composite)
-    .png()
-    .toBuffer();
+  await addLogo(composite, ctx, s, true);
+  return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } }).composite(composite).png().toBuffer();
 }
 
-// ─── Template: Quote Card ────────────────────────────────────
+// ─── Template 7: Quote Card ──────────────────────────────────
+// Landscape: text panel left + photo right. Portrait/square: text top + photo bottom.
+// Dark frame, rounded inner panels, quote mark.
 
 async function renderQuoteCard(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, subtitle, project, bg, accent, textColor, logoUrl, photoUrl, width, height } = ctx;
-  const isLandscape = width > height * 1.3;
-  const gap = Math.round(Math.min(width, height) * 0.015);
-  const radius = Math.round(Math.min(width, height) * 0.025);
-  const pad = Math.round(Math.min(width, height) * 0.06);
-  const logoSize = Math.round(Math.min(width, height) * 0.08);
+  const { hook, body, subtitle, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const gap = Math.round(s.base * 0.015);
+  const rad = Math.round(s.base * 0.025);
+  const isLand = s.mode === 'landscape';
 
-  if (isLandscape) {
-    // Side-by-side: text left, photo right
+  if (isLand) {
     const textW = Math.round(width * 0.55);
     const photoW = width - textW - gap * 3;
     const innerH = height - gap * 2;
+    const textMaxW = textW - s.pad * 2;
 
-    const base = height;
-    const hookSize = Math.round(base * 0.085);
-    const bodySize = Math.round(base * 0.042);
-    const subtitleSize = Math.round(base * 0.033);
+    const photo = await fetchImg(photoUrl, photoW, innerH);
+    const photoR = await sharp(photo).composite([{ input: rrMask(photoW, innerH, rad), blend: 'dest-in' }]).png().toBuffer();
 
-    const photo = await fetchImage(photoUrl, photoW, innerH);
-    const photoRounded = await sharp(photo).composite([{ input: roundedRectMask(photoW, innerH, radius), blend: 'dest-in' }]).png().toBuffer();
-    const logo = await fetchLogo(logoUrl, logoSize);
-
-    const hookBlock = svgTextBlock({ text: hook, x: gap + pad, y: gap + pad + hookSize * 0.8 + hookSize, fontSize: hookSize, fontWeight: '900', fill: `#${textColor}`, maxWidth: textW - pad * 2 });
-    const bodyBlock = svgTextBlock({ text: body, x: gap + pad, y: gap + pad + hookSize * 0.8 + hookSize + hookBlock.height + pad * 0.5, fontSize: bodySize, fontWeight: '400', fill: `#${textColor}`, maxWidth: textW - pad * 2, opacity: 0.7 });
-    const subBlock = svgTextBlock({ text: subtitle, x: gap + pad, y: gap + pad + hookSize * 0.8 + hookSize + hookBlock.height + bodyBlock.height + pad * 0.8, fontSize: subtitleSize, fontWeight: '400', fill: `#${accent}`, maxWidth: textW - pad * 2 });
+    const quoteFs = Math.round(s.hookFs * 0.8);
+    const hookT = svgText({ text: hook, x: gap + s.pad, y: gap + s.pad + quoteFs, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
+    const bodyT = svgText({ text: body, x: gap + s.pad, y: gap + s.pad + quoteFs + hookT.totalH + s.pad * 0.4, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.7 });
+    const subT = svgText({ text: subtitle, x: gap + s.pad, y: gap + s.pad + quoteFs + hookT.totalH + bodyT.totalH + s.pad * 0.6, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
 
     const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${width}" height="${height}" fill="#0a0a0a"/>
-      <rect x="${gap}" y="${gap}" width="${textW}" height="${innerH}" rx="${radius}" fill="#${bg}"/>
-      <!-- Quote mark -->
-      <text x="${gap + pad}" y="${gap + pad + hookSize * 0.8}" font-family="Georgia, serif" font-size="${Math.round(hookSize * 0.7)}" font-weight="900" fill="#${textColor}" opacity="0.15">„</text>
-      ${hookBlock.svg}
-      ${bodyBlock.svg}
-      ${subBlock.svg}
+      <rect x="${gap}" y="${gap}" width="${textW}" height="${innerH}" rx="${rad}" fill="#${bg}"/>
+      <text x="${gap + s.pad}" y="${gap + s.pad + quoteFs * 0.8}" font-family="Georgia,serif" font-size="${quoteFs}" font-weight="900" fill="#${textColor}" opacity="0.15">„</text>
+      ${hookT.svg}${bodyT.svg}${subT.svg}
     </svg>`;
 
-    let composite: sharp.OverlayOptions[] = [
+    const composite: sharp.OverlayOptions[] = [
       { input: Buffer.from(svg), top: 0, left: 0 },
-      { input: photoRounded, top: gap, left: textW + gap * 2 },
+      { input: photoR, top: gap, left: textW + gap * 2 },
     ];
-    if (logo) composite.push({ input: logo, top: height - gap - pad - logoSize, left: gap + pad });
+    // Logo bottom-left inside text panel for quote_card landscape
+    const logo = await fetchLogo(ctx.logoUrl, s.logoSz);
+    if (logo) composite.push({ input: logo, top: height - gap - s.pad - s.logoSz, left: gap + s.pad });
 
-    return sharp({ create: { width, height, channels: 4, background: { r: 10, g: 10, b: 10 } } })
-      .composite(composite)
-      .png()
-      .toBuffer();
+    return sharp({ create: { width, height, channels: 4, background: { r: 10, g: 10, b: 10 } } }).composite(composite).png().toBuffer();
   } else {
-    // Stacked: text top, photo bottom
     const textH = Math.round(height * 0.55);
     const photoH = height - textH - gap * 3;
     const innerW = width - gap * 2;
+    const textMaxW = innerW - s.pad * 2;
 
-    const base = width;
-    const hookSize = Math.round(base * 0.055);
-    const bodySize = Math.round(base * 0.028);
-    const subtitleSize = Math.round(base * 0.022);
+    const photo = await fetchImg(photoUrl, innerW, photoH);
+    const photoR = await sharp(photo).composite([{ input: rrMask(innerW, photoH, rad), blend: 'dest-in' }]).png().toBuffer();
 
-    const photo = await fetchImage(photoUrl, innerW, photoH);
-    const photoRounded = await sharp(photo).composite([{ input: roundedRectMask(innerW, photoH, radius), blend: 'dest-in' }]).png().toBuffer();
-    const logo = await fetchLogo(logoUrl, logoSize);
-
-    const hookBlock = svgTextBlock({ text: hook, x: gap + pad, y: gap + pad + hookSize * 0.8 + hookSize, fontSize: hookSize, fontWeight: '900', fill: `#${textColor}`, maxWidth: innerW - pad * 2 });
-    const bodyBlock = svgTextBlock({ text: body, x: gap + pad, y: gap + pad + hookSize * 0.8 + hookSize + hookBlock.height + pad * 0.4, fontSize: bodySize, fontWeight: '400', fill: `#${textColor}`, maxWidth: innerW - pad * 2, opacity: 0.7 });
-    const subBlock = svgTextBlock({ text: subtitle, x: gap + pad, y: gap + pad + hookSize * 0.8 + hookSize + hookBlock.height + bodyBlock.height + pad * 0.7, fontSize: subtitleSize, fontWeight: '400', fill: `#${accent}`, maxWidth: innerW - pad * 2 });
+    const quoteFs = Math.round(s.hookFs * 0.8);
+    const hookT = svgText({ text: hook, x: gap + s.pad, y: gap + s.pad + quoteFs, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
+    const bodyT = svgText({ text: body, x: gap + s.pad, y: gap + s.pad + quoteFs + hookT.totalH + s.pad * 0.4, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.7 });
+    const subT = svgText({ text: subtitle, x: gap + s.pad, y: gap + s.pad + quoteFs + hookT.totalH + bodyT.totalH + s.pad * 0.6, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
 
     const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${width}" height="${height}" fill="#0a0a0a"/>
-      <rect x="${gap}" y="${gap}" width="${innerW}" height="${textH}" rx="${radius}" fill="#${bg}"/>
-      <text x="${gap + pad}" y="${gap + pad + hookSize * 0.8}" font-family="Georgia, serif" font-size="${Math.round(hookSize * 0.7)}" font-weight="900" fill="#${textColor}" opacity="0.15">„</text>
-      ${hookBlock.svg}
-      ${bodyBlock.svg}
-      ${subBlock.svg}
+      <rect x="${gap}" y="${gap}" width="${innerW}" height="${textH}" rx="${rad}" fill="#${bg}"/>
+      <text x="${gap + s.pad}" y="${gap + s.pad + quoteFs * 0.8}" font-family="Georgia,serif" font-size="${quoteFs}" font-weight="900" fill="#${textColor}" opacity="0.15">„</text>
+      ${hookT.svg}${bodyT.svg}${subT.svg}
     </svg>`;
 
-    let composite: sharp.OverlayOptions[] = [
+    const composite: sharp.OverlayOptions[] = [
       { input: Buffer.from(svg), top: 0, left: 0 },
-      { input: photoRounded, top: textH + gap * 2, left: gap },
+      { input: photoR, top: textH + gap * 2, left: gap },
     ];
-    if (logo) composite.push({ input: logo, top: textH - pad - logoSize + gap, left: gap + pad });
+    const logo = await fetchLogo(ctx.logoUrl, s.logoSz);
+    if (logo) composite.push({ input: logo, top: textH - s.logoSz - s.pad + gap, left: gap + s.pad });
 
-    return sharp({ create: { width, height, channels: 4, background: { r: 10, g: 10, b: 10 } } })
-      .composite(composite)
-      .png()
-      .toBuffer();
+    return sharp({ create: { width, height, channels: 4, background: { r: 10, g: 10, b: 10 } } }).composite(composite).png().toBuffer();
   }
 }
 
-// ─── Template: Diagonal ──────────────────────────────────────
+// ─── Template 8: Diagonal ────────────────────────────────────
+// Colored polygon top-left with text, photo reveals bottom-right, white logo strip.
 
 async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, subtitle, bg, accent, textColor, logoUrl, photoUrl, width, height } = ctx;
-  const isLandscape = width > height * 1.3;
-  const pad = Math.round(Math.min(width, height) * 0.06);
-  const base = isLandscape ? height : width;
-  const hookSize = Math.round(base * (isLandscape ? 0.1 : 0.065));
-  const bodySize = Math.round(base * (isLandscape ? 0.045 : 0.03));
-  const subtitleSize = Math.round(base * (isLandscape ? 0.035 : 0.024));
+  const { hook, body, subtitle, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const isLand = s.mode === 'landscape';
   const logoStripH = Math.round(height * 0.1);
-  const logoSize = Math.round(logoStripH * 0.6);
-  const barH = Math.round(base * 0.008);
-  const divW = Math.round(base * 0.08);
+  const logoSz = Math.round(logoStripH * 0.6);
+  const textMaxW = isLand ? Math.round(width * 0.5) : Math.round(width * 0.8);
 
-  const photo = await fetchImage(photoUrl, width, height);
-  const logo = await fetchLogo(logoUrl, logoSize);
+  const dY1 = Math.round(height * (isLand ? 0.72 : 0.65));
+  const dY2 = Math.round(height * (isLand ? 0.22 : 0.28));
 
-  // Diagonal: colored polygon covering top-left, revealing photo bottom-right
-  // The diagonal line goes from (0, height*0.65) to (width, height*0.3)
-  const dY1 = Math.round(height * (isLandscape ? 0.7 : 0.65));
-  const dY2 = Math.round(height * (isLandscape ? 0.25 : 0.3));
+  const photo = await fetchImg(photoUrl, width, height);
 
-  const hookBlock = svgTextBlock({ text: hook, x: pad, y: pad + hookSize, fontSize: hookSize, fontWeight: '900', fill: `#${textColor}`, maxWidth: width * (isLandscape ? 0.55 : 0.85) });
-  const dividerY = pad + hookSize + hookBlock.height + 8;
-  const bodyBlock = svgTextBlock({ text: body, x: pad, y: dividerY + barH + 12, fontSize: bodySize, fontWeight: '500', fill: `#${textColor}`, maxWidth: width * (isLandscape ? 0.5 : 0.7), opacity: 0.85 });
-  const subBlock = svgTextBlock({ text: subtitle, x: pad, y: dividerY + barH + 12 + bodyBlock.height + 8, fontSize: subtitleSize, fontWeight: '400', fill: `#${accent}`, maxWidth: width * 0.6 });
+  const hookT = svgText({ text: hook, x: s.pad, y: s.pad, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
+  const divY = s.pad + hookT.totalH + s.pad * 0.2;
+  const bodyT = svgText({ text: body, x: s.pad, y: divY + s.barH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
+  const subT = svgText({ text: subtitle, x: s.pad, y: divY + s.barH + s.pad * 0.3 + bodyT.totalH + s.pad * 0.2, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Diagonal colored overlay -->
     <polygon points="0,0 ${width},0 ${width},${dY2} 0,${dY1}" fill="#${bg}"/>
-    <!-- Extend left side down to logo strip -->
-    <rect x="0" y="${dY1}" width="${Math.round(width * 0.08)}" height="${height - dY1 - logoStripH}" fill="#${bg}"/>
-    <!-- Text -->
-    ${hookBlock.svg}
-    <!-- Accent divider -->
-    <rect x="${pad}" y="${dividerY}" width="${divW}" height="${barH}" rx="2" fill="#${accent}"/>
-    ${bodyBlock.svg}
-    ${subBlock.svg}
-    <!-- White logo strip at bottom -->
+    <rect x="0" y="${dY1}" width="${Math.round(width * 0.06)}" height="${height - dY1 - logoStripH}" fill="#${bg}"/>
+    ${hookT.svg}
+    <rect x="${s.pad}" y="${divY}" width="${s.divW}" height="${s.barH}" rx="2" fill="#${accent}"/>
+    ${bodyT.svg}${subT.svg}
     <rect x="0" y="${height - logoStripH}" width="${width}" height="${logoStripH}" fill="#ffffff"/>
   </svg>`;
 
-  let composite: sharp.OverlayOptions[] = [
+  const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg), top: 0, left: 0 },
   ];
-  if (logo) {
-    composite.push({ input: logo, top: height - logoStripH + Math.round((logoStripH - logoSize) / 2), left: pad });
-  }
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
+  if (logo) composite.push({ input: logo, top: height - logoStripH + Math.round((logoStripH - logoSz) / 2), left: s.pad });
 
-  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } })
-    .composite(composite)
-    .png()
-    .toBuffer();
+  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
 }

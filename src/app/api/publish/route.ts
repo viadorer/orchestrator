@@ -138,30 +138,69 @@ export async function POST(request: Request) {
       };
       
       // Priority 1: Brand template (photo + brand frame + logo + text)
+      // If template_url exists AND media_urls has multiple photos → carousel with brand templates
       let usedTemplate = false;
       if (post.template_url || post.card_url) {
-        let templateSrc = post.template_url || post.card_url;
-        // Fix platform in template URL to match current target platform
-        if (templateSrc.includes('/api/visual/template') && targetPlatforms[0]) {
-          try {
-            const tUrl = new URL(templateSrc, baseUrl);
-            tUrl.searchParams.set('platform', targetPlatforms[0]);
-            tUrl.searchParams.delete('w');
-            tUrl.searchParams.delete('h');
-            templateSrc = tUrl.pathname + '?' + tUrl.searchParams.toString();
-          } catch { /* keep original */ }
+        const templateBase = post.template_url || post.card_url;
+        const isTemplateEndpoint = templateBase.includes('/api/visual/template');
+
+        // Collect photos: if media_urls has multiple, use all; otherwise just the one in template
+        const carouselPhotos: string[] = [];
+        if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 1 && isTemplateEndpoint) {
+          // Multi-photo carousel: each photo gets its own brand template
+          for (const url of post.media_urls) {
+            if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) {
+              carouselPhotos.push(url);
+            }
+          }
         }
-        const resolvedTemplate = resolveUrl(templateSrc);
-        console.log(`[publish] Template URL (dynamic): ${resolvedTemplate.substring(0, 200)}...`);
-        // Pre-render template to static PNG and upload to storage
-        const staticUrl = await resolveTemplateToStaticUrl(
-          resolvedTemplate,
-          post.id,
-          post.project_id,
-          targetPlatforms[0] || 'facebook',
-        );
-        console.log(`[publish] Using static template URL for post ${post.id}: ${staticUrl.substring(0, 200)}`);
-        mediaItems.push({ type: 'image', url: staticUrl });
+
+        if (carouselPhotos.length > 1) {
+          // Carousel mode: generate a branded template for each photo
+          console.log(`[publish] Carousel mode: ${carouselPhotos.length} photos with brand template`);
+          for (let ci = 0; ci < carouselPhotos.length; ci++) {
+            let templateSrc = templateBase;
+            try {
+              const tUrl = new URL(templateSrc, baseUrl);
+              tUrl.searchParams.set('photo', carouselPhotos[ci]);
+              if (targetPlatforms[0]) tUrl.searchParams.set('platform', targetPlatforms[0]);
+              tUrl.searchParams.delete('w');
+              tUrl.searchParams.delete('h');
+              templateSrc = tUrl.pathname + '?' + tUrl.searchParams.toString();
+            } catch { /* keep original */ }
+            const resolvedTemplate = resolveUrl(templateSrc);
+            const staticUrl = await resolveTemplateToStaticUrl(
+              resolvedTemplate,
+              post.id,
+              post.project_id,
+              targetPlatforms[0] || 'facebook',
+            );
+            console.log(`[publish] Carousel [${ci + 1}/${carouselPhotos.length}]: ${staticUrl.substring(0, 150)}`);
+            mediaItems.push({ type: 'image', url: staticUrl });
+          }
+        } else {
+          // Single template (original flow)
+          let templateSrc = templateBase;
+          if (isTemplateEndpoint && targetPlatforms[0]) {
+            try {
+              const tUrl = new URL(templateSrc, baseUrl);
+              tUrl.searchParams.set('platform', targetPlatforms[0]);
+              tUrl.searchParams.delete('w');
+              tUrl.searchParams.delete('h');
+              templateSrc = tUrl.pathname + '?' + tUrl.searchParams.toString();
+            } catch { /* keep original */ }
+          }
+          const resolvedTemplate = resolveUrl(templateSrc);
+          console.log(`[publish] Template URL (dynamic): ${resolvedTemplate.substring(0, 200)}...`);
+          const staticUrl = await resolveTemplateToStaticUrl(
+            resolvedTemplate,
+            post.id,
+            post.project_id,
+            targetPlatforms[0] || 'facebook',
+          );
+          console.log(`[publish] Using static template URL for post ${post.id}: ${staticUrl.substring(0, 200)}`);
+          mediaItems.push({ type: 'image', url: staticUrl });
+        }
         usedTemplate = true;
       } else if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
         // Priority 2: media_urls array (multiple raw images from manual post)

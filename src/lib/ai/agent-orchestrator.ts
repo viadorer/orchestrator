@@ -2724,27 +2724,11 @@ export async function publishApprovedPosts(): Promise<{
         return url;
       };
 
-      // Priority 1: Brand template (photo + brand frame + logo + text)
-      let usedTemplate = false;
-      if (post.template_url || post.card_url) {
-        let templateSrc = post.template_url || post.card_url;
-        // Fix platform in template URL to match current target platform
-        if (templateSrc.includes('/api/visual/template') && targetPlatforms[0]) {
-          try {
-            const tUrl = new URL(templateSrc, baseUrl);
-            tUrl.searchParams.set('platform', targetPlatforms[0]);
-            tUrl.searchParams.delete('w');
-            tUrl.searchParams.delete('h');
-            templateSrc = tUrl.pathname + '?' + tUrl.searchParams.toString();
-          } catch { /* keep original */ }
-        }
-        const resolvedTemplate = resolveUrl(templateSrc);
-        // Pre-render template to static PNG and upload to storage
-        let staticUrl = resolvedTemplate;
+      // Helper: pre-render a template URL to static PNG and upload to storage
+      const preRenderTemplate = async (dynamicUrl: string): Promise<string> => {
         try {
           const { storage } = await import('@/lib/storage');
-          console.log(`[auto-publish] Pre-rendering template for post ${post.id}...`);
-          const resp = await fetch(resolvedTemplate, { signal: AbortSignal.timeout(14000) });
+          const resp = await fetch(dynamicUrl, { signal: AbortSignal.timeout(14000) });
           if (resp.ok && (resp.headers.get('content-type') || '').includes('image/')) {
             const buf = Buffer.from(await resp.arrayBuffer());
             const uploadResult = await storage.upload(buf, `template_${targetPlatforms[0]}_${Date.now()}.png`, {
@@ -2753,14 +2737,66 @@ export async function publishApprovedPosts(): Promise<{
               contentType: 'image/png',
             });
             if (uploadResult.success && uploadResult.public_url) {
-              staticUrl = uploadResult.public_url;
-              console.log(`[auto-publish] Template uploaded: ${staticUrl}`);
+              return uploadResult.public_url;
             }
           }
         } catch (e) {
           console.error(`[auto-publish] Template pre-render failed:`, e instanceof Error ? e.message : e);
         }
-        mediaItems.push({ type: 'image', url: staticUrl });
+        return dynamicUrl;
+      };
+
+      // Priority 1: Brand template (photo + brand frame + logo + text)
+      // If template_url + multiple media_urls → carousel with brand templates
+      let usedTemplate = false;
+      if (post.template_url || post.card_url) {
+        const templateBase = post.template_url || post.card_url;
+        const isTemplateEndpoint = templateBase.includes('/api/visual/template');
+
+        // Collect photos for carousel
+        const carouselPhotos: string[] = [];
+        if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 1 && isTemplateEndpoint) {
+          for (const url of post.media_urls) {
+            if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) {
+              carouselPhotos.push(url);
+            }
+          }
+        }
+
+        if (carouselPhotos.length > 1) {
+          // Carousel mode: generate a branded template for each photo
+          console.log(`[auto-publish] Carousel mode: ${carouselPhotos.length} photos with brand template`);
+          for (let ci = 0; ci < carouselPhotos.length; ci++) {
+            let templateSrc = templateBase;
+            try {
+              const tUrl = new URL(templateSrc, baseUrl);
+              tUrl.searchParams.set('photo', carouselPhotos[ci]);
+              if (targetPlatforms[0]) tUrl.searchParams.set('platform', targetPlatforms[0]);
+              tUrl.searchParams.delete('w');
+              tUrl.searchParams.delete('h');
+              templateSrc = tUrl.pathname + '?' + tUrl.searchParams.toString();
+            } catch { /* keep original */ }
+            const staticUrl = await preRenderTemplate(resolveUrl(templateSrc));
+            console.log(`[auto-publish] Carousel [${ci + 1}/${carouselPhotos.length}]: ${staticUrl.substring(0, 150)}`);
+            mediaItems.push({ type: 'image', url: staticUrl });
+          }
+        } else {
+          // Single template
+          let templateSrc = templateBase;
+          if (isTemplateEndpoint && targetPlatforms[0]) {
+            try {
+              const tUrl = new URL(templateSrc, baseUrl);
+              tUrl.searchParams.set('platform', targetPlatforms[0]);
+              tUrl.searchParams.delete('w');
+              tUrl.searchParams.delete('h');
+              templateSrc = tUrl.pathname + '?' + tUrl.searchParams.toString();
+            } catch { /* keep original */ }
+          }
+          console.log(`[auto-publish] Pre-rendering template for post ${post.id}...`);
+          const staticUrl = await preRenderTemplate(resolveUrl(templateSrc));
+          console.log(`[auto-publish] Template uploaded: ${staticUrl.substring(0, 150)}`);
+          mediaItems.push({ type: 'image', url: staticUrl });
+        }
         usedTemplate = true;
       } else if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
         // Priority 2: media_urls array (multiple images from manual post)

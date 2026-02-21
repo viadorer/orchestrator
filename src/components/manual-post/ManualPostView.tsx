@@ -9,6 +9,12 @@ interface Project {
   slug: string;
   platforms: string[];
   late_accounts: Record<string, string> | null;
+  visual_identity?: {
+    logo_url?: string;
+    primary_color?: string;
+    accent_color?: string;
+    text_color?: string;
+  } | null;
 }
 
 interface SelectedProject {
@@ -331,12 +337,16 @@ export function ManualPostView() {
     const proj = selectedProjects[0];
     if (!proj) return null;
     const p = projects.find(pr => pr.id === proj.id);
-    // Use project visual identity if available, fallback to defaults
+    const vi = p?.visual_identity;
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
     const photoUrl = media.find(m => m.public_url)?.public_url || 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&h=300&fit=crop';
     const hookText = text.split(/[.!?\n]/)[0]?.trim().substring(0, 50) || 'Náhled šablony';
     const bodyText = text.split(/[.!?\n]/)[1]?.trim().substring(0, 40) || '';
-    return `${baseUrl}/api/visual/template-v2?t=${templateKey}&hook=${encodeURIComponent(hookText)}&body=${encodeURIComponent(bodyText)}&photo=${encodeURIComponent(photoUrl)}&platform=facebook&w=400&h=500&project=${encodeURIComponent(p?.name || '')}`;
+    const bgHex = (vi?.primary_color || '#0f0f23').replace('#', '');
+    const accentHex = (vi?.accent_color || '#e94560').replace('#', '');
+    const textHex = (vi?.text_color || '#ffffff').replace('#', '');
+    const logoUrl = vi?.logo_url || '';
+    return `${baseUrl}/api/visual/template-v2?t=${templateKey}&hook=${encodeURIComponent(hookText)}&body=${encodeURIComponent(bodyText)}&photo=${encodeURIComponent(photoUrl)}&bg=${bgHex}&accent=${accentHex}&text=${textHex}&logo=${encodeURIComponent(logoUrl)}&platform=facebook&w=400&h=500&project=${encodeURIComponent(p?.name || '')}`;
   };
 
   return (

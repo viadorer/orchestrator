@@ -1294,7 +1294,127 @@ const TEMPLATE_PREVIEWS: Array<{ key: string; label: string; desc: string; hook:
   { key: 'gradient', label: 'Gradient', desc: 'Fotka + gradient overlay', hook: 'Budoucnost', body: 'začíná dnes', photo: SAMPLE_PHOTO },
   { key: 'text_logo', label: 'Text + Logo', desc: 'Headline + branding', hook: 'Víte, kolik stojí', body: 'průměrný byt v Praze?', photo: SAMPLE_PHOTO },
   { key: 'minimal', label: 'Minimal', desc: 'Jen fotka + badge', hook: '', body: '', photo: SAMPLE_PHOTO },
+  { key: 'quote_card', label: 'Quote Card', desc: 'Citát nahoře + fotka dole', hook: 'Průběžný systém nemá budoucnost.', body: '– ČeskoSobě', subtitle: 'investczech.cz', photo: SAMPLE_PHOTO },
+  { key: 'diagonal', label: 'Diagonal', desc: 'Diagonální split, CTA look', hook: 'Odhad ceny nemovitosti do 2 minut', body: 'Znáte hodnotu své nemovitosti?', subtitle: 'odhad.online', photo: SAMPLE_PHOTO },
 ];
+
+const PREVIEW_PLATFORMS: Array<{ key: string; label: string; w: number; h: number; aspect: string }> = [
+  { key: 'facebook', label: 'FB Portrait', w: 540, h: 675, aspect: '4/5' },
+  { key: 'facebook_square', label: 'FB Square', w: 600, h: 600, aspect: '1/1' },
+  { key: 'facebook_landscape', label: 'FB Landscape', w: 600, h: 315, aspect: '1.91/1' },
+  { key: 'instagram', label: 'IG Portrait', w: 540, h: 675, aspect: '4/5' },
+  { key: 'instagram_square', label: 'IG Square', w: 540, h: 540, aspect: '1/1' },
+  { key: 'instagram_story', label: 'IG Story', w: 405, h: 720, aspect: '9/16' },
+  { key: 'linkedin', label: 'LinkedIn', w: 600, h: 314, aspect: '1.91/1' },
+  { key: 'x', label: 'X (Twitter)', w: 600, h: 338, aspect: '16/9' },
+];
+
+function TemplateGallery({ project, primary, accent, textColor, logoUrl, previewPhoto }: {
+  project: Project; primary: string; accent: string; textColor: string; logoUrl: string; previewPhoto: string;
+}) {
+  const [selectedPlatform, setSelectedPlatform] = useState(0);
+  const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
+
+  const plat = PREVIEW_PLATFORMS[selectedPlatform];
+  const bgHex = primary.replace('#', '');
+  const accentHex = accent.replace('#', '');
+  const textHex = textColor.replace('#', '');
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const buildUrl = (t: typeof TEMPLATE_PREVIEWS[0], p: typeof PREVIEW_PLATFORMS[0]) => {
+    const photoUrl = previewPhoto || t.photo || SAMPLE_PHOTO;
+    return `${baseUrl}/api/visual/template?t=${t.key}&hook=${encodeURIComponent(t.hook)}&body=${encodeURIComponent(t.body)}&subtitle=${encodeURIComponent(t.subtitle || '')}&project=${encodeURIComponent(project.name)}&bg=${bgHex}&accent=${accentHex}&text=${textHex}&logo=${encodeURIComponent(logoUrl || '')}&photo=${encodeURIComponent(photoUrl)}&platform=${p.key}&w=${p.w}&h=${p.h}`;
+  };
+
+  return (
+    <div className="border-t border-slate-700 pt-6">
+      <h3 className="text-sm font-medium text-white mb-1">Šablony příspěvků</h3>
+      <p className="text-xs text-slate-500 mb-3">
+        Hugo automaticky vybírá šablonu podle obsahu a platformy. Takhle budou vypadat příspěvky s vašimi barvami.
+      </p>
+
+      {/* Platform switcher */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {PREVIEW_PLATFORMS.map((p, i) => (
+          <button
+            key={p.key}
+            onClick={() => setSelectedPlatform(i)}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
+              selectedPlatform === i
+                ? 'bg-violet-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+            }`}
+          >
+            {p.label}
+            <span className="ml-1 opacity-50">{p.aspect}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Template grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {TEMPLATE_PREVIEWS.map(t => {
+          const url = buildUrl(t, plat);
+          const isExpanded = expandedTemplate === t.key;
+          return (
+            <div key={t.key} className="group">
+              <div
+                className={`rounded-lg overflow-hidden border border-slate-700 bg-slate-800 cursor-pointer hover:border-slate-600 transition-colors`}
+                style={{ aspectRatio: plat.aspect }}
+                onClick={() => setExpandedTemplate(isExpanded ? null : t.key)}
+              >
+                <img
+                  src={url}
+                  alt={t.label}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              </div>
+              <div className="mt-1.5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-white">{t.label}</p>
+                  <p className="text-[10px] text-slate-500">{t.desc}</p>
+                </div>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+                  {t.key}
+                </span>
+              </div>
+
+              {/* Expanded: show all platform variants */}
+              {isExpanded && (
+                <div className="mt-2 p-3 rounded-lg bg-slate-800/50 border border-slate-700">
+                  <p className="text-[10px] text-slate-400 mb-2 font-medium">Všechny varianty — {t.label}</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {PREVIEW_PLATFORMS.map(pp => (
+                      <div key={pp.key}>
+                        <div
+                          className="rounded overflow-hidden border border-slate-700 bg-slate-900"
+                          style={{ aspectRatio: pp.aspect }}
+                        >
+                          <img
+                            src={buildUrl(t, pp)}
+                            alt={`${t.label} — ${pp.label}`}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                        <p className="text-[9px] text-slate-500 mt-0.5 text-center">{pp.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-[10px] text-slate-600 mt-3">
+        Kliknutím na šablonu zobrazíte všechny platformové varianty. Hugo vybírá automaticky: čísla → bold_card, fotka + text → gradient/split/diagonal, citát → quote_card, jen fotka → minimal.
+      </p>
+    </div>
+  );
+}
 
 function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: Partial<Project>) => void }) {
   const vi = project.visual_identity || {
@@ -1516,46 +1636,14 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
       </div>
 
       {/* ---- Template Preview Gallery ---- */}
-      <div className="border-t border-slate-700 pt-6">
-        <h3 className="text-sm font-medium text-white mb-1">Šablony příspěvků</h3>
-        <p className="text-xs text-slate-500 mb-4">
-          Hugo automaticky vybírá šablonu podle obsahu a platformy. Takhle budou vypadat příspěvky s vašimi barvami.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          {TEMPLATE_PREVIEWS.map(t => {
-            const bgHex = primary.replace('#', '');
-            const accentHex = accent.replace('#', '');
-            const textHex = textColor.replace('#', '');
-            const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-            const photoUrl = previewPhoto || t.photo || SAMPLE_PHOTO;
-            const url = `${baseUrl}/api/visual/template?t=${t.key}&hook=${encodeURIComponent(t.hook)}&body=${encodeURIComponent(t.body)}&subtitle=${encodeURIComponent(t.subtitle || '')}&project=${encodeURIComponent(project.name)}&bg=${bgHex}&accent=${accentHex}&text=${textHex}&logo=${encodeURIComponent(logoUrl || '')}&photo=${encodeURIComponent(photoUrl)}&platform=facebook&w=600&h=315`;
-            return (
-              <div key={t.key} className="group relative">
-                <div className="rounded-lg overflow-hidden border border-slate-700 bg-slate-800 aspect-[1.91/1]">
-                  <img
-                    src={url}
-                    alt={t.label}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                </div>
-                <div className="mt-1.5 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-white">{t.label}</p>
-                    <p className="text-[10px] text-slate-500">{t.desc}</p>
-                  </div>
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
-                    {t.key}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <p className="text-[10px] text-slate-600 mt-3">
-          Hugo vybírá šablonu automaticky: čísla → bold_card, fotka + text → gradient/split, krátký headline → text_logo, jen fotka → minimal.
-        </p>
-      </div>
+      <TemplateGallery
+        project={project}
+        primary={primary}
+        accent={accent}
+        textColor={textColor}
+        logoUrl={logoUrl}
+        previewPhoto={previewPhoto}
+      />
 
       {/* ---- Photography Preset ---- */}
       <div className="border-t border-slate-700 pt-6">

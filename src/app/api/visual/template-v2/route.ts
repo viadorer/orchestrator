@@ -680,6 +680,7 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
 
+  
   // Place logo clean, bottom-right
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
   if (logo) {

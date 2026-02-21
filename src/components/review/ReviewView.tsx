@@ -71,10 +71,18 @@ export function ReviewView() {
     setLoading(true);
     const res = await fetch(`/api/queue?status=${statusFilter}`);
     const data = await res.json();
-    // Fallback: if template_url column is empty, read from generation_context
+    // Post-process items: fix JSONB parsing + template_url fallback
     const items = (Array.isArray(data) ? data : []).map((item: QueueItem) => {
+      // Fallback: if template_url column is empty, read from generation_context
       if (!item.template_url && item.generation_context?.template_url_value) {
         item.template_url = item.generation_context.template_url_value as string;
+      }
+      // Ensure media_urls is a proper array (JSONB may come as string)
+      if (item.media_urls && typeof item.media_urls === 'string') {
+        try { item.media_urls = JSON.parse(item.media_urls as unknown as string); } catch { item.media_urls = null; }
+      }
+      if (item.media_urls && !Array.isArray(item.media_urls)) {
+        item.media_urls = null;
       }
       return item;
     });

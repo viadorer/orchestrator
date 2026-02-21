@@ -26,12 +26,14 @@ export async function POST(request: Request) {
     projects,
     media_urls,
     hugo_adapt,
+    template_key,
     status = 'approved',
   } = body as {
     text: string;
     projects: Array<{ id: string; platforms: string[] }>;
     media_urls?: string[];
     hugo_adapt?: boolean;
+    template_key?: string;
     status?: 'approved' | 'review';
   };
 
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
             hugo_adapted: hugo_adapt && finalText !== text,
             media_count: media_urls?.length || 0,
             projects_count: projects.length,
+            template_key: template_key || null,
             timestamp: new Date().toISOString(),
           },
         };
@@ -102,6 +105,32 @@ export async function POST(request: Request) {
           insertData.media_urls = media_urls;
           // Also set first image to image_url for backward compatibility
           insertData.image_url = media_urls[0];
+        }
+
+        // Build template_url if template_key is selected and we have a photo
+        if (template_key && media_urls && media_urls.length > 0) {
+          // Load project visual identity for brand colors
+          const vi = projectData?.visual_identity as Record<string, string> | null;
+          const bgColor = (vi?.primary_color || '#0f0f23').replace('#', '');
+          const accentColor = (vi?.accent_color || '#e94560').replace('#', '');
+          const textColor = (vi?.text_color || '#ffffff').replace('#', '');
+          const logoUrl = vi?.logo_url || '';
+          const hookText = finalText.split(/[.!?\n]/)[0]?.trim().substring(0, 60) || '';
+          const bodyText = finalText.split(/[.!?\n]/)[1]?.trim().substring(0, 50) || '';
+
+          const tParams = new URLSearchParams({
+            t: template_key,
+            hook: hookText,
+            body: bodyText,
+            photo: media_urls[0],
+            bg: bgColor,
+            accent: accentColor,
+            text: textColor,
+            logo: logoUrl,
+            platform,
+            project: projectName,
+          });
+          insertData.template_url = `/api/visual/template-v2?${tParams.toString()}`;
         }
 
         let { data: saved, error } = await supabase

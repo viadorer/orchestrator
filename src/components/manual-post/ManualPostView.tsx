@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Send, Upload, X, Check, Loader2, ImageIcon, Film, Sparkles, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Send, Upload, X, Check, Loader2, ImageIcon, Film, Sparkles, AlertTriangle, CheckCircle, LayoutGrid } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -84,6 +84,7 @@ export function ManualPostView() {
   const [storageAssets, setStorageAssets] = useState<StorageAsset[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [tagFilter, setTagFilter] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -281,6 +282,7 @@ export function ManualPostView() {
           })),
           media_urls: mediaUrls.length > 0 ? mediaUrls : undefined,
           hugo_adapt: hugoAdapt,
+          template_key: selectedTemplate || undefined,
           status: 'approved',
         }),
       });
@@ -321,6 +323,20 @@ export function ManualPostView() {
     setResults(null);
     setError('');
     setHugoAdapt(false);
+    setSelectedTemplate(null);
+  };
+
+  // Build template preview URL for first selected project
+  const getTemplatePreviewUrl = (templateKey: string) => {
+    const proj = selectedProjects[0];
+    if (!proj) return null;
+    const p = projects.find(pr => pr.id === proj.id);
+    // Use project visual identity if available, fallback to defaults
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const photoUrl = media.find(m => m.public_url)?.public_url || 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400&h=300&fit=crop';
+    const hookText = text.split(/[.!?\n]/)[0]?.trim().substring(0, 50) || 'Náhled šablony';
+    const bodyText = text.split(/[.!?\n]/)[1]?.trim().substring(0, 40) || '';
+    return `${baseUrl}/api/visual/template-v2?t=${templateKey}&hook=${encodeURIComponent(hookText)}&body=${encodeURIComponent(bodyText)}&photo=${encodeURIComponent(photoUrl)}&platform=facebook&w=400&h=500&project=${encodeURIComponent(p?.name || '')}`;
   };
 
   return (
@@ -491,6 +507,76 @@ export function ManualPostView() {
                   </div>
                 </button>
               </div>
+            </div>
+
+            {/* Template picker */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+                  <LayoutGrid className="w-4 h-4 text-slate-500" />
+                  Brand šablona (volitelné)
+                </label>
+                {selectedTemplate && (
+                  <button onClick={() => setSelectedTemplate(null)} className="text-[11px] text-slate-500 hover:text-slate-300">
+                    Zrušit výběr
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {[
+                  { key: 'bold_card', label: 'Bold Card' },
+                  { key: 'photo_strip', label: 'Photo Strip' },
+                  { key: 'split', label: 'Split' },
+                  { key: 'gradient', label: 'Gradient' },
+                  { key: 'text_logo', label: 'Text + Logo' },
+                  { key: 'quote_card', label: 'Quote Card' },
+                  { key: 'diagonal', label: 'Diagonal' },
+                  { key: 'quote_overlay', label: 'Quote Overlay' },
+                  { key: 'cta_card', label: 'CTA Card' },
+                ].map(t => {
+                  const isActive = selectedTemplate === t.key;
+                  const previewUrl = selectedProjects.length > 0 ? getTemplatePreviewUrl(t.key) : null;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setSelectedTemplate(isActive ? null : t.key)}
+                      className={`relative rounded-lg border-2 overflow-hidden transition-all ${
+                        isActive
+                          ? 'border-violet-500 ring-2 ring-violet-500/30'
+                          : 'border-slate-700 hover:border-slate-500'
+                      }`}
+                    >
+                      {previewUrl ? (
+                        <img
+                          src={previewUrl}
+                          alt={t.label}
+                          className="w-full aspect-[4/5] object-cover bg-slate-800"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full aspect-[4/5] bg-slate-800 flex items-center justify-center">
+                          <LayoutGrid className="w-5 h-5 text-slate-600" />
+                        </div>
+                      )}
+                      <div className={`px-1 py-1 text-center ${isActive ? 'bg-violet-600/20' : 'bg-slate-800/80'}`}>
+                        <span className={`text-[10px] font-medium ${isActive ? 'text-violet-300' : 'text-slate-400'}`}>
+                          {t.label}
+                        </span>
+                      </div>
+                      {isActive && (
+                        <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-violet-500 flex items-center justify-center">
+                          <Check className="w-2.5 h-2.5 text-white" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                {selectedTemplate
+                  ? `Šablona "${selectedTemplate}" se použije pro brand frame na fotce`
+                  : 'Bez šablony — fotky se pošlou bez brand framu'}
+              </p>
             </div>
 
             {/* Hugo adapt toggle */}

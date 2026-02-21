@@ -147,8 +147,10 @@ ${brandBlock}
 === PRIORITA VÝBĚRU VIZUÁLU (DODŘŽUJ TOTO POŘADÍ!) ===
 
 🥇 PRIORITA 1 — FOTKA + TEXT + LOGO (visual_type: "photo")
-VŽDY preferuj reálnou fotku s textem. Toto je DEFAULTNÍ volba.
-Šablony: "photo_strip", "split", "gradient", "text_logo", "quote_card"
+VŽDY preferuj reálnou fotku s textem. Toto je DEFAULTNÍ a JEDINÁ volba pro fotky.
+NIKDY nepoužívej fotku bez textu — lidé nečtou caption texty, hlavní sdělení MUSÍ být na fotce!
+
+Šablony (VŽDY s hook + body textem):
 - "photo_strip" → Fotka nahoře (72%), brand pás dole s hook textem + logo. UNIVERZÁLNÍ, funguje vždy.
 - "gradient" → Fotka přes celou plochu, tmavý gradient overlay, bold text dole + logo. PRO: Instagram, atmosférické, emocionální.
 - "text_logo" → Fotka na pozadí, text vlevo nahoře, logo vpravo dole. PRO: krátký výrazný headline, branding.
@@ -156,11 +158,11 @@ VŽDY preferuj reálnou fotku s textem. Toto je DEFAULTNÍ volba.
 - "quote_card" → Barevný panel s citátem nahoře + fotka dole. PRO: citáty, výroky, silné tvrzení. Elegantní, čistý look.
 - "diagonal" → Diagonální split: barevný panel s textem vlevo nahoře, fotka prosvitá vpravo dole, logo pás dole. PRO: dynamický, reklamní look, CTA posty.
 
-🥈 PRIORITA 2 — FOTKA + LOGO (visual_type: "photo")
-Když fotka mluví sama a text by rušil.
-Šablona: "minimal" → Jen fotka + malý brand badge vpravo dole.
+DŮLEŽITÉ: card_hook a card_body jsou POVINNÉ pro všechny photo šablony!
+- card_hook = hlavní sdělení (1. řádek, výrazný, krátký)
+- card_body = doplňující informace (2. řádek, kontext)
 
-🥉 PRIORITA 3 — INFOGRAFIKA: ČÍSLO + TEXT (visual_type: "card")
+� PRIORITA 2 — INFOGRAFIKA: ČÍSLO + TEXT (visual_type: "card")
 POUZE když je v postu KONKRÉTNÍ ČÍSLO jako hlavní hook (statistika, procento, cena).
 Šablona: "bold_card" → Velké číslo uprostřed, glow efekt, dekorativní rohy.
 Použij JEN když číslo je skutečně hlavní sdělení postu. Jinak preferuj fotku.
@@ -170,16 +172,16 @@ Použij JEN když číslo je skutečně hlavní sdělení postu. Jinak preferuj 
 
 | Platforma   | aspect_ratio | Rozměry      | Preferované šablony          | NEPOUŽÍVAT        |
 |-------------|-------------|--------------|------------------------------|--------------------|
-| facebook    | "portrait"  | 1080×1350    | gradient, quote_card, diagonal, text_logo | bold_card (slabý)  |
-| instagram   | "portrait"  | 1080×1350    | gradient, quote_card, diagonal, text_logo | split, landscape   |
-| linkedin    | "landscape" | 1200×627     | split, diagonal, photo_strip, quote_card  | story              |
-| x           | "landscape" | 1600×900     | minimal, photo_strip            | split              |
-| tiktok      | "story"     | 1080×1920    | gradient, text_logo          | split, landscape   |
-| pinterest   | "portrait"  | 1000×1500    | gradient, text_logo          | split, landscape   |
-| threads     | "square"    | 1080×1080    | gradient, minimal            | split              |
-| youtube     | "landscape" | 1280×720     | text_logo, photo_strip       | story              |
-| telegram    | "landscape" | 1280×720     | photo_strip, gradient        | story              |
-| bluesky     | "landscape" | 1200×675     | minimal, photo_strip         | split              |
+| facebook    | "portrait"  | 1080×1350    | gradient, quote_card, diagonal, text_logo | bold_card, minimal |
+| instagram   | "portrait"  | 1080×1350    | gradient, quote_card, diagonal, text_logo | split, minimal     |
+| linkedin    | "landscape" | 1200×627     | split, diagonal, photo_strip, quote_card  | story, minimal     |
+| x           | "landscape" | 1600×900     | photo_strip, gradient, text_logo | split, minimal     |
+| tiktok      | "story"     | 1080×1920    | gradient, text_logo, diagonal | split, minimal     |
+| pinterest   | "portrait"  | 1000×1500    | gradient, text_logo, diagonal | split, minimal     |
+| threads     | "square"    | 1080×1080    | gradient, photo_strip, text_logo | split, minimal     |
+| youtube     | "landscape" | 1280×720     | text_logo, photo_strip, gradient | story, minimal     |
+| telegram    | "landscape" | 1280×720     | photo_strip, gradient, text_logo | story, minimal     |
+| bluesky     | "landscape" | 1200×675     | photo_strip, gradient, text_logo | split, minimal     |
 
 DŮLEŽITÉ:
 - aspect_ratio z tabulky je POVINNÝ pro danou platformu — neměň ho!
@@ -196,12 +198,12 @@ DŮLEŽITÉ:
 - NIKDY nepiš genericky: "Professional photo of business" nebo "Happy people in office"
 - Zaměř se na EMOCI a PŘÍBĚH, ne na popis produktu
 - Pro "gradient"/"text_logo": fotka musí mít VOLNÝ PROSTOR pro text (ne příliš detailní)
-- Pro "minimal": fotka musí být vizuálně silná sama o sobě
+- NIKDY nepoužívej šablonu bez textu — každá fotka MUSÍ mít hook + body text!
 
 Vrať POUZE JSON:
 {
   "visual_type": "photo|card|none",
-  "template_key": "photo_strip|gradient|text_logo|split|minimal|bold_card|quote_card|diagonal",
+  "template_key": "photo_strip|gradient|text_logo|split|bold_card|quote_card|diagonal",
   "aspect_ratio": "portrait|square|landscape|story",
   "card_hook": "krátký hook text pro šablonu (1. řádek)" | null,
   "card_body": "druhý řádek textu pro šablonu" | null,
@@ -316,8 +318,9 @@ function generateCardVisual(
 
 /**
  * Valid template keys for brand frame templates.
+ * Note: "minimal" removed - all photos MUST have text overlay (hook + body).
  */
-const VALID_TEMPLATES = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'minimal', 'quote_card', 'diagonal'] as const;
+const VALID_TEMPLATES = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'quote_card', 'diagonal'] as const;
 type TemplateKey = typeof VALID_TEMPLATES[number];
 
 /**

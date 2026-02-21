@@ -1293,7 +1293,6 @@ const TEMPLATE_PREVIEWS: Array<{ key: string; label: string; desc: string; hook:
   { key: 'split', label: 'Split', desc: 'Půlka fotka, půlka text', hook: 'Investice', body: 'která se vyplatí', photo: SAMPLE_PHOTO },
   { key: 'gradient', label: 'Gradient', desc: 'Fotka + gradient overlay', hook: 'Budoucnost', body: 'začíná dnes', photo: SAMPLE_PHOTO },
   { key: 'text_logo', label: 'Text + Logo', desc: 'Headline + branding', hook: 'Víte, kolik stojí', body: 'průměrný byt v Praze?', photo: SAMPLE_PHOTO },
-  { key: 'minimal', label: 'Minimal', desc: 'Jen fotka + badge', hook: '', body: '', photo: SAMPLE_PHOTO },
   { key: 'quote_card', label: 'Quote Card', desc: 'Citát nahoře + fotka dole', hook: 'Průběžný systém nemá budoucnost.', body: '– ČeskoSobě', subtitle: 'investczech.cz', photo: SAMPLE_PHOTO },
   { key: 'diagonal', label: 'Diagonal', desc: 'Diagonální split, CTA look', hook: 'Odhad ceny nemovitosti do 2 minut', body: 'Znáte hodnotu své nemovitosti?', subtitle: 'odhad.online', photo: SAMPLE_PHOTO },
 ];
@@ -1410,7 +1409,7 @@ function TemplateGallery({ project, primary, accent, textColor, logoUrl, preview
       </div>
 
       <p className="text-[10px] text-slate-600 mt-3">
-        Kliknutím na šablonu zobrazíte všechny platformové varianty. Hugo vybírá automaticky: čísla → bold_card, fotka + text → gradient/split/diagonal, citát → quote_card, jen fotka → minimal.
+        Kliknutím na šablonu zobrazíte všechny platformové varianty. Hugo vybírá automaticky: čísla → bold_card, fotka + text → gradient/split/diagonal, citát → quote_card. Všechny fotky MUSÍ mít text overlay (hook + body).
       </p>
     </div>
   );

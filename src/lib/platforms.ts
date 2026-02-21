@@ -547,6 +547,106 @@ export function isPostValidForAllPlatforms(text: string, platforms: string[]): b
 // Multi-Platform Content Generation Helpers
 // ============================================
 
+// ─── Facebook Cookbook (sections 1–5, 7–8) ──────────────────
+// Injected into prompt when platform === 'facebook'.
+// Source: FACEBOOK_COOKBOOK.md – organic content strategy.
+const FACEBOOK_COOKBOOK = `
+FACEBOOK KUCHAŘKA — ORGANICKÝ OBSAH
+
+═══ ANATOMIE POSTU ═══
+Každý post má 4 vrstvy v tomto pořadí:
+1. HOOK → zastav scrollování (první 1–2 řádky viditelné bez "Zobrazit více")
+2. TĚLO → rozvíjí hook, dává hodnotu nebo příběh
+3. CTA → jasná výzva k akci — JEDNA, konkrétní
+4. HASHTAGS → 3–5 max, relevantní, ne spam
+
+═══ HOOK FORMULE (vyber jednu) ═══
+1. Kontroverze — "Makléři nechtějí, abyste tohle věděli."
+2. Číslo + příslib — "7 chyb, které stojí prodávající 200 000 Kč."
+3. Otázka — "Víte, kolik vaše nemovitost opravdu stojí?"
+4. Příběh — "Klient chtěl prodat za 4M. Prodali jsme za 4,85M. Tady je jak."
+5. Negace — "Nestahujte žádnou hypoteční kalkulačku."
+6. Časové napětí — "Do konce dubna se změní podmínky hypoték."
+7. Výzva k identifikaci — "Pokud vlastníte byt v Plzni, čtěte dál."
+8. Šokující fakt — "Průměrný inzerát na Sreality dostane 80 % zobrazení za první 3 dny."
+9. Slib výsledku — "Takhle vypadá příprava bytu, která zvedne cenu o 15 %."
+10. Anti-hype — "Žádné tajemství. Jen 3 věci, které fungují."
+
+═══ TYPY POSTŮ ═══
+
+A) VZDĚLÁVACÍ — nejlépe sdílený, buduje autoritu:
+[HOOK — číslo nebo otázka]
+Tady je X věcí, které [cílová skupina] většinou přehlíží:
+1. [Bod + krátké vysvětlení]
+2. [Bod + krátké vysvětlení]
+3. [Bod + krátké vysvětlení]
+[Přemostění na CTA]
+[CTA — komentář / DM / odkaz]
+
+B) PŘÍBĚHOVÝ (Storytelling) — nejvyšší dosah, nejlepší engagement:
+[Situace — zasadit čtenáře do kontextu]
+[Problém — co nefungovalo / co bylo těžké]
+[Obrat — co se změnilo]
+[Výsledek — konkrétní číslo nebo dopad]
+[Poučení / CTA]
+
+C) SOCIÁLNÍ DŮKAZ — recenze, výsledky, čísla:
+[Výsledek klienta — konkrétní]
+"[Citát klienta — autentický, ne leštěný]"
+— [Jméno / initials, lokalita]
+[Co stálo za výsledkem — jedna věta]
+[CTA]
+
+D) BEHIND THE SCENES — zákulisí buduje důvěru:
+Kratší text + fotka. Tón uvolněný, přímý. Obsah: příprava, meeting, řešení případu.
+
+E) LOKÁLNÍ OBSAH — algoritmus miluje lokální relevanci:
+Vývoj cen v čtvrti, nová výstavba, změna územního plánu, tip na místo v lokalitě.
+
+F) QUICK TIP — jeden tip, jedna věta, sdílení bez přemýšlení:
+"Tip na dnes: Fotky nemovitosti dělejte vždy dopoledne. Přirozené světlo = 30 % lepší konverze."
+
+═══ CONTENT MIX ═══
+- Vzdělávací: 2x týdně (dosah, autorita)
+- Příběh / case study: 1x týdně (důvěra, engagement)
+- Social proof: 1x týdně (konverze)
+- Behind the scenes: 1x týdně (sympatie, lidskost)
+- Lokální / aktuální: ad hoc (relevance)
+- Promo (přímá nabídka): max 1x týdně (lead gen)
+Poměr: 80 % hodnota, 20 % promo.
+
+═══ COPYWRITING FORMULE ═══
+
+PAS (Problem → Agitation → Solution) — nejspolehlivější pro konverzní posty:
+PROBLÉM: [pojmenuj bolest]
+AGITACE: [zesil důsledky]
+ŘEŠENÍ: [nabídni konkrétní řešení]
+
+AIDA (Attention → Interest → Desire → Action) — pro delší posty:
+ATTENTION: [zaujmi]
+INTEREST: [probuď zvědavost]
+DESIRE: [ukaž výsledek]
+ACTION: [výzva k akci]
+
+BAB (Before → After → Bridge) — pro social proof a příběhy:
+BEFORE: [situace před]
+AFTER: [výsledek po]
+BRIDGE: [co za tím stojí]
+
+═══ KREATIVA ═══
+- Vlastní fotky vždy vyhrají nad stock fotkami.
+- Tváře v kreativě zvedají CTR o 20–40 %.
+- Text v obrázku max 20 % plochy (jinak FB omezí dosah).
+- Carousel = ideální pro nemovitosti (fotky místností) nebo výčet benefitů.
+
+═══ CHECKLIST PŘED PUBLIKACÍ ═══
+- Hook funguje bez kontextu? (test: přečti jen první větu)
+- Je CTA jedna a konkrétní?
+- Má obrázek? (posty bez vizuálu mají ~50 % dosahu)
+- Hashtags 3–5, relevantní?
+- Správný čas? (pro B2C: út–čt 11:00–13:00 nebo 19:00–21:00)
+`;
+
 /**
  * Build detailed platform-specific prompt block for AI content generation.
  * Injected into the prompt so Hugo knows exactly how to write for each platform.
@@ -582,6 +682,11 @@ export function buildPlatformPromptBlock(platform: string): string {
     lines.push(`\nVIDEO (pokud relevantní):`);
     lines.push(`- Rozměry: ${limits.videoSpec.width}×${limits.videoSpec.height}px (${limits.videoSpec.aspectRatio})`);
     lines.push(`- Optimální délka: ${limits.videoSpec.optimalDurationSec}s`);
+  }
+
+  // Inject platform-specific cookbook
+  if (platform === 'facebook' || platform.startsWith('facebook_')) {
+    lines.push(FACEBOOK_COOKBOOK);
   }
 
   return lines.join('\n');

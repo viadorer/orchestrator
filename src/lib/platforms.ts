@@ -647,6 +647,81 @@ BRIDGE: [co za tím stojí]
 - Správný čas? (pro B2C: út–čt 11:00–13:00 nebo 19:00–21:00)
 `;
 
+// ─── Instagram Cookbook (actionable sections only) ───────────
+// Injected into prompt when platform === 'instagram'.
+// Excludes: video production, Stories interactive tools, paid ads.
+const INSTAGRAM_COOKBOOK = `
+INSTAGRAM KUCHAŘKA — ORGANICKÝ OBSAH
+
+═══ KLÍČOVÝ PRINCIP ═══
+Instagram je VIZUÁLNÍ médium. Kreativa > Hook v popisku > CTA.
+Odkaz v popisku NEFUNGUJE (není klikatelný). CTA směřuj na "odkaz v biu" nebo "napište DM".
+NIKDY nedávej URL do textu — je to zbytečné a neprofesionální.
+
+═══ POPISEK — STRUKTURA ═══
+[Hook — první řádek, viditelný bez "více" (max 125 znaků)]
+
+[Tělo — 2–5 vět, krátké odstavce]
+
+[CTA — jedna, konkrétní: "Uložte si", "Napište DM", "Odkaz v biu"]
+.
+.
+.
+[Hashtags — 8–15, mix kategorií]
+
+Délky per formát:
+- Carousel: 3–8 vět + CTA + hashtags
+- Single image: 1–5 vět + CTA + hashtags
+- Reels popisek: 1–3 věty + CTA + hashtags
+
+═══ CAROUSEL — NEJLEPŠÍ FORMÁT PRO ULOŽENÍ ═══
+Instagram znovu ukazuje carousel lidem, kteří ho nedokončili → vysoký organický dosah.
+
+Struktura:
+- SLIDE 1: Hook — musí přinutit přejet (jako titulní strana knihy). NE logo, NE nadpis bez kontextu.
+- SLIDE 2–N: Obsah — každý slide = jeden bod, krátký text, čitelný na mobilu.
+- POSLEDNÍ SLIDE: CTA + "Uložte si tento post" nebo "Přepošlete kolegovi, který..."
+
+Šablona vzdělávacího carousel:
+SLIDE 1: "5 otázek, které musíte položit makléři před podpisem smlouvy"
+SLIDE 2: "1. Kolik nemovitostí jste prodali za posledních 12 měsíců?" (Proč: průměr říká víc než reference)
+SLIDE 3: "2. Jaký je váš průměrný čas prodeje?" (Proč: benchmark 30–60 dní)
+SLIDE 4: "3. Jak vypadá váš marketingový plán?" (Proč: portály nestačí)
+SLIDE 5: "4. Jak stanovíte cenu?" (Proč: intuice nestačí, chcete data)
+SLIDE 6: "5. Kdo platí za fotografa a přípravu?" (Proč: amatérské fotky = ztráta 100–300 tisíc)
+SLIDE 7: "Uložte si pro příště. A pokud chcete makléře, který odpoví správně — napište nám."
+
+═══ HASHTAG STRATEGIE ═══
+Nepoužívej mega-hashtags (#realitky — 5M příspěvků = tvůj post zmizí za 3 minuty).
+
+Správný mix (celkem 8–15):
+- Niche (1K–50K příspěvků): 3–5 ks — např. #realitkyplzen #prodejbytu
+- Střední (50K–500K): 3–5 ks — např. #nemovitosti #makler
+- Lokální: 2–3 ks — např. #plzen #praha9
+- Branded: 1 ks — vlastní hashtag projektu
+
+Více než 15 hashtagů = Instagram penalizuje jako spam.
+
+═══ KREATIVA — PRAVIDLA ═══
+- Vizuál je PRIORITA. image_prompt musí být silný a konkrétní.
+- Portrait 4:5 (1080×1350) = NEJLEPŠÍ engagement na feedu.
+- Vlastní fotky > stock. Tváře zvedají engagement o 20–40 %.
+- Text v obrázku: čitelný na mobilu, kontrastní, max 20 % plochy.
+- Carousel: vizuálně konzistentní (stejné barvy, font, styl).
+
+═══ CONTENT MIX ═══
+- Carousel: 2–3x týdně (vzdělávací, hodnota, uložení)
+- Single image: 1–2x týdně (brand, social proof, quick tip)
+- Reels popisek: 3–5x týdně (pokud klient natáčí video — my píšeme scénář/popisek)
+
+═══ CHECKLIST ═══
+- Hook v prvních 125 znacích funguje bez kontextu?
+- CTA je jedna a konkrétní (uložte/DM/bio)?
+- Žádný URL v textu?
+- 8–15 hashtagů, mix niche/střední/lokální?
+- image_prompt popisuje vizuálně silný záběr (portrait 4:5)?
+`;
+
 /**
  * Build detailed platform-specific prompt block for AI content generation.
  * Injected into the prompt so Hugo knows exactly how to write for each platform.
@@ -687,6 +762,9 @@ export function buildPlatformPromptBlock(platform: string): string {
   // Inject platform-specific cookbook
   if (platform === 'facebook' || platform.startsWith('facebook_')) {
     lines.push(FACEBOOK_COOKBOOK);
+  }
+  if (platform === 'instagram' || platform.startsWith('instagram_')) {
+    lines.push(INSTAGRAM_COOKBOOK);
   }
 
   return lines.join('\n');

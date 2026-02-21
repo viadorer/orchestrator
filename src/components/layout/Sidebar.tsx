@@ -50,8 +50,8 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 h-14 border-b border-slate-800">
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
-          <span className="text-sm font-bold text-white">O</span>
+        <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center">
+          <img src="/logo-orchestrator.png" alt="Orchestrator" className="w-8 h-8 object-contain" />
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold text-white truncate">Orchestrator</span>

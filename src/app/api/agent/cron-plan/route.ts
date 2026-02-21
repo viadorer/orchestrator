@@ -14,11 +14,11 @@ export async function GET() {
   // All projects with orchestrator config
   const { data: projects } = await supabase
     .from('projects')
-    .select('id, name, slug, platforms, orchestrator_config, logo_url, primary_color')
+    .select('id, name, slug, platforms, orchestrator_config, visual_identity')
     .order('name');
 
   if (!projects) {
-    return NextResponse.json({ projects: [], cronSchedule: {} });
+    return NextResponse.json({ projects: [], cron_schedule: {}, last_runs: [], cron_secret_configured: !!process.env.CRON_SECRET });
   }
 
   // Today's generated content count per project
@@ -62,6 +62,7 @@ export async function GET() {
 
   const enriched = projects.map(p => {
     const config = (p.orchestrator_config as Record<string, unknown>) || {};
+    const vi = (p.visual_identity as Record<string, unknown>) || {};
     const enabled = config.enabled === true;
     const frequency = (config.posting_frequency as string) || 'daily';
     const postingTimes = (config.posting_times as string[]) || ['09:00'];
@@ -77,8 +78,8 @@ export async function GET() {
       name: p.name,
       slug: p.slug,
       platforms: p.platforms || [],
-      logo_url: p.logo_url,
-      primary_color: p.primary_color,
+      logo_url: (vi.logo_url as string) || null,
+      primary_color: (vi.primary_color as string) || null,
       enabled,
       frequency,
       posting_times: postingTimes,

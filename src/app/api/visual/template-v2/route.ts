@@ -636,14 +636,16 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
   const logoStripH = Math.round(height * 0.12);
   const logoSz = Math.round(logoStripH * 0.55);
 
-  // Diagonal cut points — color panel covers ~60% top-left, photo reveals bottom-right
-  // The diagonal goes from left ~75% down to right ~15% down
-  const cutLeftY = Math.round(height * (isLand ? 0.78 : 0.72));
-  const cutRightY = Math.round(height * (isLand ? 0.18 : 0.22));
+  // Arc cut — color panel covers top-left, curved edge reveals photo bottom-right
+  const arcLeftY = Math.round(height * (isLand ? 0.82 : 0.75));
+  const arcRightY = Math.round(height * (isLand ? 0.15 : 0.18));
+  // Control point for the quadratic bezier — pulls the curve into an arc
+  const arcCtrlX = Math.round(width * 0.55);
+  const arcCtrlY = Math.round(height * (isLand ? 0.35 : 0.32));
 
   // Curve transition above logo strip
   const curveY = height - logoStripH;
-  const curveCtrl = Math.round(width * 0.3);
+  const curveCtrl = Math.round(width * 0.35);
 
   const photo = await fetchImg(photoUrl, width, height);
 
@@ -662,12 +664,10 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
   const subT = svgText({ text: subtitle, x: textPad, y: subY, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Colored diagonal panel -->
-    <polygon points="0,0 ${width},0 ${width},${cutRightY} 0,${cutLeftY}" fill="#${bg}"/>
-    <!-- Left edge fill to curve -->
-    <rect x="0" y="${cutLeftY}" width="${Math.round(width * 0.04)}" height="${curveY - cutLeftY}" fill="#${bg}"/>
+    <!-- Colored arc panel — bezier curve from left to right -->
+    <path d="M0,0 L${width},0 L${width},${arcRightY} Q${arcCtrlX},${arcCtrlY} 0,${arcLeftY} Z" fill="#${bg}"/>
     <!-- White logo strip with curve transition -->
-    <path d="M0,${curveY} Q${curveCtrl},${curveY - Math.round(logoStripH * 0.4)} ${width},${curveY} L${width},${height} L0,${height} Z" fill="#ffffff"/>
+    <path d="M0,${curveY} Q${curveCtrl},${curveY - Math.round(logoStripH * 0.5)} ${width},${curveY} L${width},${height} L0,${height} Z" fill="#ffffff"/>
     <!-- Text -->
     ${hookT.svg}
     <!-- Accent bar -->

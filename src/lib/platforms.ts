@@ -181,8 +181,8 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     name: 'TikTok',
     maxChars: 4000,
     visibleChars: 150,
-    maxHashtags: 30,
-    optimalChars: 300,
+    maxHashtags: 7,
+    optimalChars: 150,
     hasImageSupport: true,
     hasVideoSupport: true,
     hasCarouselSupport: true,
@@ -196,10 +196,10 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     videoSpec: { width: 1080, height: 1920, aspectRatio: '9:16', maxDurationSec: 600, optimalDurationSec: 30, maxSizeMB: 287, format: 'MP4' },
     maxImages: 35,
     contentSpec: {
-      tone: 'casual, playful, authentic, gen-z friendly',
-      hookStrategy: 'Hook v prvních 1.5-3 sekundách videa. Vizuální nebo textový háček HNED na začátku. Prvních 150 znaků caption = vše viditelné.',
-      structureHint: 'Caption: klíčová slova do prvních 2 řádků (TikTok SEO). Krátký (100-150 znaků). Trending audio. Photo carousel má často větší dosah než průměrné video.',
-      ctaStyle: 'Follow, like, komentuj, duet',
+      tone: 'casual, authentic, přímý, bez korporátního tónu',
+      hookStrategy: 'Hook v prvních 1.5 sekundách. Vizuální nebo textový háček HNED. Prvních 150 znaků caption = vše viditelné. Completion rate je NEJDŮLEŽITĚJŠÍ metrika.',
+      structureHint: 'Caption: 50–150 znaků + CTA + hashtags. Krátký a úderný. Photo carousel (TikTok Slides) = fotky + text overlay + trending sound. Každá věta musí vydělat právo na existenci.',
+      ctaStyle: 'Uložte si, pošlete někomu kdo [situace], follow pro víc',
       hashtagPlacement: 'end',
       emojiPolicy: 'none',
     },
@@ -647,6 +647,96 @@ BRIDGE: [co za tím stojí]
 - Správný čas? (pro B2C: út–čt 11:00–13:00 nebo 19:00–21:00)
 `;
 
+// ─── TikTok Cookbook (actionable sections only) ──────────────
+// Injected into prompt when platform === 'tiktok'.
+// Universal — not real-estate specific. Examples are illustrative only.
+// Focus: photo carousel (TikTok Slides), captions, hashtags, hooks.
+// Excludes: video production, ads, account setup, analytics.
+const TIKTOK_COOKBOOK = `
+TIKTOK KUCHAŘKA — AUTENTICITA A HOOK
+
+═══ KLÍČOVÝ PRINCIP ═══
+TikTok je entertainment engine. Počet followerů je sekundární — obsah přivádí publikum.
+Completion rate je NEJDŮLEŽITĚJŠÍ metrika. Delší obsah, který lidi dokoukají, je hodnotnější než krátký s lajky.
+Autenticita > produkční kvalita. Syrový, přímý obsah překonává přeprodukované video.
+
+═══ PHOTO CAROUSEL (TikTok Slides) ═══
+Fotky + text overlay + trending sound = funguje jako video, ale vstup jsou jen fotky.
+Algoritmus tento formát aktivně podporuje a testuje.
+- Každý slide = jeden bod, čitelný na mobilu
+- Text overlay velký, kontrastní
+- Poslední slide = CTA ("Uložte si", "Pošlete někomu kdo...")
+- VŽDY 9:16 vertical (1080×1920)
+
+═══ HOOK — 1.5 SEKUNDY NA ZASTAVENÍ ═══
+Hook musí fungovat vizuálně (text overlay) i verbálně současně.
+
+15 hook šablon (univerzální):
+1. "Tohle mi nikdo neřekl o [téma]" — tajemství = zvědavost
+2. "POV: [situace]" — empatie, identifikace
+3. "Přestaň [běžná akce] — tady je proč" — zastavení habitu
+4. "[Číslo] věcí, které [výsledek]" — konkrétní příslib
+5. "Tento [objekt] stál [neočekávané číslo]" — šok číslem
+6. "Odpovídám na otázku, kterou mi píše každý" — komunita + relevance
+7. "Chyba, která mě stála [konkrétní ztrátu]" — vulnerability + poučení
+8. "Nikdo nemluví o tom, že..." — exkluzivita informace
+9. "Sleduj co se stane když..." — demonstrace, napětí
+10. "Jako [profese] vám řeknu pravdu o [téma]" — autorita + insider info
+11. "Otestoval jsem [věc] po [čas] — výsledky" — experiment, data
+12. "Proč [populární věc] nefunguje pro [výsledek]" — kontroverze
+13. Text overlay: "ČEKEJ DO KONCE" — completion rate hack
+14. Začít uprostřed akce bez kontextu — curiosity gap
+15. "Řeknu ti co [autorita] nechce, abys věděl" — us vs. them
+
+═══ TYPY OBSAHU ═══
+
+A) VZDĚLÁVACÍ (EDU-TAINMENT) — silná komunita na TikToku:
+HOOK: Číslo nebo šokující fakt
+OBSAH: 3–5 bodů, každý 5–10 sekund / 1 slide
+CTA: "Uložte si" nebo "Pošlete někomu kdo [situace]"
+
+B) BEHIND THE SCENES — autenticita je norma:
+Zákulisí práce, příprava, den v životě. Syrové, ne leštěné.
+
+C) STORYTELLING — příběh s překvapivým koncem:
+[Situace] → [Problém] → [Obrat] → [Výsledek s číslem] → [Poučení]
+
+D) MÝTUS VS. PRAVDA:
+"Říká se, že... Pravda je..." — vzdělání + autorita
+
+E) DATA / ČÍSLA:
+Konkrétní čísla z praxe nebo trhu. Vysoký engagement a sdílení.
+
+═══ POPISEK (CAPTION) ═══
+- 50–150 znaků textu + CTA + hashtags
+- Jedna věta rozšiřující hook
+- CTA: otázka nebo výzva ("Uložte si", "Komu to pošlete?")
+- Popisek NENÍ esej — krátký a úderný
+- SEO klíčová slova do prvních 2 řádků
+
+═══ HASHTAGS ═══
+Celkem 5–7:
+- 2–3 niche (1K–100K videí): specifické pro obor/téma
+- 1–2 střední (100K–1M): obecnější kategorie
+- 1 broad (1M+): široká kategorie
+- 1 trending (pokud relevantní)
+NIKDY: #fyp, #foryou, #viral — přehlcené, žádný algoritmický efekt.
+
+═══ CONTENT MIX ═══
+- Photo carousel: průběžně (nejschůdnější bez video infrastruktury)
+- Vzdělávací obsah: 2–3x týdně
+- BTS / storytelling: 1–2x týdně
+- TikTok odměňuje konzistenci a objem
+
+═══ NEJČASTĚJŠÍ CHYBY ═══
+1. Pomalý začátek — "Ahoj, já jsem..." = odchod v první vteřině. Začni s obsahem.
+2. Horizontální formát — TikTok je VŽDY 9:16 vertical
+3. Bez titulků/text overlay — 60 %+ sleduje bez zvuku
+4. Korporátní tón — autenticita > leštěný marketing
+5. Obecné sdělení bez konkrétního čísla nebo příkladu
+6. Nekonzistence — algoritmus potřebuje konzistentní signál
+`;
+
 // ─── X/Twitter Cookbook (actionable sections only) ───────────
 // Injected into prompt when platform === 'x'.
 // Excludes: video, monetization, Premium, X Ads, profile, Musk's vision.
@@ -978,6 +1068,9 @@ export function buildPlatformPromptBlock(platform: string): string {
   }
   if (platform === 'x') {
     lines.push(X_COOKBOOK);
+  }
+  if (platform === 'tiktok') {
+    lines.push(TIKTOK_COOKBOOK);
   }
 
   return lines.join('\n');

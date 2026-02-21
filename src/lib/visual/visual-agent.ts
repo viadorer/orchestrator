@@ -133,6 +133,40 @@ async function decideVisualType(ctx: VisualContext): Promise<{
     ? `\nVIZUÁLNÍ IDENTITA ZNAČKY:\n${brandContext.join('\n')}`
     : '';
 
+  // Build template catalog from registry
+  const photoTemplates = TEMPLATE_REGISTRY.filter(t => t.visual_type === 'photo');
+  const cardTemplates = TEMPLATE_REGISTRY.filter(t => t.visual_type === 'card');
+
+  const photoList = photoTemplates.map(t =>
+    `- "${t.key}" → ${t.description} TAGY: [${t.tags.join(', ')}]. PRO: ${t.best_for}`
+  ).join('\n');
+
+  const cardList = cardTemplates.map(t =>
+    `- "${t.key}" → ${t.description} TAGY: [${t.tags.join(', ')}]. PRO: ${t.best_for}`
+  ).join('\n');
+
+  // Build platform table from registry
+  const PLATFORM_CONFIG: Record<string, { aspect: string; dims: string }> = {
+    facebook: { aspect: 'portrait', dims: '1080×1350' },
+    instagram: { aspect: 'portrait', dims: '1080×1350' },
+    linkedin: { aspect: 'landscape', dims: '1200×627' },
+    x: { aspect: 'landscape', dims: '1600×900' },
+    tiktok: { aspect: 'story', dims: '1080×1920' },
+    pinterest: { aspect: 'portrait', dims: '1000×1500' },
+    threads: { aspect: 'square', dims: '1080×1080' },
+    youtube: { aspect: 'landscape', dims: '1280×720' },
+    telegram: { aspect: 'landscape', dims: '1280×720' },
+    bluesky: { aspect: 'landscape', dims: '1200×675' },
+  };
+
+  const platformTable = Object.entries(PLATFORM_CONFIG).map(([plat, cfg]) => {
+    const good = TEMPLATE_REGISTRY.filter(t => t.good_platforms.includes(plat)).map(t => t.key).join(', ');
+    const avoid = TEMPLATE_REGISTRY.filter(t => t.avoid_platforms.includes(plat)).map(t => t.key).join(', ') || '—';
+    return `| ${plat.padEnd(11)} | ${(`"${cfg.aspect}"`).padEnd(11)} | ${cfg.dims.padEnd(12)} | ${good} | ${avoid} |`;
+  }).join('\n');
+
+  const allKeys = TEMPLATE_REGISTRY.map(t => `"${t.key}"`).join('|');
+
   const prompt = `Analyzuj tento post a rozhodni, jaký vizuál potřebuje. Vyber KONKRÉTNÍ šablonu.
 
 POST:
@@ -147,47 +181,38 @@ ${brandBlock}
 === PRIORITA VÝBĚRU VIZUÁLU (DODŘŽUJ TOTO POŘADÍ!) ===
 
 🥇 PRIORITA 1 — FOTKA + TEXT + LOGO (visual_type: "photo")
-VŽDY preferuj reálnou fotku s textem. Toto je DEFAULTNÍ a JEDINÁ volba pro fotky.
-NIKDY nepoužívej fotku bez textu — lidé nečtou caption texty, hlavní sdělení MUSÍ být na fotce!
+VŽDY preferuj reálnou fotku s textem. Toto je DEFAULTNÍ volba.
+NIKDY nepoužívej fotku bez textu — hlavní sdělení MUSÍ být na fotce!
 
 Šablony (VŽDY s hook + body textem):
-- "photo_strip" → Fotka nahoře (72%), brand pás dole s hook textem + logo. UNIVERZÁLNÍ, funguje vždy.
-- "gradient" → Fotka přes celou plochu, tmavý gradient overlay, bold text dole + logo. PRO: Instagram, atmosférické, emocionální.
-- "text_logo" → Fotka na pozadí, text vlevo nahoře, logo vpravo dole. PRO: krátký výrazný headline, branding.
-- "split" → Půlka fotka, půlka text vedle sebe + logo. PRO: LinkedIn, profesionální obsah, delší text.
-- "quote_card" → Barevný panel s citátem nahoře + fotka dole. PRO: citáty, výroky, silné tvrzení. Elegantní, čistý look.
-- "diagonal" → Diagonální split: barevný panel s textem vlevo nahoře, fotka prosvitá vpravo dole, logo pás dole. PRO: dynamický, reklamní look, CTA posty.
+${photoList}
 
 DŮLEŽITÉ: card_hook a card_body jsou POVINNÉ pro všechny photo šablony!
 - card_hook = hlavní sdělení (1. řádek, výrazný, krátký)
 - card_body = doplňující informace (2. řádek, kontext)
 
-� PRIORITA 2 — INFOGRAFIKA: ČÍSLO + TEXT (visual_type: "card")
+VÝBĚR ŠABLONY PODLE TAGŮ:
+- Post obsahuje citát/výrok osoby → hledej tagy: quote, podcast, interview, testimonial
+- Post je reklamní/CTA → hledej tagy: cta, promo, dynamic
+- Post je emocionální/atmosférický → hledej tagy: emotional, atmospheric
+- Post je vzdělávací/profesionální → hledej tagy: educational, professional
+- Post je zpráva/novinka → hledej tagy: news, universal
+
+🥈 PRIORITA 2 — INFOGRAFIKA: ČÍSLO + TEXT (visual_type: "card")
 POUZE když je v postu KONKRÉTNÍ ČÍSLO jako hlavní hook (statistika, procento, cena).
-Šablona: "bold_card" → Velké číslo uprostřed, glow efekt, dekorativní rohy.
+${cardList}
 Použij JEN když číslo je skutečně hlavní sdělení postu. Jinak preferuj fotku.
 
-=== POVINNÁ TABULKA: PLATFORMA → FORMÁT + ŠABLONA ===
-(MUSÍŠ dodržet aspect_ratio a preferované šablony pro danou platformu!)
+=== PLATFORMA → FORMÁT ===
+(MUSÍŠ dodržet aspect_ratio pro danou platformu!)
 
-| Platforma   | aspect_ratio | Rozměry      | Preferované šablony          | NEPOUŽÍVAT        |
-|-------------|-------------|--------------|------------------------------|--------------------|
-| facebook    | "portrait"  | 1080×1350    | gradient, quote_card, diagonal, text_logo | bold_card, minimal |
-| instagram   | "portrait"  | 1080×1350    | gradient, quote_card, diagonal, text_logo | split, minimal     |
-| linkedin    | "landscape" | 1200×627     | split, diagonal, photo_strip, quote_card  | story, minimal     |
-| x           | "landscape" | 1600×900     | photo_strip, gradient, text_logo | split, minimal     |
-| tiktok      | "story"     | 1080×1920    | gradient, text_logo, diagonal | split, minimal     |
-| pinterest   | "portrait"  | 1000×1500    | gradient, text_logo, diagonal | split, minimal     |
-| threads     | "square"    | 1080×1080    | gradient, photo_strip, text_logo | split, minimal     |
-| youtube     | "landscape" | 1280×720     | text_logo, photo_strip, gradient | story, minimal     |
-| telegram    | "landscape" | 1280×720     | photo_strip, gradient, text_logo | story, minimal     |
-| bluesky     | "landscape" | 1200×675     | photo_strip, gradient, text_logo | split, minimal     |
+| Platforma   | aspect_ratio | Rozměry      | Preferované šablony | NEPOUŽÍVAT |
+|-------------|-------------|--------------|---------------------|------------|
+${platformTable}
 
 DŮLEŽITÉ:
 - aspect_ratio z tabulky je POVINNÝ pro danou platformu — neměň ho!
 - Imagen API podporuje jen: 1:1, 3:4, 4:3, 9:16, 16:9 — mapování je automatické
-- Pro portrait platformy (FB, IG): fotka MUSÍ mít volný prostor dole pro text overlay
-- Pro landscape platformy (LI, X): fotka MUSÍ mít volný prostor vlevo/vpravo
 
 === PRAVIDLA PRO image_prompt (KRITICKÉ) ===
 - VŽDY generuj image_prompt, i pro "bold_card" (použije se jako fallback)
@@ -197,13 +222,12 @@ DŮLEŽITÉ:
 - Piš jako filmový režisér: "Close-up of weathered hands signing a document on oak desk, morning light through window, shallow depth of field"
 - NIKDY nepiš genericky: "Professional photo of business" nebo "Happy people in office"
 - Zaměř se na EMOCI a PŘÍBĚH, ne na popis produktu
-- Pro "gradient"/"text_logo": fotka musí mít VOLNÝ PROSTOR pro text (ne příliš detailní)
-- NIKDY nepoužívej šablonu bez textu — každá fotka MUSÍ mít hook + body text!
+- Pro šablony s overlay textem: fotka musí mít VOLNÝ PROSTOR pro text
 
 Vrať POUZE JSON:
 {
   "visual_type": "photo|card|none",
-  "template_key": "photo_strip|gradient|text_logo|split|bold_card|quote_card|diagonal",
+  "template_key": ${allKeys},
   "aspect_ratio": "portrait|square|landscape|story",
   "card_hook": "krátký hook text pro šablonu (1. řádek)" | null,
   "card_body": "druhý řádek textu pro šablonu" | null,
@@ -316,12 +340,115 @@ function generateCardVisual(
   };
 }
 
-/**
- * Valid template keys for brand frame templates.
- * Note: "minimal" removed - all photos MUST have text overlay (hook + body).
- */
-const VALID_TEMPLATES = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'quote_card', 'diagonal'] as const;
-type TemplateKey = typeof VALID_TEMPLATES[number];
+// ─── Template Registry ──────────────────────────────────────
+// Single source of truth for all templates. Adding a new template = adding 1 entry here.
+// Hugo's prompt, UI previews, and validation all read from this registry.
+
+interface TemplateEntry {
+  key: string;
+  label: string;
+  visual_type: 'photo' | 'card';
+  tags: string[];
+  best_for: string;
+  description: string;
+  requires: ('photo' | 'hook' | 'body' | 'subtitle' | 'number')[];
+  good_platforms: string[];
+  avoid_platforms: string[];
+}
+
+const TEMPLATE_REGISTRY: TemplateEntry[] = [
+  {
+    key: 'bold_card',
+    label: 'Bold Card',
+    visual_type: 'card',
+    tags: ['stats', 'number', 'infographic'],
+    best_for: 'Konkrétní číslo jako hlavní sdělení (statistika, procento, cena)',
+    description: 'Velké číslo uprostřed, glow efekt, dekorativní rohy. Bez fotky.',
+    requires: ['hook', 'body'],
+    good_platforms: ['linkedin', 'x', 'threads'],
+    avoid_platforms: ['facebook', 'instagram'],
+  },
+  {
+    key: 'photo_strip',
+    label: 'Photo Strip',
+    visual_type: 'photo',
+    tags: ['news', 'universal', 'safe'],
+    best_for: 'Univerzální šablona, funguje vždy. Fotka nahoře, brand pás dole.',
+    description: 'Fotka nahoře (72%), brand pás dole s hook textem + logo.',
+    requires: ['photo', 'hook', 'body'],
+    good_platforms: ['linkedin', 'x', 'youtube', 'telegram', 'bluesky'],
+    avoid_platforms: [],
+  },
+  {
+    key: 'split',
+    label: 'Split',
+    visual_type: 'photo',
+    tags: ['educational', 'professional', 'long_text'],
+    best_for: 'Profesionální obsah s delším textem. Půlka fotka, půlka text.',
+    description: 'Půlka fotka, půlka bold text vedle sebe + logo.',
+    requires: ['photo', 'hook', 'body'],
+    good_platforms: ['linkedin'],
+    avoid_platforms: ['instagram', 'tiktok', 'pinterest', 'threads', 'bluesky'],
+  },
+  {
+    key: 'gradient',
+    label: 'Gradient',
+    visual_type: 'photo',
+    tags: ['emotional', 'atmospheric', 'instagram'],
+    best_for: 'Atmosférické, emocionální sdělení. Fotka přes celou plochu s gradient overlay.',
+    description: 'Fotka přes celou plochu, tmavý gradient overlay, bold text dole + logo.',
+    requires: ['photo', 'hook', 'body'],
+    good_platforms: ['facebook', 'instagram', 'x', 'tiktok', 'pinterest', 'threads', 'youtube', 'telegram', 'bluesky'],
+    avoid_platforms: [],
+  },
+  {
+    key: 'text_logo',
+    label: 'Text + Logo',
+    visual_type: 'photo',
+    tags: ['cta', 'promo', 'branding', 'headline'],
+    best_for: 'Krátký výrazný headline s brandingem. Fotka na pozadí.',
+    description: 'Fotka na pozadí, text vlevo nahoře, logo vpravo dole.',
+    requires: ['photo', 'hook', 'body'],
+    good_platforms: ['facebook', 'instagram', 'tiktok', 'pinterest', 'threads', 'youtube', 'telegram', 'bluesky'],
+    avoid_platforms: [],
+  },
+  {
+    key: 'quote_card',
+    label: 'Quote Card',
+    visual_type: 'photo',
+    tags: ['quote', 'opinion', 'statement', 'elegant'],
+    best_for: 'Citáty, výroky, silná tvrzení. Barevný panel s textem + fotka.',
+    description: 'Barevný panel s citátem nahoře + fotka dole (portrait) nebo vedle (landscape).',
+    requires: ['photo', 'hook', 'body', 'subtitle'],
+    good_platforms: ['facebook', 'instagram', 'linkedin'],
+    avoid_platforms: [],
+  },
+  {
+    key: 'diagonal',
+    label: 'Diagonal',
+    visual_type: 'photo',
+    tags: ['cta', 'promo', 'dynamic', 'remax'],
+    best_for: 'Reklamní look, CTA posty, dynamický vizuál. Diagonální řez.',
+    description: 'Velký barevný panel s textem vlevo nahoře, diagonální řez odhaluje fotku vpravo dole, bílý logo pás s křivkou.',
+    requires: ['photo', 'hook', 'body'],
+    good_platforms: ['facebook', 'instagram', 'tiktok', 'pinterest', 'linkedin'],
+    avoid_platforms: [],
+  },
+  {
+    key: 'quote_overlay',
+    label: 'Quote Overlay',
+    visual_type: 'photo',
+    tags: ['quote', 'podcast', 'interview', 'person', 'testimonial'],
+    best_for: 'Citát přes fotku osoby. Podcast, rozhovor, testimonial.',
+    description: 'Fotka na pozadí (osoba), tmavý gradient dole, velká uvozovka, citát + autor.',
+    requires: ['photo', 'hook', 'body'],
+    good_platforms: ['facebook', 'instagram', 'linkedin', 'threads'],
+    avoid_platforms: [],
+  },
+];
+
+const VALID_TEMPLATES = TEMPLATE_REGISTRY.map(t => t.key);
+type TemplateKey = string;
 
 /**
  * Resolve platform variant string from base platform + aspect_ratio.

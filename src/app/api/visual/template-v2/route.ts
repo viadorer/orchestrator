@@ -66,6 +66,9 @@ export async function GET(request: NextRequest) {
       case 'diagonal':
         buffer = await renderDiagonal(ctx);
         break;
+      case 'quote_overlay':
+        buffer = await renderQuoteOverlay(ctx);
+        break;
       case 'bold_card':
       default:
         buffer = await renderBoldCard(ctx);
@@ -675,6 +678,61 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
   ];
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
   if (logo) composite.push({ input: logo, top: height - logoStripH + Math.round((logoStripH - logoSz) / 2), left: textPad });
+
+  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
+}
+
+// ─── Template 9: Quote Overlay ──────────────────────────────
+// Photo background (person), dark gradient bottom, large quote mark, citation + author.
+// Inspired by First Class podcast style.
+
+async function renderQuoteOverlay(ctx: TemplateContext): Promise<Buffer> {
+  const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const isLand = s.mode === 'landscape';
+
+  const photo = await fetchImg(photoUrl, width, height);
+
+  // Quote mark size and position
+  const quoteFs = Math.round(s.base * (isLand ? 0.12 : 0.1));
+  const quoteMark = textToPath('\u201e', s.pad, Math.round(height * 0.48), quoteFs, `#${accent}`, 1, true);
+
+  // Hook = the quote text, positioned below quote mark
+  const hookFs = isLand ? Math.round(s.base * 0.065) : Math.round(s.base * 0.06);
+  const hookY = Math.round(height * 0.50);
+  const textMaxW = isLand ? Math.round(width * 0.7) : Math.round(width * 0.85);
+  const hookT = svgText({ text: hook, x: s.pad, y: hookY, fs: hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: isLand ? 4 : 5, lh: 1.25 });
+
+  // Body = author name, below hook
+  const bodyY = hookY + hookT.totalH + Math.round(s.pad * 0.6);
+  const bodyT = svgText({ text: body, x: s.pad, y: bodyY, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 2, opacity: 0.8 });
+
+  // Gradient: transparent top -> dark bottom (covers ~60% of image height)
+  const gradTop = Math.round(height * 0.35);
+  const { r, g, b } = hexToRgb(bg);
+
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="qog" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="rgb(${r},${g},${b})" stop-opacity="0"/>
+        <stop offset="0.3" stop-color="rgb(${r},${g},${b})" stop-opacity="0.6"/>
+        <stop offset="1" stop-color="rgb(${r},${g},${b})" stop-opacity="0.95"/>
+      </linearGradient>
+    </defs>
+    <rect y="${gradTop}" width="${width}" height="${height - gradTop}" fill="url(#qog)"/>
+    ${quoteMark}
+    ${hookT.svg}${bodyT.svg}
+  </svg>`;
+
+  const composite: sharp.OverlayOptions[] = [
+    { input: photo, top: 0, left: 0 },
+    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
+  ];
+
+  // Logo top-right
+  const logoSz = Math.round(s.base * 0.1);
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
+  if (logo) composite.push({ input: logo, top: s.pad, left: width - s.pad - logoSz });
 
   return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
 }

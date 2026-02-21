@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
     newParams.set('t', 'bold_card');
   }
 
-  const redirectUrl = `/api/visual/template-v2?${newParams.toString()}`;
-  return NextResponse.redirect(new URL(redirectUrl, request.url), 301);
+  const url = new URL(request.url);
+  url.pathname = '/api/visual/template-v2';
+  url.search = newParams.toString();
+  return NextResponse.redirect(url, 308);
 }

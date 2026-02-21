@@ -637,10 +637,10 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Large circle — bg color, positioned top-right, overflows edges
-  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.5 : 0.55));
-  const circleCx = Math.round(width * (isLand ? 0.72 : 0.7));
-  const circleCy = Math.round(height * (isLand ? 0.25 : 0.22));
+  // Large circle — bg color, center-right area
+  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.45 : 0.48));
+  const circleCx = Math.round(width * (isLand ? 0.65 : 0.6));
+  const circleCy = Math.round(height * (isLand ? 0.4 : 0.35));
 
   // Text layout — large hook + body, top-left
   const textPad = Math.round(s.pad * 1.5);
@@ -652,22 +652,15 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
   const bodyFs = isLand ? Math.round(s.base * 0.04) : Math.round(s.base * 0.038);
   const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: bodyFs, bold: true, fill: '#1a1a2e', maxPx: textMaxW, maxLines: isLand ? 2 : 3, opacity: 0.7 });
 
-  // Logo circle frame — bottom-right, accent border
-  const logoSz = Math.round(s.base * 0.1);
-  const logoFrameR = Math.round(logoSz * 0.65);
-  const logoBorder = Math.round(logoSz * 0.08);
-  const logoCx = Math.round(width - textPad - logoFrameR);
-  const logoCy = Math.round(height - textPad - logoFrameR);
+  // Logo — clean, bottom-right, no frame
+  const logoSz = Math.round(s.base * 0.08);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Large bg-colored circle top-right -->
+    <!-- Large bg-colored circle center-right -->
     <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${bg}" opacity="0.85"/>
     <!-- Text -->
     ${hookT.svg}
     ${bodyT.svg}
-    <!-- Logo accent circle border -->
-    <circle cx="${logoCx}" cy="${logoCy}" r="${logoFrameR + logoBorder}" fill="#${accent}"/>
-    <circle cx="${logoCx}" cy="${logoCy}" r="${logoFrameR}" fill="#1a1a2e"/>
   </svg>`;
 
   const composite: sharp.OverlayOptions[] = [
@@ -675,13 +668,13 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
 
-  // Place logo inside the circle frame
+  // Place logo clean, bottom-right
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
   if (logo) {
     composite.push({
       input: logo,
-      top: Math.round(logoCy - logoSz / 2),
-      left: Math.round(logoCx - logoSz / 2),
+      top: height - textPad - logoSz,
+      left: width - textPad - logoSz,
     });
   }
 

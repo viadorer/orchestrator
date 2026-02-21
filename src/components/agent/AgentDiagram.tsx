@@ -88,7 +88,7 @@ export function AgentDiagram() {
               <Clock className="w-5 h-5 text-amber-400 flex-shrink-0" />
               <div>
                 <p className="text-sm font-medium text-white">Cron Job</p>
-                <p className="text-[11px] text-slate-400">3x denně (8:00, 12:00, 17:00)</p>
+                <p className="text-[11px] text-slate-400">Každou hodinu (Vercel Cron)</p>
               </div>
             </div>
             <div className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
@@ -193,14 +193,21 @@ export function AgentDiagram() {
         <SectionCard title="3. Typy úkolů">
           <div className="space-y-2">
             {[
-              { icon: Sparkles, label: 'Generovat post', desc: 'Text + skóre + editor review', color: 'text-violet-400' },
+              { icon: Sparkles, label: 'Generovat post', desc: 'Text + skóre + editor review + vizuál', color: 'text-violet-400' },
               { icon: Lightbulb, label: 'Navrhnout témata', desc: '→ vytvoří generate_content tasky', color: 'text-amber-400' },
               { icon: Calendar, label: 'Plán na týden', desc: '→ naplánuje tasky na 5 dní', color: 'text-cyan-400' },
               { icon: BookOpen, label: 'Analýza KB', desc: '→ uloží mezery do memory', color: 'text-blue-400' },
+              { icon: BookOpen, label: 'Obohatit KB', desc: '→ AI navrhne nové KB záznamy', color: 'text-blue-400' },
               { icon: BarChart3, label: 'Analýza mixu', desc: '→ korekce do memory', color: 'text-emerald-400' },
               { icon: TrendingUp, label: 'Report výkonu', desc: '→ insights do memory', color: 'text-green-400' },
+              { icon: TrendingUp, label: 'Engagement learning', desc: '→ učí se z reálných dat', color: 'text-green-400' },
               { icon: Clock, label: 'Optimalizace časů', desc: '→ doporučení do memory', color: 'text-orange-400' },
               { icon: Shield, label: 'Sentiment check', desc: '→ bezpečnost do memory', color: 'text-red-400' },
+              { icon: Shield, label: 'Audit promptů', desc: '→ efektivita prompt šablon', color: 'text-red-400' },
+              { icon: Shield, label: 'Cross-project dedup', desc: '→ duplicity napříč projekty', color: 'text-red-400' },
+              { icon: Sparkles, label: 'A/B varianty', desc: '→ alternativní verze postu', color: 'text-violet-400' },
+              { icon: Eye, label: 'Vizuální audit', desc: '→ konzistence vizuálů', color: 'text-indigo-400' },
+              { icon: Shield, label: 'Analýza konkurence', desc: '→ diferenciátory, příležitosti', color: 'text-red-400' },
             ].map((task) => (
               <div key={task.label} className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-800/50">
                 <task.icon className={`w-4 h-4 ${task.color} flex-shrink-0`} />
@@ -224,13 +231,14 @@ export function AgentDiagram() {
             { icon: Sparkles, label: 'Gemini AI', color: 'bg-purple-600' },
             { icon: Shield, label: 'Score Check', color: 'bg-amber-600' },
             { icon: Eye, label: 'Editor Review', color: 'bg-indigo-600' },
+            { icon: Image, label: 'Image Review', color: 'bg-rose-600' },
             { icon: Image, label: 'Match Media', color: 'bg-pink-600' },
             { icon: CheckCircle, label: 'Content Queue', color: 'bg-emerald-600' },
             { icon: Send, label: 'Publish', color: 'bg-green-600' },
           ].map((step, i) => (
             <div key={step.label} className="flex items-center gap-2">
               <DiagramNode icon={step.icon} label={step.label} color={step.color} />
-              {i < 8 && <ArrowRight className="w-3.5 h-3.5 text-slate-700 hidden sm:block" />}
+              {i < 9 && <ArrowRight className="w-3.5 h-3.5 text-slate-700 hidden sm:block" />}
             </div>
           ))}
         </div>
@@ -246,7 +254,7 @@ export function AgentDiagram() {
           </div>
           <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
             <p className="text-[11px] font-medium text-emerald-300 mb-1">Media Match</p>
-            <p className="text-[10px] text-slate-400">pgvector similarity + cooldown</p>
+            <p className="text-[10px] text-slate-400">Library → Imagen → template fallback</p>
           </div>
         </div>
       </SectionCard>

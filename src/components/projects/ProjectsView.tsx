@@ -1508,7 +1508,7 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       <div>
         <h3 className="text-sm font-medium text-white mb-1">Vizuální identita projektu</h3>
         <p className="text-xs text-slate-500 mb-4">

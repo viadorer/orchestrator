@@ -299,31 +299,20 @@ async function renderBoldCard(ctx: TemplateContext): Promise<Buffer> {
   const bodyMaxW = s.mode === 'landscape' ? Math.round(width * 0.55) : Math.round(width * 0.8);
   const bodyT = svgText({ text: body, x: s.pad, y: bodyY, fs: bodyFs, bold: true, fill: `#${textColor}`, maxPx: bodyMaxW, maxLines: s.bodyMax, lh: 1.35 });
 
-  // Logo: circular with accent border, bottom-right (bigger for landscape)
-  const logoR = Math.round(s.mode === 'landscape' ? height * 0.14 : s.base * 0.11);
-  const logoCx = width - s.pad - logoR;
-  const logoCy = height - s.pad - logoR;
-  const borderW = Math.round(logoR * 0.12);
-
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
     <rect width="${width}" height="${height}" fill="#${bg}"/>
     ${hookT.svg}${bodyT.svg}
-    <circle cx="${logoCx}" cy="${logoCy}" r="${logoR + borderW}" fill="#${accent}"/>
-    <circle cx="${logoCx}" cy="${logoCy}" r="${logoR}" fill="#${bg}"/>
   </svg>`;
 
   const composite: sharp.OverlayOptions[] = [{ input: Buffer.from(svg), top: 0, left: 0 }];
 
-  // Fetch logo and clip to circle, place inside the accent ring
-  const logo = await fetchLogo(ctx.logoUrl, logoR * 2);
+  // Logo: clean, no border, bottom-right
+  const logoSz = Math.round(s.mode === 'landscape' ? height * 0.18 : s.base * 0.14);
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
   if (logo) {
-    // Clip logo to circle
-    const circleMask = Buffer.from(`<svg width="${logoR * 2}" height="${logoR * 2}"><circle cx="${logoR}" cy="${logoR}" r="${logoR}" fill="white"/></svg>`);
-    const logoCircle = await sharp(logo)
-      .resize(logoR * 2, logoR * 2, { fit: 'cover' })
-      .composite([{ input: circleMask, blend: 'dest-in' }])
-      .png().toBuffer();
-    composite.push({ input: logoCircle, top: logoCy - logoR, left: logoCx - logoR });
+    const logoX = width - s.pad - logoSz;
+    const logoY = height - s.pad - logoSz;
+    composite.push({ input: logo, top: logoY, left: logoX });
   }
 
   return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } })

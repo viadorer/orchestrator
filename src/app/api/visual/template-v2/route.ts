@@ -618,33 +618,55 @@ async function renderQuoteCard(ctx: TemplateContext): Promise<Buffer> {
 }
 
 // ─── Template 8: Diagonal ────────────────────────────────────
-// Colored polygon top-left with text, photo reveals bottom-right, white logo strip.
+// RE/MAX style: large colored panel top-left with text, diagonal cut reveals photo bottom-right,
+// white logo strip at bottom with subtle curve transition.
 
 async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
   const { hook, body, subtitle, bg, accent, textColor, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
   const isLand = s.mode === 'landscape';
-  const logoStripH = Math.round(height * 0.1);
-  const logoSz = Math.round(logoStripH * 0.6);
-  const textMaxW = isLand ? Math.round(width * 0.5) : Math.round(width * 0.8);
 
-  const dY1 = Math.round(height * (isLand ? 0.72 : 0.65));
-  const dY2 = Math.round(height * (isLand ? 0.22 : 0.28));
+  // Logo strip at bottom
+  const logoStripH = Math.round(height * 0.12);
+  const logoSz = Math.round(logoStripH * 0.55);
+
+  // Diagonal cut points — color panel covers ~60% top-left, photo reveals bottom-right
+  // The diagonal goes from left ~75% down to right ~15% down
+  const cutLeftY = Math.round(height * (isLand ? 0.78 : 0.72));
+  const cutRightY = Math.round(height * (isLand ? 0.18 : 0.22));
+
+  // Curve transition above logo strip
+  const curveY = height - logoStripH;
+  const curveCtrl = Math.round(width * 0.3);
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  const hookT = svgText({ text: hook, x: s.pad, y: s.pad, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
-  const divY = s.pad + hookT.totalH + s.pad * 0.2;
-  const bodyT = svgText({ text: body, x: s.pad, y: divY + s.barH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
-  const subT = svgText({ text: subtitle, x: s.pad, y: divY + s.barH + s.pad * 0.3 + bodyT.totalH + s.pad * 0.2, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
+  // Text layout — large hook, accent bar, body, subtitle
+  const hookFs = isLand ? Math.round(s.base * 0.11) : Math.round(s.base * 0.085);
+  const textMaxW = isLand ? Math.round(width * 0.48) : Math.round(width * 0.82);
+  const textPad = Math.round(s.pad * 1.5);
+
+  const hookT = svgText({ text: hook, x: textPad, y: textPad, fs: hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: isLand ? 4 : 6 });
+  const barY = textPad + hookT.totalH + Math.round(s.pad * 0.5);
+  const barW = Math.round(s.base * 0.08);
+  const barH = Math.round(s.base * 0.006);
+  const bodyY = barY + barH + Math.round(s.pad * 0.5);
+  const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
+  const subY = bodyY + bodyT.totalH + Math.round(s.pad * 0.3);
+  const subT = svgText({ text: subtitle, x: textPad, y: subY, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <polygon points="0,0 ${width},0 ${width},${dY2} 0,${dY1}" fill="#${bg}"/>
-    <rect x="0" y="${dY1}" width="${Math.round(width * 0.06)}" height="${height - dY1 - logoStripH}" fill="#${bg}"/>
+    <!-- Colored diagonal panel -->
+    <polygon points="0,0 ${width},0 ${width},${cutRightY} 0,${cutLeftY}" fill="#${bg}"/>
+    <!-- Left edge fill to curve -->
+    <rect x="0" y="${cutLeftY}" width="${Math.round(width * 0.04)}" height="${curveY - cutLeftY}" fill="#${bg}"/>
+    <!-- White logo strip with curve transition -->
+    <path d="M0,${curveY} Q${curveCtrl},${curveY - Math.round(logoStripH * 0.4)} ${width},${curveY} L${width},${height} L0,${height} Z" fill="#ffffff"/>
+    <!-- Text -->
     ${hookT.svg}
-    <rect x="${s.pad}" y="${divY}" width="${s.divW}" height="${s.barH}" rx="2" fill="#${accent}"/>
+    <!-- Accent bar -->
+    <rect x="${textPad}" y="${barY}" width="${barW}" height="${barH}" rx="1" fill="#${accent}"/>
     ${bodyT.svg}${subT.svg}
-    <rect x="0" y="${height - logoStripH}" width="${width}" height="${logoStripH}" fill="#ffffff"/>
   </svg>`;
 
   const composite: sharp.OverlayOptions[] = [
@@ -652,7 +674,7 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
-  if (logo) composite.push({ input: logo, top: height - logoStripH + Math.round((logoStripH - logoSz) / 2), left: s.pad });
+  if (logo) composite.push({ input: logo, top: height - logoStripH + Math.round((logoStripH - logoSz) / 2), left: textPad });
 
   return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
 }

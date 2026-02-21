@@ -631,45 +631,45 @@ async function renderQuoteCard(ctx: TemplateContext): Promise<Buffer> {
 // body text below hook, logo in circular accent-bordered frame bottom-right.
 
 async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, bg, accent, photoUrl, width, height } = ctx;
+  const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
   const isLand = s.mode === 'landscape';
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Large circle — bg color, far top-right (center outside canvas)
+  // Large circle — ACCENT color, far top-right (center partially outside canvas)
   const circleR = Math.round(Math.min(width, height) * (isLand ? 0.55 : 0.55));
-  const circleCx = Math.round(width * (isLand ? 0.85 : 0.82));
-  const circleCy = Math.round(height * (isLand ? 0.12 : 0.1));
+  const circleCx = Math.round(width * (isLand ? 0.82 : 0.78));
+  const circleCy = Math.round(height * (isLand ? 0.15 : 0.12));
 
-  // Text layout — large hook + body, top-left with dark backdrop for readability
+  // Text layout — large hook + body, top-left
   const textPad = Math.round(s.pad * 1.5);
   const hookFs = isLand ? Math.round(s.base * 0.1) : Math.round(s.base * 0.085);
   const textMaxW = isLand ? Math.round(width * 0.5) : Math.round(width * 0.7);
 
-  const hookT = svgText({ text: hook, x: textPad, y: textPad, fs: hookFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: isLand ? 3 : 5, lh: 1.1 });
+  const hookT = svgText({ text: hook, x: textPad, y: textPad, fs: hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: isLand ? 3 : 5, lh: 1.1 });
   const bodyY = textPad + hookT.totalH + Math.round(s.pad * 0.4);
   const bodyFs = isLand ? Math.round(s.base * 0.04) : Math.round(s.base * 0.038);
-  const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: bodyFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: isLand ? 2 : 3, opacity: 0.85 });
+  const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: bodyFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: isLand ? 2 : 3, opacity: 0.85 });
 
-  // Text backdrop height
+  // Text backdrop height — bg color gradient for readability
   const backdropH = bodyY + bodyT.totalH + Math.round(s.pad * 1.2);
 
   // Logo — clean, bottom-right, no frame
   const logoSz = Math.round(s.base * 0.08);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Dark gradient backdrop for text readability -->
+    <!-- BG gradient backdrop for text readability -->
     <defs>
       <linearGradient id="txtBg" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#000000" stop-opacity="0.55"/>
-        <stop offset="70%" stop-color="#000000" stop-opacity="0.2"/>
-        <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+        <stop offset="0%" stop-color="#${bg}" stop-opacity="0.75"/>
+        <stop offset="60%" stop-color="#${bg}" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="#${bg}" stop-opacity="0"/>
       </linearGradient>
     </defs>
     <rect x="0" y="0" width="${width}" height="${backdropH}" fill="url(#txtBg)"/>
-    <!-- Large bg-colored circle far top-right -->
-    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${bg}" opacity="0.8"/>
+    <!-- Large accent circle far top-right -->
+    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${accent}" opacity="0.8"/>
     <!-- Text -->
     ${hookT.svg}
     ${bodyT.svg}
@@ -690,7 +690,7 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
     });
   }
 
-  return sharp({ create: { width, height, channels: 4, background: { r: 240, g: 240, b: 244 } } }).composite(composite).png().toBuffer();
+  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
 }
 
 // ─── Template 9: Quote Overlay ──────────────────────────────
@@ -815,8 +815,8 @@ async function renderCtaCard(ctx: TemplateContext): Promise<Buffer> {
 }
 
 // ─── Template 11: Circle CTA ───────────────────────────────
-// odhad.online style: photo background, large white circle bottom-left with dark hook text,
-// accent CTA button inside circle, logo badge top-right on accent rect.
+// odhad.online style: photo background, large ACCENT circle left with WHITE hook text,
+// white CTA button with accent text below circle, logo on accent badge top-right.
 
 async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
   const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
@@ -825,42 +825,50 @@ async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Circle — white, left side, vertically centered-low
-  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.38 : 0.4));
-  const circleCx = Math.round(width * (isLand ? 0.3 : 0.3));
-  const circleCy = Math.round(height * (isLand ? 0.55 : 0.55));
+  // Circle — ACCENT color, left side, centered vertically
+  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.4 : 0.42));
+  const circleCx = Math.round(width * (isLand ? 0.25 : 0.22));
+  const circleCy = Math.round(height * (isLand ? 0.45 : 0.42));
 
-  // Hook text inside circle — always dark on white for readability
+  // Hook text inside circle — WHITE on accent
   const textPad = Math.round(s.pad * 1.2);
-  const hookFs = isLand ? Math.round(s.base * 0.055) : Math.round(s.base * 0.05);
-  const textMaxW = Math.round(circleR * 1.1);
-  const textX = Math.max(textPad, Math.round(circleCx - circleR * 0.4));
-  const textY = Math.round(circleCy - circleR * 0.4);
-  const hookT = svgText({ text: hook, x: textX, y: textY, fs: hookFs, bold: true, fill: '#1a1a2e', maxPx: textMaxW, maxLines: isLand ? 5 : 7, lh: 1.15 });
+  const hookFs = isLand ? Math.round(s.base * 0.06) : Math.round(s.base * 0.055);
+  const textMaxW = Math.round(circleR * 1.2);
+  const textX = Math.max(textPad, Math.round(circleCx - circleR * 0.45));
+  const textY = Math.round(circleCy - circleR * 0.35);
+  const hookT = svgText({ text: hook, x: textX, y: textY, fs: hookFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: isLand ? 5 : 6, lh: 1.15 });
 
-  // CTA button (body text)
-  const ctaFs = Math.round(s.base * 0.028);
-  const ctaH = Math.round(ctaFs * 2.8);
-  const ctaY = textY + hookT.totalH + Math.round(s.pad * 0.4);
-  const ctaPadX = Math.round(ctaFs * 1.8);
+  // CTA button — WHITE rounded rect with ACCENT text, below circle
+  const ctaFs = Math.round(s.base * 0.035);
+  const ctaH = Math.round(ctaFs * 2.6);
+  const ctaY = circleCy + circleR + Math.round(s.pad * 0.3);
+  const ctaPadX = Math.round(ctaFs * 2);
   const font = getFont(true);
   const ctaLabel = body || 'Více info';
   const ctaTextW = Math.round(font.getAdvanceWidth(ctaLabel, ctaFs));
   const ctaW = ctaTextW + ctaPadX * 2;
   const ctaRad = Math.round(ctaH / 2);
-  const ctaTextPath = textToPath(ctaLabel, textX + ctaPadX, ctaY + ctaH * 0.65, ctaFs, '#ffffff', 1, true);
+  const ctaTextPath = textToPath(ctaLabel, textX + ctaPadX, ctaY + ctaH * 0.65, ctaFs, `#${accent}`, 1, true);
 
-  // Logo — clean, top-right, no frame
-  const logoSz = Math.round(s.base * 0.07);
+  // Logo badge — accent rect with logo, top-right
+  const logoSz = Math.round(s.base * 0.05);
+  const badgePad = Math.round(s.pad * 0.5);
+  const badgeH = Math.round(logoSz + badgePad * 1.6);
+  const badgeW = Math.round(logoSz * 3.5);
+  const badgeX = width - badgeW - Math.round(s.pad * 0.6);
+  const badgeY = Math.round(s.pad * 0.6);
+  const badgeR = Math.round(badgeH * 0.25);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- White circle left side -->
-    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#ffffff"/>
-    <!-- Hook text (dark on white) -->
+    <!-- Accent circle left -->
+    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${accent}"/>
+    <!-- Hook text (white on accent) -->
     ${hookT.svg}
-    <!-- CTA button -->
-    <rect x="${textX}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${ctaRad}" fill="#${accent}"/>
+    <!-- CTA button (white with accent text) -->
+    <rect x="${textX}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${ctaRad}" fill="#ffffff"/>
     ${ctaTextPath}
+    <!-- Logo badge top-right -->
+    <rect x="${badgeX}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="${badgeR}" fill="#${accent}"/>
   </svg>`;
 
   const composite: sharp.OverlayOptions[] = [
@@ -868,13 +876,13 @@ async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
 
-  // Logo clean, top-right
+  // Place logo inside accent badge
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
   if (logo) {
     composite.push({
       input: logo,
-      top: Math.round(s.pad * 0.8),
-      left: width - logoSz - Math.round(s.pad * 0.8),
+      top: badgeY + Math.round((badgeH - logoSz) / 2),
+      left: badgeX + Math.round(badgePad * 0.8),
     });
   }
 

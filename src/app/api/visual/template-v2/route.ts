@@ -228,7 +228,8 @@ function svgText(opts: {
   const lineH = Math.round(fs * lh);
   let svg = '';
   for (let i = 0; i < lines.length; i++) {
-    svg += `<text x="${x}" y="${y + i * lineH + fs}" font-family="${FONT}" font-size="${fs}" font-weight="${bold ? '800' : '400'}" fill="${fill}" opacity="${opacity}" text-anchor="${anchor}">${esc(lines[i])}</text>\n`;
+    const escapedText = esc(lines[i]);
+    svg += `<text x="${x}" y="${y + i * lineH + fs}" font-family="${FONT}" font-size="${fs}px" font-weight="${bold ? '800' : '400'}" fill="${fill}" opacity="${opacity}" text-anchor="${anchor}">${escapedText}</text>\n`;
   }
   return { svg, totalH: lines.length * lineH };
 }
@@ -259,7 +260,7 @@ function logoBgCircle(x: number, y: number, r: number): string {
 }
 
 function rrMask(w: number, h: number, r: number): Buffer {
-  return Buffer.from(`<svg width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${r}" ry="${r}" fill="white"/></svg>`);
+  return Buffer.from(`<svg width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${r}" ry="${r}" fill="white"/></svg>`, 'utf-8');
 }
 
 /** Add logo to composite array — always bottom-right with padding, optional bg circle */
@@ -304,7 +305,7 @@ async function renderBoldCard(ctx: TemplateContext): Promise<Buffer> {
     ${hookT.svg}${bodyT.svg}
   </svg>`;
 
-  const composite: sharp.OverlayOptions[] = [{ input: Buffer.from(svg), top: 0, left: 0 }];
+  const composite: sharp.OverlayOptions[] = [{ input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 }];
 
   // Logo: clean, no border, bottom-right
   const logoSz = Math.round(s.mode === 'landscape' ? height * 0.18 : s.base * 0.14);
@@ -349,7 +350,7 @@ async function renderPhotoStrip(ctx: TemplateContext): Promise<Buffer> {
 
   const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
-    { input: Buffer.from(svg), top: 0, left: 0 },
+    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
   // Logo vertically centered in strip, right side
   const logo = await fetchLogo(ctx.logoUrl, s.logoSz);
@@ -390,7 +391,7 @@ async function renderGradient(ctx: TemplateContext): Promise<Buffer> {
 
   const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
-    { input: Buffer.from(svg), top: 0, left: 0 },
+    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
   await addLogo(composite, ctx, s, true);
 
@@ -451,7 +452,7 @@ async function renderSplit(ctx: TemplateContext): Promise<Buffer> {
 
     const composite: sharp.OverlayOptions[] = [
       { input: photo, top: 0, left: 0 },
-      { input: Buffer.from(svg), top: 0, left: 0 },
+      { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
     ];
     await addLogo(composite, ctx, s);
     return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
@@ -488,7 +489,7 @@ async function renderTextLogo(ctx: TemplateContext): Promise<Buffer> {
 
   const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
-    { input: Buffer.from(svg), top: 0, left: 0 },
+    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
   await addLogo(composite, ctx, s, true);
   return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
@@ -510,7 +511,7 @@ async function renderMinimal(ctx: TemplateContext): Promise<Buffer> {
 
   const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
-    { input: Buffer.from(svg), top: 0, left: 0 },
+    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
   await addLogo(composite, ctx, s, true);
   return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } }).composite(composite).png().toBuffer();
@@ -549,7 +550,7 @@ async function renderQuoteCard(ctx: TemplateContext): Promise<Buffer> {
     </svg>`;
 
     const composite: sharp.OverlayOptions[] = [
-      { input: Buffer.from(svg), top: 0, left: 0 },
+      { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
       { input: photoR, top: gap, left: textW + gap * 2 },
     ];
     // Logo bottom-left inside text panel for quote_card landscape
@@ -579,7 +580,7 @@ async function renderQuoteCard(ctx: TemplateContext): Promise<Buffer> {
     </svg>`;
 
     const composite: sharp.OverlayOptions[] = [
-      { input: Buffer.from(svg), top: 0, left: 0 },
+      { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
       { input: photoR, top: textH + gap * 2, left: gap },
     ];
     const logo = await fetchLogo(ctx.logoUrl, s.logoSz);
@@ -621,7 +622,7 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
 
   const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
-    { input: Buffer.from(svg), top: 0, left: 0 },
+    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
   if (logo) composite.push({ input: logo, top: height - logoStripH + Math.round((logoStripH - logoSz) / 2), left: s.pad });

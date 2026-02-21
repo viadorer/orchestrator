@@ -637,27 +637,39 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Large circle — bg color, center-right area
-  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.45 : 0.48));
-  const circleCx = Math.round(width * (isLand ? 0.65 : 0.6));
-  const circleCy = Math.round(height * (isLand ? 0.4 : 0.35));
+  // Large circle — bg color, far top-right (center outside canvas)
+  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.55 : 0.55));
+  const circleCx = Math.round(width * (isLand ? 0.85 : 0.82));
+  const circleCy = Math.round(height * (isLand ? 0.12 : 0.1));
 
-  // Text layout — large hook + body, top-left
+  // Text layout — large hook + body, top-left with dark backdrop for readability
   const textPad = Math.round(s.pad * 1.5);
   const hookFs = isLand ? Math.round(s.base * 0.1) : Math.round(s.base * 0.085);
-  const textMaxW = isLand ? Math.round(width * 0.5) : Math.round(width * 0.85);
+  const textMaxW = isLand ? Math.round(width * 0.5) : Math.round(width * 0.7);
 
-  const hookT = svgText({ text: hook, x: textPad, y: textPad, fs: hookFs, bold: true, fill: '#1a1a2e', maxPx: textMaxW, maxLines: isLand ? 3 : 5, lh: 1.1 });
+  const hookT = svgText({ text: hook, x: textPad, y: textPad, fs: hookFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: isLand ? 3 : 5, lh: 1.1 });
   const bodyY = textPad + hookT.totalH + Math.round(s.pad * 0.4);
   const bodyFs = isLand ? Math.round(s.base * 0.04) : Math.round(s.base * 0.038);
-  const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: bodyFs, bold: true, fill: '#1a1a2e', maxPx: textMaxW, maxLines: isLand ? 2 : 3, opacity: 0.7 });
+  const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: bodyFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: isLand ? 2 : 3, opacity: 0.85 });
+
+  // Text backdrop height
+  const backdropH = bodyY + bodyT.totalH + Math.round(s.pad * 1.2);
 
   // Logo — clean, bottom-right, no frame
   const logoSz = Math.round(s.base * 0.08);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Large bg-colored circle center-right -->
-    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${bg}" opacity="0.85"/>
+    <!-- Dark gradient backdrop for text readability -->
+    <defs>
+      <linearGradient id="txtBg" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#000000" stop-opacity="0.55"/>
+        <stop offset="70%" stop-color="#000000" stop-opacity="0.2"/>
+        <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="${width}" height="${backdropH}" fill="url(#txtBg)"/>
+    <!-- Large bg-colored circle far top-right -->
+    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${bg}" opacity="0.8"/>
     <!-- Text -->
     ${hookT.svg}
     ${bodyT.svg}
@@ -813,21 +825,21 @@ async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Circle dimensions — large, positioned so text stays inside visible area
-  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.42 : 0.45));
-  const circleCx = Math.round(width * (isLand ? 0.35 : 0.35));
-  const circleCy = Math.round(height * (isLand ? 0.62 : 0.65));
+  // Circle — white, left side, vertically centered-low
+  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.38 : 0.4));
+  const circleCx = Math.round(width * (isLand ? 0.3 : 0.3));
+  const circleCy = Math.round(height * (isLand ? 0.55 : 0.55));
 
-  // Hook text inside circle — ensure textX has enough padding from left edge
-  const hookFs = isLand ? Math.round(s.base * 0.06) : Math.round(s.base * 0.055);
+  // Hook text inside circle — always dark on white for readability
   const textPad = Math.round(s.pad * 1.2);
-  const textMaxW = Math.round(circleR * 1.2);
-  const textX = Math.max(textPad, Math.round(circleCx - circleR * 0.45));
-  const textY = Math.round(circleCy - circleR * 0.45);
-  const hookT = svgText({ text: hook, x: textX, y: textY, fs: hookFs, bold: true, fill: `#${bg}`, maxPx: textMaxW, maxLines: isLand ? 5 : 7, lh: 1.15 });
+  const hookFs = isLand ? Math.round(s.base * 0.055) : Math.round(s.base * 0.05);
+  const textMaxW = Math.round(circleR * 1.1);
+  const textX = Math.max(textPad, Math.round(circleCx - circleR * 0.4));
+  const textY = Math.round(circleCy - circleR * 0.4);
+  const hookT = svgText({ text: hook, x: textX, y: textY, fs: hookFs, bold: true, fill: '#1a1a2e', maxPx: textMaxW, maxLines: isLand ? 5 : 7, lh: 1.15 });
 
-  // CTA button (body text) — accent colored rounded rect inside circle
-  const ctaFs = Math.round(s.base * 0.03);
+  // CTA button (body text)
+  const ctaFs = Math.round(s.base * 0.028);
   const ctaH = Math.round(ctaFs * 2.8);
   const ctaY = textY + hookT.totalH + Math.round(s.pad * 0.4);
   const ctaPadX = Math.round(ctaFs * 1.8);
@@ -842,9 +854,9 @@ async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
   const logoSz = Math.round(s.base * 0.07);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- White circle -->
+    <!-- White circle left side -->
     <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#ffffff"/>
-    <!-- Hook text -->
+    <!-- Hook text (dark on white) -->
     ${hookT.svg}
     <!-- CTA button -->
     <rect x="${textX}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${ctaRad}" fill="#${accent}"/>

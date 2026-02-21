@@ -121,7 +121,7 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     maxChars: 3000,
     visibleChars: 210,
     maxHashtags: 5,
-    optimalChars: 1300,
+    optimalChars: 1500,
     hasImageSupport: true,
     hasVideoSupport: true,
     hasCarouselSupport: true,
@@ -138,14 +138,14 @@ export const PLATFORM_LIMITS: Record<string, PlatformLimits> = {
     videoSpec: { width: 1920, height: 1080, aspectRatio: '16:9', maxDurationSec: 600, optimalDurationSec: 60, maxSizeMB: 200, format: 'MP4' },
     maxImages: 20,
     contentSpec: {
-      tone: 'profesionální, data-driven, expertní',
-      hookStrategy: 'Prvních 210 znaků = hook. Začni faktem, číslem nebo provokativní otázkou.',
-      structureHint: 'Dlouhý formát (1200-1300 znaků). Krátké odstavce (1-2 věty). Prázdné řádky mezi nimi. Externí odkaz dát do prvního komentáře (algoritmus penál za externí URL v postu).',
-      ctaStyle: 'Otázka na konci k diskuzi. Odkaz v prvním komentáři.',
+      tone: 'profesionální, data-driven, expertní, osobní hlas (ne firemní tón)',
+      hookStrategy: 'Prvních 210 znaků = hook. Kontroverze, číslo z praxe, osobní selhání, nebo přímé zpochybnění konvence.',
+      structureHint: 'Dlouhý formát (1200-1800 znaků). Krátké odstavce (1-2 věty). Prázdné řádky mezi nimi. Konkrétní čísla, ne zaokrouhlená. Osobní příběhy s obchodním poučením. NIKDY odkaz v těle postu — vždy "odkaz v prvním komentáři".',
+      ctaStyle: 'Otázka do diskuse na konci. Soft lead gen přes DM. Odkaz v prvním komentáři.',
       hashtagPlacement: 'end',
       emojiPolicy: 'none',
     },
-    aiPromptHint: 'LinkedIn: Profesionální long-form (1200-1300 znaků). Hook v prvních 210 znacích. Krátké odstavce. 3-5 hashtagů na konci. Obrázek: square 1200×1200 (1:1, nejbezpečnější), portrait 1080×1350 (4:5, víc místa na mobilu), landscape 1200×627 (1.91:1, pro sdílené odkazy). Externí odkaz dát do 1. komentáře, ne do postu.',
+    aiPromptHint: 'LinkedIn: KVALITA JE PRIORITA. Long-form (1200-1800 znaků). Hook v prvních 210 znacích — musí být silnější než kdekoliv jinde. Krátké odstavce s prázdnými řádky. Konkrétní čísla z praxe. Osobní hlas, NE firemní tón. 3-5 hashtagů na konci. NIKDY odkaz v těle postu. Obrázek: square 1200×1200 (1:1), portrait 1080×1350 (4:5). Timing: út–čt 7–9 nebo 11–13.',
   },
   x: {
     name: 'X (Twitter)',
@@ -647,6 +647,138 @@ BRIDGE: [co za tím stojí]
 - Správný čas? (pro B2C: út–čt 11:00–13:00 nebo 19:00–21:00)
 `;
 
+// ─── LinkedIn Cookbook (sections 1–5, 7–8, 13, 15) ──────────
+// Injected into prompt when platform === 'linkedin'.
+// LinkedIn = KVALITA JE PRIORITA. Delší posty, důkladně ověřené, konkrétní čísla.
+// Excludes: video, LinkedIn Ads, profile optimization, commenting strategy.
+const LINKEDIN_COOKBOOK = `
+LINKEDIN KUCHAŘKA — KVALITA JE ABSOLUTNÍ PRIORITA
+
+═══ PROČ JE LINKEDIN JINÝ ═══
+Na LinkedIn je uživatel v pracovním módu — aktivně hledá hodnotu, inspiraci, řešení.
+- Delší posty fungují LÉPE než kratší
+- Vzdělávací obsah se sdílí více než zábavný
+- Osobní příběhy a zkušenosti překonávají firemní obsah
+- Autenticita > leštěný marketing
+- Piš jako ČLOVĚK, ne jako tisková zpráva
+- NIKDY firemní tón ("Naše společnost je hrdá na..." = nikdo to nečte)
+
+═══ ANATOMIE POSTU ═══
+HOOK (1–2 řádky viditelné bez "...více")
+
+TĚLO (rozvinutí, hodnota, příběh — krátké odstavce, 1–2 věty, prázdné řádky)
+
+ZÁVĚR / POUČENÍ
+
+CTA (otázka nebo výzva k akci)
+
+Prázdné řádky jsou KLÍČOVÉ. Zvyšují čitelnost a dwell time.
+Délka: 1200–1800 znaků optimum. Kratší jen pro quick insighty.
+
+═══ HOOK FORMULE (vyber jednu — musí být SILNĚJŠÍ než na jiných platformách) ═══
+1. Kontroverze v oboru — "Většina realitních makléřů dělá marketing špatně. A vědí to."
+2. Číslo + neočekávaný výsledek — "Prodali jsme nemovitost za 8,5M. Původní odhad byl 7,2M. Tady je co rozhodlo."
+3. Osobní selhání / poučení — "Před 10 lety jsem podepsal smlouvu, které jsem nerozuměl. Stálo mě to 400 000 Kč."
+4. Přímé zpochybnění konvence — "Nejlepší čas prodávat nemovitost není jaro. Data říkají něco jiného."
+5. Věc, která se změnila — "Hypoteční trh se za posledních 18 měsíců změnil víc než za předchozích 10 let."
+6. Osobní pozorování — "Po 25 letech v realitách jsem si všiml jedné věci, která odděluje rychlé prodeje od zaseklých."
+7. Otázka bez snadné odpovědi — "Jak poznáte, že je cena nemovitosti správná — a ne jen ta, kterou chce slyšet makléř?"
+8. Nepopulární pravda — "Home staging není o vkusu. Je to matematika."
+9. Srovnání dvou světů — "Klient A prodal za 3 týdny. Klient B prodával 8 měsíců. Nemovitosti byly ve stejné čtvrti."
+10. Specifické číslo z praxe — "73 % kupujících rozhoduje o prohlídce podle titulní fotky inzerátu. Ne podle ceny."
+11. Začátek příběhu — "Bylo pondělí ráno a klient mi volal, že ruší spolupráci."
+12. Výzva k přehodnocení — "Pokud si myslíte, že prémiová nemovitost se prodá sama — přečtěte si toto."
+
+═══ TYPY POSTŮ ═══
+
+A) INSIGHT POST (Odborný pohled) — nejlépe fungující formát:
+[Hook — pozorování nebo kontroverze]
+[Kontext — proč je to důležité]
+[Hlavní insight — co jsi zjistil, co data říkají]
+[Praktický závěr — co z toho plyne]
+[Otázka pro diskusi]
+
+B) PŘÍBĚHOVÝ POST — LinkedIn miluje osobní příběhy s obchodním poučením:
+[Zasazení do situace — čas, místo, kontext]
+[Problém nebo napětí]
+[Co se stalo — konkrétní akce]
+[Výsledek — s číslem nebo konkrétním dopadem]
+[Poučení — jedna věta, universálně aplikovatelná]
+[Otázka nebo CTA]
+
+C) SEZNAM / FRAMEWORK — "X věcí" nebo "X kroků":
+Každý bod MUSÍ být konkrétní, ne obecný.
+ŠPATNĚ: "Komunikujte s klienty"
+DOBŘE: "Odpovídejte na každý dotaz do 2 hodin — rychlost odpovědi koreluje s uzavřením obchodu"
+Ideálně 3–7 bodů, každý = 1–3 věty s vysvětlením.
+
+D) DATA POST — čísla fungují na LinkedIn výjimečně:
+[Číslo nebo statistika jako hook]
+[Kontext — co to číslo znamená]
+[Analýza — proč to tak je]
+[Praktický závěr]
+[Zdroj nebo "z vlastní praxe za rok X"]
+
+E) NÁZOROVÝ POST (Thought Leadership) — kontroverze = komentáře = dosah:
+[Jasné stanovisko, ne "záleží na situaci"]
+[Argument 1]
+[Argument 2]
+[Připuštění opačného pohledu — ukáže, že jsi uvažoval o obou stranách]
+[Závěrečné stanovisko]
+["Souhlasíte? Kde vidíte to jinak?"]
+PRAVIDLO: Musí mít reálný argument, ne jen provokaci.
+
+F) CASE STUDY — detailní rozbor jednoho případu, MUSÍ mít čísla:
+SITUACE: Kdo, co, kde, výchozí stav
+VÝZVA: Co byl konkrétní problém
+PŘÍSTUP: Co jsme udělali a proč
+VÝSLEDEK: Konkrétní čísla
+POUČENÍ: Co z toho plyne obecně
+
+G) KARIÉRNÍ / OSOBNÍ POST — mezi nejsdílenějšími:
+Musí mít KONKRÉTNÍ detail.
+ŠPATNĚ: "Naučil jsem se být trpělivý"
+DOBŘE: "V roce 2003 jsem ztratil klienta kvůli e-mailu, který jsem napsal za 2 minuty. Od té doby čtu každý důležitý e-mail dvakrát."
+
+═══ COPYWRITING PRAVIDLA ═══
+- Konkrétní čísla, NE zaokrouhlená (ne "přes 200 transakcí", ale "233 transakcí")
+- Odrážky pomocí —, •, nebo ▸
+- CAPS LOCK šetři — max pro jeden klíčový pojem
+- Osobní hlas: "Viděl jsem...", "Zjistil jsem...", "Udělali jsme..."
+- NIKDY: "Naše společnost nabízí...", "Jsme hrdí na..."
+- NIKDY odkaz v těle postu — vždy napiš "Odkaz v prvním komentáři"
+- NIKDY "Klikněte na odkaz v bio" — to je Instagram logika
+
+═══ CTA FORMULE ═══
+- Otázka do diskuse: "Jak to řešíte vy?"
+- Výzva k uložení: "Uložte si post — přijde vhod"
+- Požádání o sdílení: "Pokud to vidíte stejně, sdílejte"
+- Soft lead gen: "Kdo řeší podobnou situaci, napište mi do DM"
+
+═══ CONTENT MIX ═══
+- Textový post (insight, příběh, seznam): 3–4x týdně
+- Timing: út–čt 7:00–9:00 nebo 11:00–13:00
+- NIKDY dvakrát denně (algoritmus trestá přehlcení)
+- Pondělní ráno a páteční odpoledne jsou nejhorší
+
+═══ KVALITATIVNÍ CHECKLIST (ověř KAŽDÝ post) ═══
+- Hook funguje bez kontextu? Zastaví profíka, který scrolluje mezi lidmi z oboru?
+- Obsahuje KONKRÉTNÍ čísla z praxe (ne obecné "mnoho", "většina")?
+- Je psán osobním hlasem (ne firemním tónem)?
+- Má prázdné řádky mezi odstavci?
+- CTA je otázka vyvolávající diskusi?
+- Žádný odkaz v těle postu?
+- Délka 1200–1800 znaků?
+- 3–5 relevantních hashtagů na konci?
+
+═══ NEJČASTĚJŠÍ CHYBY (vyhni se) ═══
+1. Firemní tón místo osobního hlasu
+2. Obecné sdělení bez konkrétních čísel
+3. Odkaz v těle postu (penalizace dosahu)
+4. Příliš krátký post (pod 800 znaků = promarněný potenciál)
+5. Zaokrouhlená čísla místo přesných
+`;
+
 // ─── Instagram Cookbook (actionable sections only) ───────────
 // Injected into prompt when platform === 'instagram'.
 // Excludes: video production, Stories interactive tools, paid ads.
@@ -765,6 +897,9 @@ export function buildPlatformPromptBlock(platform: string): string {
   }
   if (platform === 'instagram' || platform.startsWith('instagram_')) {
     lines.push(INSTAGRAM_COOKBOOK);
+  }
+  if (platform === 'linkedin' || platform.startsWith('linkedin_')) {
+    lines.push(LINKEDIN_COOKBOOK);
   }
 
   return lines.join('\n');

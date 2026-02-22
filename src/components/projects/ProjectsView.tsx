@@ -976,6 +976,13 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
   const [showAiSuggestions, setShowAiSuggestions] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<KBEntry[]>([]);
 
+  // Inline edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCategory, setEditCategory] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
   const handleAdd = async () => {
     setSaving(true);
     await fetch(`/api/projects/${projectId}/kb`, {
@@ -995,6 +1002,33 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
     onReload();
   };
 
+  const startEdit = (entry: KBEntry) => {
+    setEditingId(entry.id);
+    setEditCategory(entry.category);
+    setEditTitle(entry.title);
+    setEditContent(entry.content);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditCategory('');
+    setEditTitle('');
+    setEditContent('');
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setEditSaving(true);
+    await fetch(`/api/projects/${projectId}/kb`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kbId: editingId, category: editCategory, title: editTitle, content: editContent }),
+    });
+    setEditSaving(false);
+    setEditingId(null);
+    onReload();
+  };
+
   const handleActivate = async (kbId: string) => {
     await fetch(`/api/projects/${projectId}/kb`, {
       method: 'PATCH',
@@ -1008,10 +1042,6 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
   const loadAiSuggestions = async () => {
     setShowAiSuggestions(!showAiSuggestions);
     if (!showAiSuggestions) {
-      const res = await fetch(`/api/projects/${projectId}`);
-      const data = await res.json();
-      // AI suggestions are KB entries with is_active=false — they come from the full project load
-      // We need a separate query for inactive entries
       const allRes = await fetch(`/api/projects/${projectId}/kb?inactive=true`);
       const allData = await allRes.json();
       setAiSuggestions(Array.isArray(allData) ? allData : []);
@@ -1099,30 +1129,74 @@ function TabKB({ projectId, entries, onReload }: { projectId: string; entries: K
       </div>
 
       {/* Entries */}
-      <div className="space-y-2 max-h-80 overflow-y-auto">
+      <div className="space-y-2 max-h-[500px] overflow-y-auto">
         {filtered.length === 0 && (
           <p className="text-sm text-slate-500 text-center py-6">
             {entries.length === 0 ? 'Zatím žádné záznamy. Přidejte fakta, ze kterých bude Hugo generovat obsah.' : 'Žádné záznamy v této kategorii.'}
           </p>
         )}
         {filtered.map((entry) => (
-          <div key={entry.id} className="bg-slate-800 rounded-lg p-3 group">
-            <div className="flex items-start gap-2">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="px-2 py-0.5 rounded-full bg-slate-700 text-xs text-slate-300">{CATEGORY_LABELS[entry.category] || entry.category}</span>
-                  <span className="text-sm font-medium text-white">{entry.title}</span>
+          <div key={entry.id} className="bg-slate-800 rounded-lg overflow-hidden">
+            {editingId === entry.id ? (
+              /* ---- Inline edit mode ---- */
+              <div className="p-3 space-y-3 border border-violet-500/30 rounded-lg">
+                <div className="flex gap-3">
+                  <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                    {CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+                    ))}
+                  </select>
+                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Název faktu"
+                    className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
                 </div>
-                <p className="text-sm text-slate-400">{entry.content}</p>
+                <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={4}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y" />
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-500">{editContent.length} znaků</span>
+                  <div className="flex gap-2">
+                    <button onClick={cancelEdit} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-colors">
+                      Zrušit
+                    </button>
+                    <button
+                      onClick={saveEdit}
+                      disabled={editSaving || !editTitle || !editContent}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-500 disabled:opacity-50 transition-colors"
+                    >
+                      <Save className="w-3 h-3" /> {editSaving ? 'Ukládám...' : 'Uložit'}
+                    </button>
+                  </div>
+                </div>
               </div>
-              <button
-                onClick={() => handleDelete(entry.id)}
-                className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-all flex-shrink-0"
-                title="Smazat"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            ) : (
+              /* ---- View mode ---- */
+              <div className="p-3 group">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded-full bg-slate-700 text-xs text-slate-300">{CATEGORY_LABELS[entry.category] || entry.category}</span>
+                      <span className="text-sm font-medium text-white">{entry.title}</span>
+                    </div>
+                    <p className="text-sm text-slate-400">{entry.content}</p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                    <button
+                      onClick={() => startEdit(entry)}
+                      className="px-2.5 py-1 rounded text-xs text-violet-400 hover:bg-violet-600/20 transition-colors"
+                    >
+                      Upravit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(entry.id)}
+                      className="p-1.5 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors"
+                      title="Smazat"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

@@ -81,6 +81,17 @@ const CATEGORY_LABELS: Record<string, string> = {
   purchase_intent: 'Nákupní záměr',
 };
 
+function getSchemaTypeHelp(type: string): string {
+  const help: Record<string, string> = {
+    FAQ: 'Otázky a odpovědi — AI použije jako zdroj pro FAQ dotazy',
+    Organization: 'Firma/značka — základní info o entitě (název, popis, sameAs)',
+    Dataset: 'Datové body — ceny, statistiky, trendy (pro AI citace čísel)',
+    HowTo: 'Návody krok za krokem — AI použije pro "jak na to" dotazy',
+    WebPage: 'Základní metadata stránky — about, mentions, datePublished',
+  };
+  return help[type] || type;
+}
+
 // ============================================
 // Tab: GitHub Repo (AIO Site)
 // ============================================
@@ -197,8 +208,10 @@ export function TabAioSite({ projectId }: { projectId: string }) {
             value={repo}
             onChange={(e) => setRepo(e.target.value)}
             placeholder="viadorer/odhad-online"
+            title="Formát: username/repository (např. viadorer/odhad-online)"
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
           />
+          <p className="text-xs text-slate-500 mt-1">Formát: <code className="text-slate-400">username/repository</code> — musíš mít write přístup přes GITHUB_PAT</p>
         </div>
 
         {/* Branch */}
@@ -208,8 +221,10 @@ export function TabAioSite({ projectId }: { projectId: string }) {
             value={branch}
             onChange={(e) => setBranch(e.target.value)}
             placeholder="main"
+            title="Název větve (main, master, gh-pages...)"
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
           />
+          <p className="text-xs text-slate-500 mt-1">Většinou <code className="text-slate-400">main</code> nebo <code className="text-slate-400">gh-pages</code></p>
         </div>
       </div>
 
@@ -219,10 +234,11 @@ export function TabAioSite({ projectId }: { projectId: string }) {
         <input
           value={htmlFiles}
           onChange={(e) => setHtmlFiles(e.target.value)}
-          placeholder="index.html, about.html"
+          placeholder="index.html, about.html, kontakt.html"
+          title="Seznam HTML souborů oddělených čárkou"
           className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
         />
-        <p className="text-xs text-slate-500 mt-1">Soubory do kterých se injektuje JSON-LD schema a llms.txt</p>
+        <p className="text-xs text-slate-500 mt-1">📄 Soubory do kterých se injektuje JSON-LD schema do <code className="text-slate-400">&lt;head&gt;</code>. Orchestrator automaticky vytvoří <code className="text-slate-400">llms.txt</code> a <code className="text-slate-400">ai-data.json</code> v rootu.</p>
       </div>
 
       {/* Schema types */}
@@ -235,6 +251,7 @@ export function TabAioSite({ projectId }: { projectId: string }) {
               onClick={() => setSchemaTypes((prev) =>
                 prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
               )}
+              title={getSchemaTypeHelp(t)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 schemaTypes.includes(t)
                   ? 'bg-violet-600 text-white'
@@ -245,6 +262,7 @@ export function TabAioSite({ projectId }: { projectId: string }) {
             </button>
           ))}
         </div>
+        <p className="text-xs text-slate-500 mt-2">💡 <strong>FAQ</strong> = otázky/odpovědi, <strong>Organization</strong> = firma/značka, <strong>Dataset</strong> = datové body (ceny, statistiky), <strong>HowTo</strong> = návody, <strong>WebPage</strong> = základní metadata stránky</p>
       </div>
 
       {/* Entity info (quick) */}
@@ -255,18 +273,22 @@ export function TabAioSite({ projectId }: { projectId: string }) {
             value={entityName}
             onChange={(e) => setEntityName(e.target.value)}
             placeholder="odhad.online"
+            title="Oficiální název značky/služby"
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
           />
+          <p className="text-xs text-slate-500 mt-1">Přesně tak, jak má AI tuto značku nazývat</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-1.5">sameAs URLs (po řádcích)</label>
           <textarea
             value={sameAsUrls}
             onChange={(e) => setSameAsUrls(e.target.value)}
-            placeholder={"https://firmy.cz/...\nhttps://linkedin.com/..."}
+            placeholder={"https://firmy.cz/detail/123\nhttps://linkedin.com/company/...\nhttps://wikidata.org/entity/Q123"}
+            title="Wikidata, LinkedIn, Firmy.cz, ARES — propojení identity"
             rows={2}
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none font-mono"
           />
+          <p className="text-xs text-slate-500 mt-1">🔗 Propojení na Wikidata, LinkedIn, Firmy.cz — zvyšuje důvěryhodnost v AI</p>
         </div>
       </div>
 
@@ -276,10 +298,12 @@ export function TabAioSite({ projectId }: { projectId: string }) {
         <textarea
           value={entityDesc}
           onChange={(e) => setEntityDesc(e.target.value)}
-          placeholder="Online odhad tržní ceny nemovitosti v ČR..."
+          placeholder="Online odhad tržní ceny nemovitosti v ČR na základě dat z katastru nemovitostí a realizovaných prodejů. Služba pokrývá byty, domy a pozemky ve všech krajích."
+          title="Krátký faktický popis služby/produktu pro schema.org"
           rows={3}
           className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
         />
+        <p className="text-xs text-slate-500 mt-1">📝 Faktický popis (1-3 věty) — co služba dělá, pro koho, jak funguje. Bez marketingových frází.</p>
       </div>
 
       {/* Actions */}

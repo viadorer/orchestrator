@@ -2253,39 +2253,11 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
 
     if ((kbCount || 0) === 0) { skip('no_kb'); continue; }
 
-    // 6. Check posting interval (respect frequency)
-    const { data: lastPost } = await supabase
-      .from('content_queue')
-      .select('created_at')
-      .eq('project_id', project.id)
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    const lastPostDate = lastPost?.[0]?.created_at;
-    const hoursSinceLastPost = lastPostDate
-      ? (Date.now() - new Date(lastPostDate).getTime()) / (1000 * 60 * 60)
-      : 999;
-
-    const requiredInterval = getPostingIntervalHours(config.posting_frequency);
-    if (hoursSinceLastPost < requiredInterval) { skip('too_recent'); continue; }
-
-    // 7. Check daily post limit
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const { count: todayCount } = await supabase
-      .from('content_queue')
-      .select('id', { count: 'exact' })
-      .eq('project_id', project.id)
-      .gte('created_at', todayStart.toISOString());
-
-    if ((todayCount || 0) >= config.max_posts_per_day) { skip('daily_limit_reached'); continue; }
-
-    // 8. Schedule content generation – one task per platform, linked by content_group_id
+    // 6. Resolve platforms with getLate accounts
     const allPlatforms = config.platforms_priority.length > 0
       ? config.platforms_priority
       : (project.platforms as string[]) || ['facebook'];
 
-    // Filter: only generate for platforms that have a getLate account configured
     const lateAccounts = (project.late_accounts as Record<string, string>) || {};
     const platforms = allPlatforms.filter(p => {
       if (lateAccounts[p]) return true;
@@ -2295,17 +2267,47 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
 
     if (platforms.length === 0) { skip('no_late_accounts'); continue; }
 
-    // Check if we can generate at least one content group today
-    const remainingSlots = config.max_posts_per_day - (todayCount || 0);
-    if (remainingSlots <= 0) { skip('daily_limit_reached'); continue; }
-
-    // Generate one content group (= one topic, N platform variants)
-    // Tasks are created with scheduled_for=now so they execute in this same cron run.
-    // Execution delay between tasks is handled in runPendingTasks() (3-8s between each).
+    // 7. Per-platform scheduling: interval + daily limit checked independently per platform
+    const requiredInterval = getPostingIntervalHours(config.posting_frequency);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
     const contentGroupId = randomUUID();
+    let platformsScheduled = 0;
 
-    for (let i = 0; i < platforms.length; i++) {
-      const platform = platforms[i];
+    for (const platform of platforms) {
+      // 7a. Check posting interval per platform
+      const { data: lastPlatformPost } = await supabase
+        .from('content_queue')
+        .select('created_at')
+        .eq('project_id', project.id)
+        .eq('target_platform', platform)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const lastPostDate = lastPlatformPost?.[0]?.created_at;
+      const hoursSinceLastPost = lastPostDate
+        ? (Date.now() - new Date(lastPostDate).getTime()) / (1000 * 60 * 60)
+        : 999;
+
+      if (hoursSinceLastPost < requiredInterval) {
+        skip(`too_recent:${platform}`);
+        continue;
+      }
+
+      // 7b. Check daily post limit per platform
+      const { count: todayPlatformCount } = await supabase
+        .from('content_queue')
+        .select('id', { count: 'exact' })
+        .eq('project_id', project.id)
+        .eq('target_platform', platform)
+        .gte('created_at', todayStart.toISOString());
+
+      if ((todayPlatformCount || 0) >= config.max_posts_per_day) {
+        skip(`daily_limit:${platform}`);
+        continue;
+      }
+
+      // 7c. Schedule content generation for this platform
       await createTask(project.id, 'generate_content', {
         platform,
         content_group_id: contentGroupId,
@@ -2314,8 +2316,11 @@ export async function autoScheduleProjects(): Promise<{ scheduled: number; proje
         auto_publish: config.auto_publish,
         auto_publish_threshold: config.auto_publish_threshold,
       }, { priority: 3 });
+      platformsScheduled++;
       scheduled++;
     }
+
+    if (platformsScheduled === 0) { skip('all_platforms_throttled'); }
 
   }
 

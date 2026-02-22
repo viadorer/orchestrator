@@ -566,7 +566,7 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
           {/* Max per day + timezone */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1.5">Max postů/den</label>
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Max postů/den/platforma</label>
               <input
                 type="number" min={1} max={10} value={maxPerDay}
                 onChange={e => setMaxPerDay(parseInt(e.target.value, 10) || 1)}

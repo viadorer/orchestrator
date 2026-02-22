@@ -9,6 +9,7 @@ import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, type PromptContext } from './prompt-builder';
+import { resolvePlatformMix, CONTENT_TYPE_LABELS, type ContentType } from '@/lib/platforms';
 import { generateVisualAssets, type VisualAssets } from '@/lib/visual/visual-agent';
 import { hugoEditorReview, type EditorContext } from './hugo-editor';
 
@@ -113,6 +114,144 @@ export async function getNextContentType(
 }
 
 /**
+ * Platform-aware content type selection.
+ * Uses platform-specific types from cookbooks + weekly frequency tracking.
+ * Falls back to getNextContentType if no platform mix is available.
+ * 
+ * @returns { type, mixStatus } — chosen type + full status for prompt injection
+ */
+export interface MixStatus {
+  platform: string;
+  targetMix: Record<string, number>;
+  thisWeekCounts: Record<string, number>;
+  totalThisWeek: number;
+  chosenType: string;
+  chosenTypeLabel: string;
+  deficits: Array<{ type: string; label: string; target: number; actual: number; deficit: number }>;
+}
+
+export async function getNextPlatformContentType(
+  projectId: string,
+  platform: string,
+  projectMix?: Record<string, number> | null,
+  platformOverride?: Partial<Record<ContentType, number>> | null,
+): Promise<MixStatus> {
+  const targetMix = resolvePlatformMix(platform, projectMix, platformOverride);
+  const thisWeekCounts: Record<string, number> = {};
+
+  if (!supabase) {
+    const firstType = Object.keys(targetMix)[0] || 'educational';
+    return {
+      platform,
+      targetMix,
+      thisWeekCounts: {},
+      totalThisWeek: 0,
+      chosenType: firstType,
+      chosenTypeLabel: CONTENT_TYPE_LABELS[firstType as ContentType] || firstType,
+      deficits: [],
+    };
+  }
+
+  // Calculate start of current week (Monday 00:00 in UTC)
+  const now = new Date();
+  const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon, ...
+  const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const weekStart = new Date(now);
+  weekStart.setUTCDate(now.getUTCDate() - mondayOffset);
+  weekStart.setUTCHours(0, 0, 0, 0);
+
+  // Query this week's posts for this project × platform
+  const [queueRes, historyRes] = await Promise.all([
+    supabase
+      .from('content_queue')
+      .select('content_type')
+      .eq('project_id', projectId)
+      .eq('target_platform', platform)
+      .in('status', ['review', 'approved', 'scheduled', 'sent', 'published'])
+      .gte('created_at', weekStart.toISOString()),
+    supabase
+      .from('post_history')
+      .select('content_type')
+      .eq('project_id', projectId)
+      .eq('platform', platform)
+      .gte('posted_at', weekStart.toISOString()),
+  ]);
+
+  // Count types from both sources (deduplicated by type counting)
+  const allPosts = [
+    ...(queueRes.data || []),
+    ...(historyRes.data || []),
+  ];
+
+  for (const post of allPosts) {
+    const t = post.content_type || 'educational';
+    thisWeekCounts[t] = (thisWeekCounts[t] || 0) + 1;
+  }
+
+  // Calculate deficits: target frequency - actual count this week
+  const deficits: MixStatus['deficits'] = [];
+  for (const [type, target] of Object.entries(targetMix)) {
+    const actual = thisWeekCounts[type] || 0;
+    const deficit = target - actual;
+    deficits.push({
+      type,
+      label: CONTENT_TYPE_LABELS[type as ContentType] || type,
+      target,
+      actual,
+      deficit,
+    });
+  }
+
+  // Sort by deficit descending (most underrepresented first)
+  deficits.sort((a, b) => b.deficit - a.deficit);
+
+  // Choose the type with the highest deficit
+  // If all deficits are <= 0 (all targets met), pick the one with highest target (most important)
+  let chosenType: string;
+  const positiveDeficits = deficits.filter(d => d.deficit > 0);
+  if (positiveDeficits.length > 0) {
+    chosenType = positiveDeficits[0].type;
+  } else {
+    // All targets met this week — pick the highest-frequency type for "bonus" post
+    const sorted = Object.entries(targetMix).sort((a, b) => b[1] - a[1]);
+    chosenType = sorted[0]?.[0] || 'educational';
+  }
+
+  return {
+    platform,
+    targetMix,
+    thisWeekCounts,
+    totalThisWeek: allPosts.length,
+    chosenType,
+    chosenTypeLabel: CONTENT_TYPE_LABELS[chosenType as ContentType] || chosenType,
+    deficits,
+  };
+}
+
+/**
+ * Build a prompt block that shows Hugo the current content mix status.
+ * Injected into the prompt so Hugo knows what type to create and why.
+ */
+export function buildMixStatusBlock(status: MixStatus): string {
+  const lines: string[] = [];
+  lines.push(`\n--- CONTENT MIX TENTO TÝDEN (${status.platform.toUpperCase()}) ---`);
+  lines.push(`Celkem postů tento týden: ${status.totalThisWeek}`);
+  lines.push('');
+
+  for (const d of status.deficits) {
+    const check = d.actual >= d.target ? '✅' : '⬜';
+    const arrow = d.type === status.chosenType ? ' ← VYTVOŘ TENTO TYP' : '';
+    lines.push(`${check} ${d.label}: ${d.actual}/${d.target}${arrow}`);
+  }
+
+  lines.push('');
+  lines.push(`DOPORUČENÝ TYP PRO TENTO POST: ${status.chosenTypeLabel.toUpperCase()}`);
+  lines.push(`Pokud nemáš silné téma pro "${status.chosenTypeLabel}", vyber další nesplněný typ ze seznamu výše.`);
+
+  return lines.join('\n');
+}
+
+/**
  * Load project context from DB
  */
 async function loadProjectContext(projectId: string): Promise<{
@@ -163,15 +302,34 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
 
   const project = ctx.project;
 
-  // Determine content type
-  const contentMix = (project.content_mix as Record<string, number>) || { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 };
+  // Determine content type (platform-aware)
+  const legacyMix = (project.content_mix as Record<string, number>) || null;
+  const orchConfig = (project.orchestrator_config as Record<string, unknown>) || {};
+  const platformContentMixAll = (orchConfig.platform_content_mix as Record<string, Record<string, number>>) || {};
+  const platformOverride = (platformContentMixAll[req.platform] as Partial<Record<ContentType, number>>) || null;
   const wasExplicit = !!req.contentType;
-  const contentType = (req.contentType || await getNextContentType(req.projectId, contentMix)) as PromptContext['contentType'];
+
+  let contentType: PromptContext['contentType'];
+  if (wasExplicit) {
+    contentType = req.contentType as PromptContext['contentType'];
+  } else {
+    const mixStatus = await getNextPlatformContentType(
+      req.projectId, req.platform, legacyMix, platformOverride,
+    );
+    contentType = mixStatus.chosenType as PromptContext['contentType'];
+    reasoning.mix_status = {
+      platform: mixStatus.platform,
+      thisWeekCounts: mixStatus.thisWeekCounts,
+      totalThisWeek: mixStatus.totalThisWeek,
+      chosenType: mixStatus.chosenType,
+      deficits: mixStatus.deficits,
+    };
+  }
   
   reasoning.content_type_decision = {
     chosen: contentType,
-    source: wasExplicit ? 'explicit' : 'auto_4-1-1',
-    target_mix: contentMix,
+    source: wasExplicit ? 'explicit' : 'platform_mix_tracking',
+    target_mix: platformOverride || legacyMix,
   };
 
   // Load pattern if specified
@@ -348,8 +506,8 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
   }
 
   // Read media_strategy from project's orchestrator_config
-  const orchConfig = (project.orchestrator_config as Record<string, unknown>) || {};
-  const mediaStrategy = (orchConfig.media_strategy as string) || 'auto';
+  const mediaOrchConfig = (project.orchestrator_config as Record<string, unknown>) || {};
+  const mediaStrategy = (mediaOrchConfig.media_strategy as string) || 'auto';
 
   // Generate visual assets (chart/card/photo)
   if (mediaStrategy !== 'none' || req.forcePhoto) {

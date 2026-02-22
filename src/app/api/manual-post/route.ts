@@ -193,16 +193,6 @@ export async function POST(request: Request) {
           continue;
         }
 
-        // Verify what actually got saved in DB
-        if (saved?.id) {
-          const { data: verify } = await supabase
-            .from('content_queue')
-            .select('id, template_url, card_url, image_url, media_urls')
-            .eq('id', saved.id)
-            .single();
-          console.log(`[manual-post] VERIFY saved ${saved.id}: template_url=${verify?.template_url ? 'YES' : 'NO'}, card_url=${verify?.card_url ? 'YES' : 'NO'}, image_url=${verify?.image_url ? 'YES' : 'NO'}, media_urls=${Array.isArray(verify?.media_urls) ? verify.media_urls.length : 'NULL'}`);
-        }
-
         results.push({
           project_id: proj.id,
           project_name: projectName,

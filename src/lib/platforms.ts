@@ -31,6 +31,178 @@ export interface ContentSpec {
   emojiPolicy: string;    // 'none', 'minimal', 'moderate'
 }
 
+// ============================================
+// Platform-Specific Content Types & Mix
+// ============================================
+
+/** All content types used across platforms. Superset — not every platform uses all. */
+export type ContentType =
+  | 'educational'
+  | 'story'
+  | 'social_proof'
+  | 'bts'           // behind the scenes
+  | 'local'
+  | 'quick_tip'
+  | 'promo'
+  | 'insight'       // LinkedIn: odborný pohled
+  | 'data_post'     // LinkedIn/X: čísla a statistiky
+  | 'opinion'       // LinkedIn: thought leadership
+  | 'case_study'
+  | 'career'        // LinkedIn: kariérní/osobní
+  | 'standalone'    // X: standalone tweet
+  | 'thread'        // X: vlákno
+  | 'quote'         // X: quote tweet
+  | 'myth_vs_truth' // TikTok: mýtus vs. pravda
+  | 'soft_sell'     // backward compat
+  | 'hard_sell'     // backward compat
+  | 'news'          // backward compat
+  | 'engagement';   // backward compat
+
+/** Human-readable labels for content types (Czech) */
+export const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
+  educational: 'Vzdělávací',
+  story: 'Příběh',
+  social_proof: 'Sociální důkaz',
+  bts: 'Zákulisí (BTS)',
+  local: 'Lokální obsah',
+  quick_tip: 'Rychlý tip',
+  promo: 'Promo / Nabídka',
+  insight: 'Odborný pohled',
+  data_post: 'Data & Čísla',
+  opinion: 'Názor / Thought Leadership',
+  case_study: 'Případová studie',
+  career: 'Kariérní / Osobní',
+  standalone: 'Standalone tweet',
+  thread: 'Vlákno (Thread)',
+  quote: 'Quote tweet',
+  myth_vs_truth: 'Mýtus vs. Pravda',
+  soft_sell: 'Soft-sell',
+  hard_sell: 'Hard-sell',
+  news: 'Aktuality',
+  engagement: 'Engagement',
+};
+
+/** Content type descriptions for admin UI tooltips (Czech) */
+export const CONTENT_TYPE_DESCRIPTIONS: Record<ContentType, string> = {
+  educational: 'Budování expertní pozice, tipy, návody, vzdělávací obsah',
+  story: 'Příběhy klientů, osobní zkušenosti s poučením',
+  social_proof: 'Recenze, výsledky, reference, čísla z praxe',
+  bts: 'Zákulisí práce, příprava, den v životě — buduje důvěru',
+  local: 'Lokálně relevantní obsah — vývoj v oboru, novinky z regionu',
+  quick_tip: 'Jeden tip, jedna věta — snadno sdílitelné',
+  promo: 'Přímá nabídka, výzva k akci, produkt',
+  insight: 'Odborný pohled na trend nebo problém v oboru',
+  data_post: 'Post postavený na konkrétních číslech a statistikách',
+  opinion: 'Kontroverzní nebo nepopulární názor s argumenty',
+  case_study: 'Detailní rozbor jednoho případu s čísly',
+  career: 'Osobní příběh s profesním poučením',
+  standalone: 'Jedna silná věta / myšlenka (pod 280 znaků)',
+  thread: 'Vzdělávací vlákno (5–10 tweetů)',
+  quote: 'Komentář k cizímu tweetu nebo zprávě',
+  myth_vs_truth: '"Říká se, že... Pravda je..." — vzdělání + autorita',
+  soft_sell: 'Případové studie, úspěchy, reference (nepřímý prodej)',
+  hard_sell: 'Přímá výzva k akci, nabídka',
+  news: 'Reakce na aktuální zprávy z oboru',
+  engagement: 'Otázka, anketa, výzva k diskusi',
+};
+
+/**
+ * Default content mix per platform — derived from cookbooks.
+ * Values = weekly frequency (e.g. 2 = 2x/week).
+ * Admin can override per project via `platform_content_mix` in DB.
+ */
+export const DEFAULT_PLATFORM_CONTENT_MIX: Record<string, Partial<Record<ContentType, number>>> = {
+  facebook: {
+    educational: 2,
+    story: 1,
+    social_proof: 1,
+    bts: 1,
+    local: 1,
+    promo: 1,
+  },
+  instagram: {
+    educational: 2,
+    story: 1,
+    social_proof: 1,
+    bts: 1,
+    quick_tip: 1,
+    promo: 1,
+  },
+  linkedin: {
+    insight: 2,
+    story: 1,
+    data_post: 1,
+    opinion: 1,
+    case_study: 1,
+    career: 1,
+  },
+  x: {
+    standalone: 3,
+    thread: 1,
+    data_post: 1,
+    quote: 1,
+    engagement: 1,
+  },
+  tiktok: {
+    educational: 2,
+    bts: 1,
+    story: 1,
+    myth_vs_truth: 1,
+    data_post: 1,
+  },
+};
+
+/**
+ * Which content types are available for each platform.
+ * Used in admin UI to show only relevant types.
+ */
+export function getPlatformContentTypes(platform: string): ContentType[] {
+  const mix = DEFAULT_PLATFORM_CONTENT_MIX[platform];
+  if (mix) return Object.keys(mix) as ContentType[];
+  // Fallback for platforms without a cookbook
+  return ['educational', 'story', 'promo'];
+}
+
+/**
+ * Map old 3-type system to new platform-specific types.
+ * Used for backward compatibility when project has old content_mix format.
+ */
+export const LEGACY_TYPE_MAPPING: Record<string, ContentType[]> = {
+  educational: ['educational', 'insight', 'data_post', 'quick_tip', 'myth_vs_truth', 'thread'],
+  soft_sell: ['story', 'social_proof', 'case_study', 'bts', 'career', 'quote'],
+  hard_sell: ['promo', 'standalone', 'opinion'],
+};
+
+/**
+ * Convert a legacy content_mix { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 }
+ * to platform-specific weekly frequencies using DEFAULT_PLATFORM_CONTENT_MIX.
+ * Returns the platform default if available, otherwise distributes legacy ratios.
+ */
+export function resolvePlatformMix(
+  platform: string,
+  projectMix?: Record<string, number> | null,
+  platformOverride?: Partial<Record<ContentType, number>> | null,
+): Record<string, number> {
+  // 1. Admin override per platform — highest priority
+  if (platformOverride && Object.keys(platformOverride).length > 0) {
+    return platformOverride as Record<string, number>;
+  }
+
+  // 2. Platform default from cookbook
+  const platformDefault = DEFAULT_PLATFORM_CONTENT_MIX[platform];
+  if (platformDefault && Object.keys(platformDefault).length > 0) {
+    return platformDefault as Record<string, number>;
+  }
+
+  // 3. Fallback to legacy project mix (old 3-type system)
+  if (projectMix && Object.keys(projectMix).length > 0) {
+    return projectMix;
+  }
+
+  // 4. Ultimate fallback
+  return { educational: 2, story: 1, promo: 1 };
+}
+
 export interface PlatformLimits {
   name: string;
   maxChars: number;

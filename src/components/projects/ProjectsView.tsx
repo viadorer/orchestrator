@@ -8,6 +8,12 @@ import {
 import { ProjectPrompts } from './ProjectPrompts';
 import { MediaLibrary } from './MediaLibrary';
 import { NewsPanel } from './NewsPanel';
+import {
+  DEFAULT_PLATFORM_CONTENT_MIX,
+  CONTENT_TYPE_LABELS,
+  CONTENT_TYPE_DESCRIPTIONS,
+  getPlatformContentTypes,
+} from '@/lib/platforms';
 
 interface Project {
   id: string;
@@ -499,6 +505,7 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
 
   const buildConfig = () => ({
     orchestrator_config: {
+      ...(project.orchestrator_config || {}),
       enabled, posting_frequency: frequency,
       posting_times: times.split(',').map(t => t.trim()).filter(Boolean),
       max_posts_per_day: maxPerDay, content_strategy: cfg.content_strategy,
@@ -703,12 +710,46 @@ function TabMix({ project, onSave }: { project: Project; onSave: (f: Partial<Pro
   const total = edu + soft + hard;
   const isValid = total === 100;
 
+  // Platform-specific mix state
+  const orchConfig = (project.orchestrator_config || {}) as Record<string, unknown>;
+  const savedPlatformMix = (orchConfig.platform_content_mix as Record<string, Record<string, number>>) || {};
+  const [platformMixes, setPlatformMixes] = useState<Record<string, Record<string, number>>>(() => {
+    const initial: Record<string, Record<string, number>> = {};
+    for (const p of project.platforms || []) {
+      const saved = savedPlatformMix[p];
+      const defaults = (DEFAULT_PLATFORM_CONTENT_MIX[p] as Record<string, number> | undefined);
+      initial[p] = saved && Object.keys(saved).length > 0 ? { ...saved } : (defaults ? { ...defaults } : {});
+    }
+    return initial;
+  });
+  const [expandedPlatform, setExpandedPlatform] = useState<string | null>(null);
+
+  const updatePlatformType = (platform: string, type: string, value: number) => {
+    setPlatformMixes(prev => ({
+      ...prev,
+      [platform]: { ...prev[platform], [type]: value },
+    }));
+  };
+
+  const resetPlatformToDefault = (platform: string) => {
+    const defaults = (DEFAULT_PLATFORM_CONTENT_MIX[platform] as Record<string, number> | undefined);
+    if (defaults) {
+      setPlatformMixes(prev => ({ ...prev, [platform]: { ...defaults } }));
+    }
+  };
+
+  const savePlatformMix = () => {
+    const mergedConfig = { ...orchConfig, platform_content_mix: platformMixes };
+    onSave({ orchestrator_config: mergedConfig } as Partial<Project>);
+  };
+
   return (
-    <div className="space-y-6 max-w-lg">
+    <div className="space-y-8 max-w-2xl">
+      {/* Legacy 4-1-1 */}
       <div>
-        <h3 className="text-sm font-medium text-white mb-1">4-1-1 Pravidlo</h3>
+        <h3 className="text-sm font-medium text-white mb-1">Globální 4-1-1 Pravidlo (fallback)</h3>
         <p className="text-xs text-slate-500 mb-4">
-          Poměr typů obsahu. Doporučeno: 66% edukace, 17% soft-sell, 17% hard-sell. Celkem musí být 100%.
+          Použije se pro platformy bez specifického nastavení níže. Celkem musí být 100%.
         </p>
 
         <div className="space-y-4">
@@ -723,11 +764,91 @@ function TabMix({ project, onSave }: { project: Project; onSave: (f: Partial<Pro
           </span>
           {!isValid && <span className="text-xs text-red-400">Musí být 100%</span>}
         </div>
+
+        <div className="mt-3">
+          <SaveBtn disabled={!isValid} onClick={() => onSave({
+            content_mix: { educational: edu / 100, soft_sell: soft / 100, hard_sell: hard / 100 },
+          } as Partial<Project>)} />
+        </div>
       </div>
 
-      <SaveBtn disabled={!isValid} onClick={() => onSave({
-        content_mix: { educational: edu / 100, soft_sell: soft / 100, hard_sell: hard / 100 },
-      } as Partial<Project>)} />
+      {/* Platform-specific mix */}
+      {(project.platforms || []).length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-white mb-1">Platformový Content Mix</h3>
+          <p className="text-xs text-slate-500 mb-4">
+            Týdenní frekvence typů obsahu per platforma. Hugo automaticky rotuje typy podle tohoto nastavení.
+            Hodnoty = kolikrát za týden (např. 2 = 2× týdně).
+          </p>
+
+          <div className="space-y-2">
+            {(project.platforms || []).map(platform => {
+              const mix = platformMixes[platform] || {};
+              const types = getPlatformContentTypes(platform);
+              const isExpanded = expandedPlatform === platform;
+              const totalWeekly = Object.values(mix).reduce((s, v) => s + v, 0);
+
+              return (
+                <div key={platform} className="border border-slate-700 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setExpandedPlatform(isExpanded ? null : platform)}
+                    className="w-full flex items-center justify-between p-3 hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full ${PLATFORM_COLORS[platform] || 'bg-slate-500'}`} />
+                      <span className="text-sm font-medium text-white">{PLATFORM_LABELS[platform] || platform}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-400">{totalWeekly} postů/týden • {Object.keys(mix).length} typů</span>
+                      <span className="text-slate-500 text-xs">{isExpanded ? '▲' : '▼'}</span>
+                    </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="p-4 pt-2 border-t border-slate-700/50 space-y-3">
+                      {types.map(type => {
+                        const label = CONTENT_TYPE_LABELS[type as keyof typeof CONTENT_TYPE_LABELS] || type;
+                        const desc = CONTENT_TYPE_DESCRIPTIONS[type as keyof typeof CONTENT_TYPE_DESCRIPTIONS] || '';
+                        const val = mix[type] ?? 0;
+                        return (
+                          <div key={type} className="flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-medium text-slate-300" title={desc}>{label}</div>
+                              <div className="text-[10px] text-slate-500 truncate">{desc}</div>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => updatePlatformType(platform, type, Math.max(0, val - 1))}
+                                className="w-6 h-6 rounded bg-slate-700 text-slate-300 text-xs hover:bg-slate-600 flex items-center justify-center"
+                              >−</button>
+                              <span className="w-6 text-center text-sm font-bold text-white">{val}</span>
+                              <button
+                                onClick={() => updatePlatformType(platform, type, val + 1)}
+                                className="w-6 h-6 rounded bg-slate-700 text-slate-300 text-xs hover:bg-slate-600 flex items-center justify-center"
+                              >+</button>
+                              <span className="text-[10px] text-slate-500 w-10">×/týden</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <button
+                        onClick={() => resetPlatformToDefault(platform)}
+                        className="text-xs text-violet-400 hover:text-violet-300 mt-2"
+                      >
+                        Obnovit výchozí z kuchařky
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-4">
+            <SaveBtn onClick={savePlatformMix} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

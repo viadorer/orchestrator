@@ -22,9 +22,9 @@ import { supabase } from '@/lib/supabase/client';
 import { buildContentPrompt, getPromptTemplate, getProjectPrompts, type PromptContext } from './prompt-builder';
 import { generateVisualAssets } from '@/lib/visual/visual-agent';
 import { getRelevantNews } from '@/lib/rss/fetcher';
-import { getNextContentType } from './content-engine';
+import { getNextPlatformContentType, buildMixStatusBlock } from './content-engine';
 import { hugoEditorReview } from './hugo-editor';
-import { getDefaultImageSpec, buildPlatformPromptBlock, PLATFORM_LIMITS } from '@/lib/platforms';
+import { getDefaultImageSpec, buildPlatformPromptBlock, PLATFORM_LIMITS, type ContentType } from '@/lib/platforms';
 
 // ============================================
 // Constants
@@ -338,9 +338,32 @@ async function buildAgentPrompt(
   switch (taskType) {
     case 'generate_content': {
       const platform = (params.platform as string) || (project.platforms as string[])?.[0] || 'linkedin';
-      // Smart content type selection: use getNextContentType if not explicitly set
-      const contentMix = (project.content_mix as Record<string, number>) || { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 };
-      const contentType = (params.contentType as string) || await getNextContentType(project.id as string, contentMix);
+
+      // ---- Platform-aware content type selection ----
+      // Priority: explicit param > platform mix tracking > legacy fallback
+      const legacyMix = (project.content_mix as Record<string, number>) || null;
+      const orchConfig = (project.orchestrator_config as Record<string, unknown>) || {};
+      const platformContentMix = (orchConfig.platform_content_mix as Record<string, Record<string, number>>) || {};
+      const platformOverride = (platformContentMix[platform] as Partial<Record<ContentType, number>>) || null;
+
+      let contentType: string;
+      let mixStatusBlock = '';
+
+      if (params.contentType) {
+        // Explicit type from human/task param — respect it, but still show mix status
+        contentType = params.contentType as string;
+        const mixStatus = await getNextPlatformContentType(
+          project.id as string, platform, legacyMix, platformOverride,
+        );
+        mixStatusBlock = buildMixStatusBlock(mixStatus);
+      } else {
+        // Auto-select based on platform mix tracking
+        const mixStatus = await getNextPlatformContentType(
+          project.id as string, platform, legacyMix, platformOverride,
+        );
+        contentType = mixStatus.chosenType;
+        mixStatusBlock = buildMixStatusBlock(mixStatus);
+      }
 
       // ---- Style rules ----
       const styleRules = project.style_rules as Record<string, unknown>;
@@ -353,8 +376,8 @@ async function buildAgentPrompt(
 
       // ---- Content mix context for this generation ----
       parts.push(`\nAKTUÁLNÍ GENEROVÁNÍ: typ="${contentType}", platforma="${platform}"`);
-      parts.push(`CÍLOVÝ MIX: ${JSON.stringify(contentMix)}`);
-      parts.push('Generuj obsah odpovídající zadanému typu. Dodržuj cílový content mix.');
+      parts.push(mixStatusBlock);
+      parts.push('Generuj obsah odpovídající doporučenému typu. Dodržuj týdenní content mix.');
 
       // ---- Load per-project prompts (examples, identity, guardrails, etc.) ----
       const projectPrompts = await getProjectPrompts(project.id as string);
@@ -1685,7 +1708,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
         content_type: resolvedContentType,
         content_type_reason: task.params?.contentType
           ? 'explicit (human/task param)'
-          : `4-1-1 rule: ${resolvedContentType} selected by getNextContentType`,
+          : `platform_mix: ${resolvedContentType} selected by getNextPlatformContentType`,
         platform,
         kb_entries_used: ctx.kbEntries.length,
         kb_categories: [...new Set(ctx.kbEntries.map(e => e.category))],
@@ -1852,9 +1875,20 @@ async function generateContentWithRetry(
 ): Promise<Record<string, unknown>> {
   const params = (task.params as Record<string, unknown>) || {};
   const platform = (params.platform as string) || (ctx.project.platforms as string[])?.[0] || 'linkedin';
-  // Resolve content type once (same logic as buildAgentPrompt)
-  const contentMix = (ctx.project.content_mix as Record<string, number>) || { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 };
-  const resolvedContentType = (params.contentType as string) || await getNextContentType(task.project_id as string, contentMix);
+  // Resolve content type once (same logic as buildAgentPrompt — platform-aware)
+  let resolvedContentType: string;
+  if (params.contentType) {
+    resolvedContentType = params.contentType as string;
+  } else {
+    const legacyMix = (ctx.project.content_mix as Record<string, number>) || null;
+    const orchConfig = (ctx.project.orchestrator_config as Record<string, unknown>) || {};
+    const platformContentMix = (orchConfig.platform_content_mix as Record<string, Record<string, number>>) || {};
+    const platformOverride = (platformContentMix[platform] as Partial<Record<ContentType, number>>) || null;
+    const mixStatus = await getNextPlatformContentType(
+      task.project_id as string, platform, legacyMix, platformOverride,
+    );
+    resolvedContentType = mixStatus.chosenType;
+  }
   let totalTokens = 0;
   let bestResult: Record<string, unknown> = {};
   let bestScore = 0;

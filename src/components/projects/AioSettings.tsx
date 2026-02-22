@@ -67,10 +67,12 @@ interface AioScore {
   score_date: string;
   visibility_score: number;
   share_of_voice: number;
+  citation_rate: number;
   prompts_tested: number;
   prompts_with_brand: number;
+  prompts_with_citation: number;
   top_competitors: Array<{ name: string; count: number }>;
-  platforms_breakdown: Record<string, { tested: number; mentioned: number }>;
+  platforms_breakdown: Record<string, { tested: number; mentioned: number; cited: number }>;
 }
 
 interface AioAudit {
@@ -79,6 +81,11 @@ interface AioAudit {
   platform: string;
   brand_mentioned: boolean;
   brand_position: number | null;
+  brand_context: string | null;
+  is_source: boolean;
+  citation_url: string | null;
+  citation_urls: string[];
+  search_results: Array<{ title: string; url: string; date?: string }>;
   sentiment: string | null;
   competitors_mentioned: string[];
   created_at: string;
@@ -948,7 +955,7 @@ export function TabAioScores({ projectId }: { projectId: string }) {
       {latestScore ? (
         <>
           {/* Score cards */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-5 gap-3">
             <ScoreCard
               label="Visibility Score"
               value={`${latestScore.visibility_score}`}
@@ -961,14 +968,19 @@ export function TabAioScores({ projectId }: { projectId: string }) {
               color={latestScore.share_of_voice >= 50 ? 'emerald' : latestScore.share_of_voice >= 25 ? 'amber' : 'red'}
             />
             <ScoreCard
-              label="Prompty testováno"
-              value={`${latestScore.prompts_tested}`}
-              color="violet"
+              label="Citation Rate"
+              value={`${latestScore.citation_rate || 0}%`}
+              color={(latestScore.citation_rate || 0) > 0 ? 'cyan' : 'red'}
             />
             <ScoreCard
-              label="Značka zmíněna"
+              label="Zmíněno"
               value={`${latestScore.prompts_with_brand}/${latestScore.prompts_tested}`}
               color={latestScore.prompts_with_brand > 0 ? 'emerald' : 'red'}
+            />
+            <ScoreCard
+              label="Citováno"
+              value={`${latestScore.prompts_with_citation || 0}/${latestScore.prompts_tested}`}
+              color={(latestScore.prompts_with_citation || 0) > 0 ? 'cyan' : 'red'}
             />
           </div>
 
@@ -977,15 +989,37 @@ export function TabAioScores({ projectId }: { projectId: string }) {
             <div>
               <h4 className="text-sm font-medium text-slate-300 mb-3">Platformy</h4>
               <div className="grid grid-cols-3 gap-3">
-                {Object.entries(latestScore.platforms_breakdown).map(([platform, data]) => (
-                  <div key={platform} className="p-3 rounded-lg bg-slate-800 border border-slate-700">
-                    <div className="text-xs font-medium text-slate-400 capitalize mb-1">{platform}</div>
-                    <div className="text-lg font-bold text-white">
-                      {data.tested > 0 ? Math.round((data.mentioned / data.tested) * 100) : 0}%
+                {Object.entries(latestScore.platforms_breakdown).map(([platform, data]) => {
+                  const mentionPct = data.tested > 0 ? Math.round((data.mentioned / data.tested) * 100) : 0;
+                  const citePct = data.tested > 0 ? Math.round(((data.cited || 0) / data.tested) * 100) : 0;
+                  return (
+                    <div key={platform} className="p-3 rounded-lg bg-slate-800 border border-slate-700">
+                      <div className="text-xs font-medium text-slate-400 capitalize mb-2">{platform}</div>
+                      <div className="flex items-end gap-3">
+                        <div>
+                          <div className="text-lg font-bold text-white">{mentionPct}%</div>
+                          <div className="text-xs text-slate-500">{data.mentioned}/{data.tested} zmíněno</div>
+                        </div>
+                        {(data.cited || 0) > 0 && (
+                          <div>
+                            <div className="text-lg font-bold text-cyan-400">{citePct}%</div>
+                            <div className="text-xs text-cyan-500/70">{data.cited}/{data.tested} citováno</div>
+                          </div>
+                        )}
+                      </div>
+                      {data.tested > 0 && (
+                        <div className="mt-2 flex gap-1">
+                          <div className="h-1.5 rounded-full bg-emerald-500/30 flex-1">
+                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${mentionPct}%` }} />
+                          </div>
+                          <div className="h-1.5 rounded-full bg-cyan-500/30 flex-1">
+                            <div className="h-full rounded-full bg-cyan-500" style={{ width: `${citePct}%` }} />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-xs text-slate-500">{data.mentioned}/{data.tested} zmíněno</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1020,6 +1054,9 @@ export function TabAioScores({ projectId }: { projectId: string }) {
                     </div>
                     <span className="text-slate-400 w-12 text-right">{s.visibility_score}</span>
                     <span className="text-slate-500 w-16 text-right">{s.share_of_voice}% SoV</span>
+                    {(s.citation_rate || 0) > 0 && (
+                      <span className="text-cyan-400 w-16 text-right">{s.citation_rate}% cit</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1038,23 +1075,50 @@ export function TabAioScores({ projectId }: { projectId: string }) {
       {audits.length > 0 && (
         <div>
           <h4 className="text-sm font-medium text-slate-300 mb-3">Poslední audit výsledky</h4>
-          <div className="space-y-1.5">
-            {audits.slice(0, 10).map((a) => (
-              <div key={a.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-xs">
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.brand_mentioned ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                <span className="text-slate-300 flex-1 truncate">{a.prompt}</span>
-                <span className="text-slate-500 capitalize">{a.platform}</span>
-                {a.brand_position && (
-                  <span className="text-amber-400">#{a.brand_position}</span>
+          <div className="space-y-2">
+            {audits.slice(0, 15).map((a) => (
+              <div key={a.id} className="p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                <div className="flex items-center gap-3 text-xs">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.brand_mentioned ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                  <span className="text-slate-300 flex-1 truncate text-sm">{a.prompt}</span>
+                  <span className="text-slate-500 capitalize">{a.platform}</span>
+                  {a.brand_position && (
+                    <span className="text-amber-400">#{a.brand_position}</span>
+                  )}
+                  {a.is_source && (
+                    <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400">citováno</span>
+                  )}
+                  {a.sentiment && (
+                    <span className={`px-1.5 py-0.5 rounded ${
+                      a.sentiment === 'positive' ? 'bg-emerald-500/10 text-emerald-400' :
+                      a.sentiment === 'negative' ? 'bg-red-500/10 text-red-400' :
+                      'bg-slate-700 text-slate-400'
+                    }`}>
+                      {a.sentiment}
+                    </span>
+                  )}
+                </div>
+                {a.brand_context && (
+                  <p className="text-xs text-slate-400 mt-1.5 pl-5 italic">&ldquo;{a.brand_context}&rdquo;</p>
                 )}
-                {a.sentiment && (
-                  <span className={`px-1.5 py-0.5 rounded ${
-                    a.sentiment === 'positive' ? 'bg-emerald-500/10 text-emerald-400' :
-                    a.sentiment === 'negative' ? 'bg-red-500/10 text-red-400' :
-                    'bg-slate-700 text-slate-400'
-                  }`}>
-                    {a.sentiment}
-                  </span>
+                {a.citation_urls && a.citation_urls.length > 0 && (
+                  <div className="mt-1.5 pl-5 flex flex-wrap gap-1">
+                    {a.citation_urls.map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 truncate max-w-xs">
+                        {url.replace(/^https?:\/\//, '').substring(0, 50)}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {a.search_results && a.search_results.length > 0 && !a.citation_urls?.length && (
+                  <div className="mt-1.5 pl-5">
+                    <span className="text-xs text-slate-500">Nalezeno v search: </span>
+                    {a.search_results.slice(0, 3).map((sr, i) => (
+                      <a key={i} href={sr.url} target="_blank" rel="noopener noreferrer" className="text-xs text-slate-400 hover:text-slate-300 mr-2">
+                        {sr.title?.substring(0, 40) || sr.url.replace(/^https?:\/\//, '').substring(0, 30)}
+                      </a>
+                    ))}
+                  </div>
                 )}
               </div>
             ))}
@@ -1069,13 +1133,14 @@ function ScoreCard({ label, value, suffix, color }: {
   label: string;
   value: string;
   suffix?: string;
-  color: 'emerald' | 'amber' | 'red' | 'violet';
+  color: 'emerald' | 'amber' | 'red' | 'violet' | 'cyan';
 }) {
   const colorMap = {
     emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
     amber: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
     red: 'text-red-400 bg-red-500/10 border-red-500/20',
     violet: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
+    cyan: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
   };
 
   return (

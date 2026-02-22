@@ -11,7 +11,7 @@ export async function GET(request: Request) {
 
   const { data } = await supabase
     .from('aio_audits')
-    .select('id, prompt, platform, brand_mentioned, brand_position, sentiment, competitors_mentioned, created_at')
+    .select('id, prompt, platform, brand_mentioned, brand_position, brand_context, is_source, citation_url, citation_urls, search_results, sentiment, competitors_mentioned, created_at')
     .eq('project_id', projectId)
     .order('created_at', { ascending: false })
     .limit(limit);

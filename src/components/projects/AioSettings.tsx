@@ -10,6 +10,8 @@ import {
 // Types
 // ============================================
 
+type SiteType = 'html' | 'nextjs' | 'astro' | 'hugo' | 'sveltekit';
+
 interface AioSite {
   id: string;
   project_id: string;
@@ -23,6 +25,10 @@ interface AioSite {
   same_as_urls: string[];
   last_injected_at: string | null;
   last_commit_sha: string | null;
+  site_type: SiteType;
+  layout_file: string | null;
+  public_dir: string;
+  last_rollback_sha: string | null;
 }
 
 interface AioEntityProfile {
@@ -69,6 +75,14 @@ interface AioAudit {
   created_at: string;
 }
 
+const SITE_TYPES: Array<{ id: SiteType; label: string; desc: string }> = [
+  { id: 'html', label: 'Static HTML', desc: 'GitHub Pages, Netlify static' },
+  { id: 'nextjs', label: 'Next.js', desc: 'App Router / Pages Router (Vercel, Railway)' },
+  { id: 'astro', label: 'Astro', desc: 'Astro framework' },
+  { id: 'hugo', label: 'Hugo', desc: 'Hugo static site generator' },
+  { id: 'sveltekit', label: 'SvelteKit', desc: 'SvelteKit framework' },
+];
+
 const SCHEMA_TYPES = ['FAQ', 'Organization', 'Dataset', 'HowTo', 'WebPage'] as const;
 const PROMPT_CATEGORIES = ['how_to', 'pricing', 'recommendation', 'comparison', 'purchase_intent'] as const;
 const ENTITY_CATEGORIES = ['software', 'service', 'information', 'community', 'product'] as const;
@@ -110,6 +124,10 @@ export function TabAioSite({ projectId }: { projectId: string }) {
   const [entityName, setEntityName] = useState('');
   const [entityDesc, setEntityDesc] = useState('');
   const [sameAsUrls, setSameAsUrls] = useState('');
+  const [siteType, setSiteType] = useState<SiteType>('html');
+  const [layoutFile, setLayoutFile] = useState('');
+  const [publicDir, setPublicDir] = useState('');
+  const [detecting, setDetecting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +145,9 @@ export function TabAioSite({ projectId }: { projectId: string }) {
       setEntityName(s.entity_name || '');
       setEntityDesc(s.entity_description || '');
       setSameAsUrls((s.same_as_urls || []).join('\n'));
+      setSiteType(s.site_type || 'html');
+      setLayoutFile(s.layout_file || '');
+      setPublicDir(s.public_dir || '');
     }
     setLoading(false);
   }, [projectId]);
@@ -145,6 +166,9 @@ export function TabAioSite({ projectId }: { projectId: string }) {
       entity_name: entityName || null,
       entity_description: entityDesc || null,
       same_as_urls: sameAsUrls.split('\n').map((u) => u.trim()).filter(Boolean),
+      site_type: siteType,
+      layout_file: layoutFile || null,
+      public_dir: publicDir,
     };
 
     await fetch('/api/agent/aio/site', {
@@ -199,6 +223,87 @@ export function TabAioSite({ projectId }: { projectId: string }) {
           </button>
         </div>
       </div>
+
+      {/* Project type */}
+      <div className="max-w-2xl">
+        <label className="block text-sm font-medium text-slate-300 mb-2">Typ projektu</label>
+        <div className="flex flex-wrap gap-2">
+          {SITE_TYPES.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => {
+                setSiteType(t.id);
+                if (t.id === 'nextjs') { setPublicDir('public'); setLayoutFile(''); }
+                else if (t.id === 'astro') { setPublicDir('public'); setLayoutFile(''); }
+                else if (t.id === 'hugo') { setPublicDir('static'); setLayoutFile('layouts/_default/baseof.html'); }
+                else if (t.id === 'sveltekit') { setPublicDir('static'); setLayoutFile('src/app.html'); }
+                else { setPublicDir(''); setLayoutFile(''); }
+              }}
+              title={t.desc}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                siteType === t.id
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+          {repo && (
+            <button
+              onClick={async () => {
+                setDetecting(true);
+                try {
+                  const res = await fetch(`/api/agent/aio/detect?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`);
+                  if (res.ok) {
+                    const d = await res.json() as { siteType: SiteType; layoutFile: string | null; publicDir: string };
+                    setSiteType(d.siteType);
+                    setLayoutFile(d.layoutFile || '');
+                    setPublicDir(d.publicDir);
+                  }
+                } finally { setDetecting(false); }
+              }}
+              disabled={detecting || !repo}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 transition-colors disabled:opacity-50"
+            >
+              {detecting ? 'Detekuji...' : 'Auto-detect'}
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-slate-500 mt-2">
+          {siteType === 'html' && '📄 Statický web — schema se injektuje přímo do HTML souborů'}
+          {siteType === 'nextjs' && '⚛️ Next.js — schema se injektuje do layout.tsx, statické soubory do /public'}
+          {siteType === 'astro' && '🚀 Astro — schema se injektuje do Layout.astro, statické soubory do /public'}
+          {siteType === 'hugo' && '🏗️ Hugo — schema do baseof.html, statické soubory do /static'}
+          {siteType === 'sveltekit' && '🔥 SvelteKit — schema do app.html, statické soubory do /static'}
+        </p>
+      </div>
+
+      {/* Layout file + public dir (for dynamic projects) */}
+      {siteType !== 'html' && (
+        <div className="grid grid-cols-2 gap-4 max-w-2xl">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Layout soubor</label>
+            <input
+              value={layoutFile}
+              onChange={(e) => setLayoutFile(e.target.value)}
+              placeholder={siteType === 'nextjs' ? 'src/app/layout.tsx' : siteType === 'astro' ? 'src/layouts/Layout.astro' : 'layouts/_default/baseof.html'}
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
+            />
+            <p className="text-xs text-slate-500 mt-1">Soubor kam se injektuje JSON-LD schema (mezi markery)</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">Public adresář</label>
+            <input
+              value={publicDir}
+              onChange={(e) => setPublicDir(e.target.value)}
+              placeholder={siteType === 'hugo' || siteType === 'sveltekit' ? 'static' : 'public'}
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
+            />
+            <p className="text-xs text-slate-500 mt-1">Kam se zapíše llms.txt a ai-data.json</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 max-w-2xl">
         {/* GitHub repo */}

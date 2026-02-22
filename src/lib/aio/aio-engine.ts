@@ -12,7 +12,9 @@ import { generateSchemaBundle, bundleToJsonLd } from './schema-generator';
 import {
   processSiteInjection,
   readFile,
+  detectProjectType,
   type InjectionResult,
+  type SiteType,
 } from './github-injector';
 import { generateLlmsTxtForProject } from './llms-generator';
 
@@ -30,6 +32,10 @@ interface AioSite {
   entity_name: string | null;
   entity_description: string | null;
   same_as_urls: string[] | null;
+  site_type: SiteType;
+  layout_file: string | null;
+  public_dir: string;
+  last_rollback_sha: string | null;
 }
 
 export interface AioInjectionResult {
@@ -79,20 +85,51 @@ export async function processAioSite(
   };
 
   try {
-    // 1. Read first HTML file to extract FAQ from content
+    // 1. Auto-detect project type if not set or set to default
+    let siteType = site.site_type || 'html';
+    let layoutFile = site.layout_file;
+    let publicDir = site.public_dir ?? '';
+
+    if (siteType === 'html' && !layoutFile) {
+      const detected = await detectProjectType(site.github_repo, site.github_branch);
+      if (detected.siteType !== 'html') {
+        siteType = detected.siteType;
+        layoutFile = detected.layoutFile;
+        publicDir = detected.publicDir;
+
+        // Persist detected type so we don't re-detect every time
+        if (supabase) {
+          await supabase
+            .from('aio_sites')
+            .update({
+              site_type: siteType,
+              layout_file: layoutFile,
+              public_dir: publicDir,
+            })
+            .eq('id', site.id);
+        }
+      }
+    }
+
+    // 2. Read content for FAQ extraction
     let htmlContent: string | undefined;
-    if (site.html_files.length > 0) {
+    if (siteType === 'html' && site.html_files.length > 0) {
       const firstFile = await readFile(
         site.github_repo,
         site.html_files[0],
         site.github_branch,
       );
-      if (firstFile) {
-        htmlContent = firstFile.content;
-      }
+      if (firstFile) htmlContent = firstFile.content;
+    } else if (layoutFile) {
+      const layoutContent = await readFile(
+        site.github_repo,
+        layoutFile,
+        site.github_branch,
+      );
+      if (layoutContent) htmlContent = layoutContent.content;
     }
 
-    // 2. Generate schema bundle
+    // 3. Generate schema bundle
     const bundle = await generateSchemaBundle(site.project_id, htmlContent);
     if (!bundle) {
       result.error = 'Failed to generate schema bundle';
@@ -101,18 +138,19 @@ export async function processAioSite(
 
     const jsonLdBlock = bundleToJsonLd(bundle);
 
-    // 3. Generate llms.txt
+    // 4. Generate llms.txt
     const llmsTxt = await generateLlmsTxtForProject(site.project_id);
 
-    // 4. Build ai-data.json from schema bundle
+    // 5. Build ai-data.json from schema bundle
     const aiDataJson: Record<string, unknown> = {
       '@context': 'https://schema.org',
       generatedAt: new Date().toISOString(),
       generatedBy: 'Hugo Orchestrator AIO Engine',
+      projectType: siteType,
       schemas: bundle,
     };
 
-    // 5. Process injection via GitHub API
+    // 6. Process injection via GitHub API
     const injectionResult = await processSiteInjection({
       repo: site.github_repo,
       branch: site.github_branch,
@@ -120,6 +158,9 @@ export async function processAioSite(
       jsonLdBlock,
       llmsTxt: llmsTxt || undefined,
       aiDataJson,
+      siteType,
+      layoutFile,
+      publicDir,
     });
 
     result.success = injectionResult.failed === 0;
@@ -129,13 +170,14 @@ export async function processAioSite(
     result.lastCommitSha = injectionResult.lastCommitSha;
     result.details = injectionResult.results;
 
-    // 6. Update aio_sites record
+    // 7. Update aio_sites record + save rollback SHA
     if (supabase) {
       await supabase
         .from('aio_sites')
         .update({
           last_injected_at: new Date().toISOString(),
           last_commit_sha: injectionResult.lastCommitSha || null,
+          last_rollback_sha: injectionResult.previousSha || site.last_rollback_sha,
           updated_at: new Date().toISOString(),
         })
         .eq('id', site.id);

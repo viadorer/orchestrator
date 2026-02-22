@@ -244,10 +244,25 @@ export async function POST(request: Request) {
 
       console.log(`[publish] Post ${post.id} → platforms: ${targetPlatforms.join(',')}, mediaItems: ${JSON.stringify(mediaItems.map(m => ({ type: m.type, url: m.url.substring(0, 150) })))}, template: ${usedTemplate}`);
 
+      // Add first_comment to platformSpecificData for supported platforms
+      const platformsWithFirstComment = platformEntries.map(entry => {
+        const supportsFirstComment = ['facebook', 'instagram', 'linkedin'].includes(entry.platform);
+        if (supportsFirstComment && post.first_comment) {
+          return {
+            ...entry,
+            platformSpecificData: {
+              ...entry.platformSpecificData,
+              firstComment: post.first_comment,
+            },
+          };
+        }
+        return entry;
+      });
+
       const publisher = getPublisher();
       const publishResult = await publisher.publish({
         content: post.text_content,
-        platforms: platformEntries,
+        platforms: platformsWithFirstComment,
         mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
         scheduledFor: scheduledFor || post.scheduled_for || undefined,
         timezone: 'Europe/Prague',

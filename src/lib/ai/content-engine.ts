@@ -15,6 +15,7 @@ import { hugoEditorReview, type EditorContext } from './hugo-editor';
 
 export interface GeneratedContent {
   text: string;
+  first_comment?: string;
   image_prompt?: string;
   image_spec?: { width: number; height: number; aspectRatio: string };
   alt_text?: string;
@@ -396,6 +397,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
     styleRules: (project.style_rules as Record<string, unknown>) || {},
     constraints: (project.constraints as PromptContext['constraints']) || { forbidden_topics: [], mandatory_terms: [], max_hashtags: 5 },
     semanticAnchors: (project.semantic_anchors as string[]) || [],
+    websiteUrl: (project.website_url as string) || undefined,
     kbEntries: ctx.kbEntries,
     recentPosts: ctx.recentPosts,
     newsContext: [newsContext, feedbackContext].filter(Boolean).join('\n\n---\n'),

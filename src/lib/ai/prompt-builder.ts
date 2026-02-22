@@ -24,6 +24,7 @@ export interface PromptContext {
   constraints: { forbidden_topics: string[]; mandatory_terms: string[]; max_hashtags: number };
   contentMix?: Record<string, number>;
   semanticAnchors: string[];
+  websiteUrl?: string;
   // Knowledge base entries
   kbEntries: Array<{ category: string; title: string; content: string }>;
   // Recent posts for dedup context
@@ -84,6 +85,7 @@ function substituteVariables(template: string, ctx: PromptContext): string {
     '{{ENERGY}}': ctx.moodSettings.energy,
     '{{STYLE}}': ctx.moodSettings.style,
     '{{SEMANTIC_ANCHORS}}': ctx.semanticAnchors.join(', ') || 'Nejsou definovány',
+    '{{WEBSITE_URL}}': ctx.websiteUrl || '',
     '{{FORBIDDEN_TOPICS}}': ctx.constraints.forbidden_topics.length > 0
       ? ctx.constraints.forbidden_topics.map(t => `- ${t}`).join('\n')
       : '- Žádná specifická omezení',
@@ -278,9 +280,15 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
     }
   }
 
+  const supportsFirstComment = ['facebook', 'instagram', 'linkedin'].includes(ctx.platform);
+  const firstCommentInstruction = supportsFirstComment && ctx.websiteUrl
+    ? `  "first_comment": "Krátké CTA + odkaz (POUZE pokud post má CTA). Max 1 věta. Např: 'Kompletní průvodce: ${ctx.websiteUrl}/prirucka' nebo null pokud post nemá CTA.",`
+    : '';
+
   parts.push(`\n---\nVÝSTUP: Vrať POUZE JSON objekt (žádný další text, žádný markdown, žádný \`\`\`json wrapper):
 {
   "text": "Čistý text příspěvku optimalizovaný pro ${ctx.platform}. Délka: ${platformLimits?.optimalChars || 500} znaků.",
+${firstCommentInstruction}
   "image_prompt": "DETAILED English scene description – see rules below",
   "image_spec": ${imgSpecExample},
   "alt_text": "Alt text pro obrázek v češtině (volitelné)",
@@ -296,9 +304,20 @@ export async function buildContentPrompt(ctx: PromptContext): Promise<string> {
 DŮLEŽITÉ PRAVIDLO PRO TEXT:
 ${hashtagRule}
 ${emojiRule}
-- ŽÁDNÉ URL odkazy
+- ŽÁDNÉ URL odkazy v textu (odkazy POUZE v first_comment pokud je podporován)
 - Text musí fungovat sám o sobě jako čistý příspěvek
-- Text MUSÍ mít délku kolem ${platformLimits?.optimalChars || 500} znaků (max ${platformLimits?.maxChars || 2200})
+- Text MUSÍ mít délku kolem ${platformLimits?.optimalChars || 500} znaků (max ${platformLimits?.maxChars || 2200})${supportsFirstComment ? `
+
+FIRST COMMENT (${ctx.platform}):
+- Generuj POUZE pokud post obsahuje CTA (lead magnet, checklist, konzultace, průvodce)
+- Pokud post je čistě edukační BEZ CTA → first_comment vynech (null)
+- Formát: "Krátké CTA: ${ctx.websiteUrl}/konkretni-stranka"
+- Max 1 věta + 1 URL
+- Příklady:
+  ✅ "Kompletní průvodce ke stažení: ${ctx.websiteUrl}/prirucka"
+  ✅ "Checklist zdarma: ${ctx.websiteUrl}/checklist"
+  ✅ "Rezervace konzultace: ${ctx.websiteUrl}/kontakt"
+  ❌ "Klikněte na odkaz v bio" (to je pro Stories, ne feed)` : ''}
 
 PRAVIDLA PRO image_prompt (KRITICKÉ – čti pozorně):
 - MUSÍ být v angličtině

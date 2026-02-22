@@ -1744,6 +1744,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
       const coreInsert: Record<string, unknown> = {
         project_id: task.project_id,
         text_content: result.text as string,
+        first_comment: (result.first_comment as string) || null,
         image_prompt: (result.image_prompt as string) || null,
         content_type: resolvedContentType,
         platforms: [platform],

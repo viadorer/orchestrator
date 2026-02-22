@@ -1603,6 +1603,21 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
           error: r.error,
         })),
       };
+    } else if (task.task_type === 'aio_visibility_audit') {
+      // ---- AIO: Visibility Audit (prompt testing across AI platforms) ----
+      const { runVisibilityAudit } = await import('@/lib/aio/visibility-auditor');
+      const auditResult = await runVisibilityAudit(task.project_id);
+      result = auditResult
+        ? {
+            total_prompts: auditResult.totalPrompts,
+            total_tests: auditResult.totalTests,
+            visibility_score: auditResult.score.visibilityScore,
+            share_of_voice: auditResult.score.shareOfVoice,
+            prompts_with_brand: auditResult.score.promptsWithBrand,
+            top_competitors: auditResult.score.topCompetitors,
+            platforms: auditResult.score.platformsBreakdown,
+          }
+        : { error: 'No entity profile or prompts configured for this project' };
     } else {
       // ---- OTHER TASK TYPES ----
       const prompt = await buildAgentPrompt(task.task_type, ctx, task.params || {});

@@ -86,6 +86,35 @@ export async function GET(request: Request) {
     }
   }
 
+  // 11. AIO Visibility Audit: Sunday morning – test brand visibility in AI search
+  let aioAuditResult = { tested: 0, succeeded: 0 };
+  if (pragueDay === 'Sun' && pragueHour >= 8 && pragueHour <= 10) {
+    try {
+      const { runVisibilityAudit } = await import('@/lib/aio/visibility-auditor');
+      // Load projects that have AIO prompts configured
+      if (supabase) {
+        const { data: aioProjects } = await supabase
+          .from('aio_prompts')
+          .select('project_id')
+          .eq('is_active', true);
+        if (aioProjects) {
+          const uniqueProjectIds = [...new Set(aioProjects.map((p) => p.project_id as string))];
+          for (const pid of uniqueProjectIds) {
+            try {
+              const auditRes = await runVisibilityAudit(pid);
+              if (auditRes) aioAuditResult.succeeded++;
+              aioAuditResult.tested++;
+            } catch {
+              aioAuditResult.tested++;
+            }
+          }
+        }
+      }
+    } catch {
+      // AIO audit failed, continue
+    }
+  }
+
   // 8. Performance optimization: Sunday morning – analyze engagement and learn
   if (pragueDay === 'Sun' && pragueHour >= 8 && pragueHour <= 10) {
     try {
@@ -121,9 +150,11 @@ export async function GET(request: Request) {
     embed_failed: embedResult.failed,
     aio_sites_injected: aioResult.succeeded,
     aio_sites_failed: aioResult.failed,
+    aio_audits_tested: aioAuditResult.tested,
+    aio_audits_succeeded: aioAuditResult.succeeded,
     duration_ms: duration,
     timestamp: new Date().toISOString(),
-    message: `Hugo: ${taskResult.executed} tasks, ${publishResult.published} published, ${rssResult.total_added} news, ${mediaResult.processed} media, ${engagementResult.metrics_updated} engagement, ${embedResult.embedded} embedded, ${aioResult.succeeded} AIO injected.`,
+    message: `Hugo: ${taskResult.executed} tasks, ${publishResult.published} published, ${rssResult.total_added} news, ${mediaResult.processed} media, ${engagementResult.metrics_updated} engagement, ${embedResult.embedded} embedded, ${aioResult.succeeded} AIO injected, ${aioAuditResult.succeeded} AIO audited.`,
   };
 
   // Log cron run to agent_log for admin visibility

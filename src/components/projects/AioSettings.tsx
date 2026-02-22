@@ -287,11 +287,11 @@ export function TabAioSite({ projectId }: { projectId: string }) {
           )}
         </div>
         <p className="text-xs text-slate-500 mt-2">
-          {siteType === 'html' && '📄 Statický web — schema se injektuje přímo do HTML souborů'}
-          {siteType === 'nextjs' && '⚛️ Next.js — schema se injektuje do layout.tsx, statické soubory do /public'}
-          {siteType === 'astro' && '🚀 Astro — schema se injektuje do Layout.astro, statické soubory do /public'}
-          {siteType === 'hugo' && '🏗️ Hugo — schema do baseof.html, statické soubory do /static'}
-          {siteType === 'sveltekit' && '🔥 SvelteKit — schema do app.html, statické soubory do /static'}
+          {siteType === 'html' && 'Statický web — schema se injektuje přímo do HTML souborů'}
+          {siteType === 'nextjs' && 'Next.js — schema se injektuje do layout.tsx, statické soubory do /public'}
+          {siteType === 'astro' && 'Astro — schema se injektuje do Layout.astro, statické soubory do /public'}
+          {siteType === 'hugo' && 'Hugo — schema do baseof.html, statické soubory do /static'}
+          {siteType === 'sveltekit' && 'SvelteKit — schema do app.html, statické soubory do /static'}
         </p>
       </div>
 
@@ -359,7 +359,7 @@ export function TabAioSite({ projectId }: { projectId: string }) {
           title="Seznam HTML souborů oddělených čárkou"
           className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
         />
-        <p className="text-xs text-slate-500 mt-1">📄 Soubory do kterých se injektuje JSON-LD schema do <code className="text-slate-400">&lt;head&gt;</code>. Orchestrator automaticky vytvoří <code className="text-slate-400">llms.txt</code> a <code className="text-slate-400">ai-data.json</code> v rootu.</p>
+        <p className="text-xs text-slate-500 mt-1">Soubory do kterých se injektuje JSON-LD schema do <code className="text-slate-400">&lt;head&gt;</code>. Orchestrator automaticky vytvoří <code className="text-slate-400">llms.txt</code> a <code className="text-slate-400">ai-data.json</code> v rootu.</p>
       </div>
 
       {/* Schema types */}
@@ -383,48 +383,7 @@ export function TabAioSite({ projectId }: { projectId: string }) {
             </button>
           ))}
         </div>
-        <p className="text-xs text-slate-500 mt-2">💡 <strong>FAQ</strong> = otázky/odpovědi, <strong>Organization</strong> = firma/značka, <strong>Dataset</strong> = datové body (ceny, statistiky), <strong>HowTo</strong> = návody, <strong>WebPage</strong> = základní metadata stránky</p>
-      </div>
-
-      {/* Entity info (quick) */}
-      <div className="grid grid-cols-2 gap-4 max-w-2xl">
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1.5">Název entity</label>
-          <input
-            value={entityName}
-            onChange={(e) => setEntityName(e.target.value)}
-            placeholder="odhad.online"
-            title="Oficiální název značky/služby"
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-          />
-          <p className="text-xs text-slate-500 mt-1">Přesně tak, jak má AI tuto značku nazývat</p>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1.5">sameAs URLs (po řádcích)</label>
-          <textarea
-            value={sameAsUrls}
-            onChange={(e) => setSameAsUrls(e.target.value)}
-            placeholder={"https://firmy.cz/detail/123\nhttps://linkedin.com/company/...\nhttps://wikidata.org/entity/Q123"}
-            title="Wikidata, LinkedIn, Firmy.cz, ARES — propojení identity"
-            rows={2}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none font-mono"
-          />
-          <p className="text-xs text-slate-500 mt-1">🔗 Propojení na Wikidata, LinkedIn, Firmy.cz — zvyšuje důvěryhodnost v AI</p>
-        </div>
-      </div>
-
-      {/* Entity description */}
-      <div className="max-w-2xl">
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">Popis entity (pro schema)</label>
-        <textarea
-          value={entityDesc}
-          onChange={(e) => setEntityDesc(e.target.value)}
-          placeholder="Online odhad tržní ceny nemovitosti v ČR na základě dat z katastru nemovitostí a realizovaných prodejů. Služba pokrývá byty, domy a pozemky ve všech krajích."
-          title="Krátký faktický popis služby/produktu pro schema.org"
-          rows={3}
-          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
-        />
-        <p className="text-xs text-slate-500 mt-1">📝 Faktický popis (1-3 věty) — co služba dělá, pro koho, jak funguje. Bez marketingových frází.</p>
+        <p className="text-xs text-slate-500 mt-2">FAQ = otázky/odpovědi, Organization = firma/značka, Dataset = datové body (ceny, statistiky), HowTo = návody, WebPage = základní metadata stránky. Detaily entity vyplň v Entity tabu.</p>
       </div>
 
       {/* Actions */}

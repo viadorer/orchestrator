@@ -58,7 +58,10 @@ export type TaskType =
   | 'image_prompt_review'
   | 'prompt_quality_audit'
   | 'engagement_learning'
-  | 'visual_consistency_audit';
+  | 'visual_consistency_audit'
+  | 'aio_schema_inject'
+  | 'aio_visibility_audit'
+  | 'aio_entity_audit';
 
 export interface AgentTask {
   id: string;
@@ -1583,6 +1586,23 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
       delete result._attempts;
       delete result._total_tokens;
       // Keep _resolved_content_type for saving, will be cleaned up after
+    } else if (task.task_type === 'aio_schema_inject') {
+      // ---- AIO: Schema Injection via GitHub API ----
+      const { runAioInjectionBatch } = await import('@/lib/aio/aio-engine');
+      const aioResult = await runAioInjectionBatch(task.project_id);
+      result = {
+        total_sites: aioResult.totalSites,
+        succeeded: aioResult.succeeded,
+        failed: aioResult.failed,
+        details: aioResult.results.map((r) => ({
+          repo: r.repo,
+          injected: r.injected,
+          skipped: r.skipped,
+          failed: r.failed,
+          commit_sha: r.lastCommitSha,
+          error: r.error,
+        })),
+      };
     } else {
       // ---- OTHER TASK TYPES ----
       const prompt = await buildAgentPrompt(task.task_type, ctx, task.params || {});

@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server';
  * 7. Engagement metrics: Stáhne metriky z getLate.dev (likes, comments, shares)
  * 8. Performance optimization: Analyzuje engagement data a učí se (neděle)
  * 9. Embed posts: Generuje embeddingy pro cross-project dedup (pgvector)
+ * 10. AIO Schema Inject: Pondělí ráno – inject JSON-LD + llms.txt do GitHub repozitářů
  * 
  * Secured by CRON_SECRET header (Vercel automatically sends this)
  */
@@ -72,6 +73,19 @@ export async function GET(request: Request) {
     // Embedding failed, continue
   }
 
+  // 10. AIO Schema Injection: Monday morning – inject JSON-LD + llms.txt into GitHub repos
+  let aioResult = { totalSites: 0, succeeded: 0, failed: 0 };
+  if (pragueDay === 'Mon' && pragueHour >= 8 && pragueHour <= 10) {
+    try {
+      const { runAioInjectionBatch, isAioConfigured } = await import('@/lib/aio/aio-engine');
+      if (isAioConfigured()) {
+        aioResult = await runAioInjectionBatch();
+      }
+    } catch {
+      // AIO injection failed, continue
+    }
+  }
+
   // 8. Performance optimization: Sunday morning – analyze engagement and learn
   if (pragueDay === 'Sun' && pragueHour >= 8 && pragueHour <= 10) {
     try {
@@ -105,9 +119,11 @@ export async function GET(request: Request) {
     engagement_updated: engagementResult.metrics_updated,
     posts_embedded: embedResult.embedded,
     embed_failed: embedResult.failed,
+    aio_sites_injected: aioResult.succeeded,
+    aio_sites_failed: aioResult.failed,
     duration_ms: duration,
     timestamp: new Date().toISOString(),
-    message: `Hugo: ${taskResult.executed} tasks, ${publishResult.published} published, ${rssResult.total_added} news, ${mediaResult.processed} media, ${engagementResult.metrics_updated} engagement, ${embedResult.embedded} embedded.`,
+    message: `Hugo: ${taskResult.executed} tasks, ${publishResult.published} published, ${rssResult.total_added} news, ${mediaResult.processed} media, ${engagementResult.metrics_updated} engagement, ${embedResult.embedded} embedded, ${aioResult.succeeded} AIO injected.`,
   };
 
   // Log cron run to agent_log for admin visibility

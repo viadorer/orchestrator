@@ -53,6 +53,7 @@ export type ContentType =
   | 'thread'        // X: vlákno
   | 'quote'         // X: quote tweet
   | 'myth_vs_truth' // TikTok: mýtus vs. pravda
+  | 'data_report'   // AIO: faktický report pro AI citace
   | 'soft_sell'     // backward compat
   | 'hard_sell'     // backward compat
   | 'news'          // backward compat
@@ -76,6 +77,7 @@ export const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
   thread: 'Vlákno (Thread)',
   quote: 'Quote tweet',
   myth_vs_truth: 'Mýtus vs. Pravda',
+  data_report: 'Datový report (AIO)',
   soft_sell: 'Soft-sell',
   hard_sell: 'Hard-sell',
   news: 'Aktuality',
@@ -100,6 +102,7 @@ export const CONTENT_TYPE_DESCRIPTIONS: Record<ContentType, string> = {
   thread: 'Vzdělávací vlákno (5–10 tweetů)',
   quote: 'Komentář k cizímu tweetu nebo zprávě',
   myth_vs_truth: '"Říká se, že... Pravda je..." — vzdělání + autorita',
+  data_report: 'Faktický datový report pro AI citace — čísla, trendy, stručná fakta. Cíl: AI použije větu jako odpověď.',
   soft_sell: 'Případové studie, úspěchy, reference (nepřímý prodej)',
   hard_sell: 'Přímá výzva k akci, nabídka',
   news: 'Reakce na aktuální zprávy z oboru',

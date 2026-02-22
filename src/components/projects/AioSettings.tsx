@@ -40,7 +40,16 @@ interface AioEntityProfile {
   category: string | null;
   same_as: unknown;
   keywords: string[];
+  wikidata_id: string | null;
+  website_url: string | null;
   last_audit_at: string | null;
+}
+
+interface WikidataResult {
+  id: string;
+  label: string;
+  description: string;
+  url: string;
 }
 
 interface AioPrompt {
@@ -462,6 +471,11 @@ export function TabAioEntity({ projectId }: { projectId: string }) {
   const [category, setCategory] = useState('software');
   const [keywords, setKeywords] = useState('');
   const [sameAs, setSameAs] = useState('');
+  const [wikidataId, setWikidataId] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [wdSearching, setWdSearching] = useState(false);
+  const [wdResults, setWdResults] = useState<WikidataResult[]>([]);
+  const [wdQuery, setWdQuery] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -478,6 +492,8 @@ export function TabAioEntity({ projectId }: { projectId: string }) {
       setKeywords((e.keywords || []).join(', '));
       const sameAsArr = Array.isArray(e.same_as) ? e.same_as : [];
       setSameAs((sameAsArr as string[]).join('\n'));
+      setWikidataId(e.wikidata_id || '');
+      setWebsiteUrl(e.website_url || '');
     }
     setLoading(false);
   }, [projectId]);
@@ -494,6 +510,8 @@ export function TabAioEntity({ projectId }: { projectId: string }) {
       category,
       keywords: keywords.split(',').map((k) => k.trim()).filter(Boolean),
       same_as: JSON.stringify(sameAs.split('\n').map((u) => u.trim()).filter(Boolean)),
+      wikidata_id: wikidataId || null,
+      website_url: websiteUrl || null,
     };
 
     await fetch('/api/agent/aio/entity', {
@@ -585,16 +603,125 @@ export function TabAioEntity({ projectId }: { projectId: string }) {
         <p className="text-xs text-slate-500 mt-1">Používá se pro keyword overlap v citační síti a schema generování</p>
       </div>
 
+      {/* Website URL */}
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-1.5">URL webu</label>
+        <input
+          value={websiteUrl}
+          onChange={(e) => setWebsiteUrl(e.target.value)}
+          placeholder="https://odhad.online"
+          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
+        />
+        <p className="text-xs text-slate-500 mt-1">Hlavní URL webu — používá se pro Organization schema a matching citací v auditech</p>
+      </div>
+
+      {/* Wikidata */}
+      <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700 space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-sm font-medium text-white">Wikidata</span>
+          {wikidataId && (
+            <a
+              href={`https://www.wikidata.org/wiki/${wikidataId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-cyan-400 hover:text-cyan-300"
+            >
+              {wikidataId}
+            </a>
+          )}
+        </div>
+        <p className="text-xs text-slate-500">
+          Wikidata jsou zdrojem pravdy pro AI modely. Pokud má vaše značka záznam na Wikidatech, AI ji vnímá jako oficiální entitu.
+        </p>
+
+        <div className="flex gap-2">
+          <input
+            value={wdQuery}
+            onChange={(e) => setWdQuery(e.target.value)}
+            placeholder={name || 'Hledat na Wikidata...'}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setWdSearching(true);
+                fetch(`/api/agent/aio/wikidata?action=search&q=${encodeURIComponent(wdQuery || name)}`)
+                  .then(r => r.json())
+                  .then(d => { setWdResults((d.results || []) as WikidataResult[]); setWdSearching(false); })
+                  .catch(() => setWdSearching(false));
+              }
+            }}
+            className="flex-1 px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+          />
+          <button
+            onClick={() => {
+              setWdSearching(true);
+              fetch(`/api/agent/aio/wikidata?action=search&q=${encodeURIComponent(wdQuery || name)}`)
+                .then(r => r.json())
+                .then(d => { setWdResults((d.results || []) as WikidataResult[]); setWdSearching(false); })
+                .catch(() => setWdSearching(false));
+            }}
+            disabled={wdSearching || (!wdQuery && !name)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-cyan-600/20 text-cyan-300 text-sm font-medium hover:bg-cyan-600/30 disabled:opacity-50 transition-colors"
+          >
+            <Search className="w-4 h-4" />
+            {wdSearching ? 'Hledám...' : 'Hledat'}
+          </button>
+        </div>
+
+        {wdResults.length > 0 && (
+          <div className="space-y-1">
+            {wdResults.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => {
+                  setWikidataId(r.id);
+                  const wdUrl = `https://www.wikidata.org/wiki/${r.id}`;
+                  const currentUrls = sameAs.split('\n').map(u => u.trim()).filter(Boolean);
+                  if (!currentUrls.some(u => u.includes('wikidata.org'))) {
+                    setSameAs([...currentUrls, wdUrl].join('\n'));
+                  } else {
+                    setSameAs(currentUrls.map(u => u.includes('wikidata.org') ? wdUrl : u).join('\n'));
+                  }
+                  setWdResults([]);
+                }}
+                className={`w-full text-left p-2 rounded-lg hover:bg-slate-700 transition-colors ${
+                  wikidataId === r.id ? 'bg-violet-600/20 border border-violet-500/30' : 'bg-slate-800'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-cyan-400">{r.id}</span>
+                  <span className="text-sm text-white">{r.label}</span>
+                </div>
+                {r.description && <p className="text-xs text-slate-400 mt-0.5">{r.description}</p>}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {wdResults.length === 0 && wdQuery && !wdSearching && (
+          <p className="text-xs text-slate-500">Nic nenalezeno. Zvažte vytvoření záznamu na <a href="https://www.wikidata.org/wiki/Special:NewItem" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300">wikidata.org</a>.</p>
+        )}
+
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Wikidata ID (ručně)</label>
+          <input
+            value={wikidataId}
+            onChange={(e) => setWikidataId(e.target.value)}
+            placeholder="Q12345"
+            className="w-full px-3 py-1.5 rounded-lg bg-slate-700 border border-slate-600 text-white placeholder-slate-500 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono"
+          />
+        </div>
+      </div>
+
+      {/* sameAs URLs */}
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1.5">sameAs URLs (po řádcích)</label>
         <textarea
           value={sameAs}
           onChange={(e) => setSameAs(e.target.value)}
-          placeholder={"https://firmy.cz/...\nhttps://linkedin.com/company/...\nhttps://wikidata.org/entity/..."}
+          placeholder={"https://www.wikidata.org/wiki/Q12345\nhttps://firmy.cz/...\nhttps://linkedin.com/company/..."}
           rows={3}
           className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none font-mono"
         />
-        <p className="text-xs text-slate-500 mt-1">Wikidata, LinkedIn, Firmy.cz, ARES — propojení identity</p>
+        <p className="text-xs text-slate-500 mt-1">Wikidata URL se přidá automaticky při výběru entity. Doplňte LinkedIn, Firmy.cz, ARES.</p>
       </div>
 
       <button

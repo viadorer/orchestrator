@@ -286,13 +286,24 @@ export async function generateSchemaBundle(
   const websiteUrl = (project.website_url as string) || undefined;
 
   // Organization schema (from entity profile or project)
+  const sameAs = [...((entityProfile?.same_as as string[]) || [])];
+
+  // Auto-add Wikidata URL if wikidata_id is set
+  const wikidataId = entityProfile?.wikidata_id as string | null;
+  if (wikidataId) {
+    const wikidataUrl = `https://www.wikidata.org/wiki/${wikidataId}`;
+    if (!sameAs.includes(wikidataUrl)) {
+      sameAs.push(wikidataUrl);
+    }
+  }
+
   const entity: EntityProfile = entityProfile
     ? {
         officialName: entityProfile.official_name as string,
         shortDescription: (entityProfile.short_description as string) || project.name as string,
         longDescription: (entityProfile.long_description as string) || undefined,
         category: (entityProfile.category as string) || undefined,
-        sameAs: (entityProfile.same_as as string[]) || [],
+        sameAs,
         keywords: (entityProfile.keywords as string[]) || undefined,
       }
     : {

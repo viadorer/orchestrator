@@ -1,7 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Save, Key, Database, Loader2 } from 'lucide-react';
+import { Save, Key, Database, Loader2, GitBranch, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+
+interface GitHubStatus {
+  github_pat_configured: boolean;
+  github_auth?: boolean;
+  github_user?: string;
+  public_repos?: number;
+  rate_limit?: { limit: number; remaining: number; resets_at: string };
+  test_repo?: { name: string; push_access: boolean; admin_access: boolean };
+  error?: string;
+}
 
 interface PromptTemplate {
   id: string;
@@ -17,6 +27,20 @@ export function SettingsView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const [ghStatus, setGhStatus] = useState<GitHubStatus | null>(null);
+  const [ghLoading, setGhLoading] = useState(false);
+
+  const checkGitHub = async () => {
+    setGhLoading(true);
+    try {
+      const res = await fetch('/api/agent/aio/status');
+      const data = await res.json() as GitHubStatus;
+      setGhStatus(data);
+    } catch {
+      setGhStatus({ github_pat_configured: false, error: 'Endpoint nedostupný' });
+    }
+    setGhLoading(false);
+  };
 
   useEffect(() => {
     fetch('/api/settings/prompts')
@@ -76,6 +100,81 @@ export function SettingsView() {
         </div>
         <p className="text-xs text-slate-500 mt-3">
           API klíče se nastavují v souboru .env.local (nikdy se neukládají do DB).
+        </p>
+      </div>
+
+      {/* GitHub AIO Status */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-white flex items-center gap-2">
+            <GitBranch className="w-4 h-4 text-violet-400" /> GitHub AIO Injection
+          </h2>
+          <button
+            onClick={checkGitHub}
+            disabled={ghLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${ghLoading ? 'animate-spin' : ''}`} />
+            {ghLoading ? 'Testuji...' : 'Otestovat připojení'}
+          </button>
+        </div>
+
+        {!ghStatus && !ghLoading && (
+          <p className="text-xs text-slate-500">Klikni na &quot;Otestovat připojení&quot; pro ověření GitHub PAT a přístupu k repozitářům.</p>
+        )}
+
+        {ghStatus && (
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">GITHUB_PAT</span>
+              {ghStatus.github_pat_configured ? (
+                <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Nastaveno</span>
+              ) : (
+                <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Chybí</span>
+              )}
+            </div>
+
+            {ghStatus.github_auth !== undefined && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Autentizace</span>
+                {ghStatus.github_auth ? (
+                  <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> {ghStatus.github_user}</span>
+                ) : (
+                  <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Selhala</span>
+                )}
+              </div>
+            )}
+
+            {ghStatus.test_repo && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Repo: {ghStatus.test_repo.name}</span>
+                {ghStatus.test_repo.push_access ? (
+                  <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Push access</span>
+                ) : (
+                  <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Pouze read</span>
+                )}
+              </div>
+            )}
+
+            {ghStatus.rate_limit && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Rate limit</span>
+                <span className={`${ghStatus.rate_limit.remaining < 100 ? 'text-amber-400' : 'text-slate-300'}`}>
+                  {ghStatus.rate_limit.remaining} / {ghStatus.rate_limit.limit}
+                </span>
+              </div>
+            )}
+
+            {ghStatus.error && (
+              <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                <p className="text-xs text-red-400">{ghStatus.error}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="text-xs text-slate-500 mt-3">
+          GitHub PAT se nastavuje ve Vercel Environment Variables. Potřebný scope: <code className="text-slate-400">repo</code> (write access).
         </p>
       </div>
 

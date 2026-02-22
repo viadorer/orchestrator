@@ -1,16 +1,49 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Save, Key, Database, Loader2, GitBranch, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { Save, Key, Database, Loader2, GitBranch, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Bot } from 'lucide-react';
 
-interface GitHubStatus {
+interface AioStatus {
   github_pat_configured: boolean;
   github_auth?: boolean;
   github_user?: string;
-  public_repos?: number;
+  github_error?: string;
   rate_limit?: { limit: number; remaining: number; resets_at: string };
   test_repo?: { name: string; push_access: boolean; admin_access: boolean };
+  openai_configured: boolean;
+  openai_auth?: boolean;
+  openai_error?: string;
+  perplexity_configured: boolean;
+  perplexity_auth?: boolean;
+  perplexity_error?: string;
+  gemini_configured: boolean;
+}
+
+function StatusRow({ label, configured, auth, error, hint }: {
+  label: string;
+  configured: boolean;
+  auth?: boolean;
   error?: string;
+  hint?: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <span className="text-slate-400">{label}</span>
+        {!configured ? (
+          <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Chybí klíč</span>
+        ) : auth === undefined ? (
+          <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Nastaveno (neověřeno)</span>
+        ) : auth ? (
+          <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Funguje</span>
+        ) : (
+          <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Selhalo</span>
+        )}
+      </div>
+      {hint && <p className="text-xs text-slate-600 mt-0.5">{hint}</p>}
+      {error && <p className="text-xs text-red-400/70 mt-0.5">{error}</p>}
+    </div>
+  );
 }
 
 interface PromptTemplate {
@@ -27,19 +60,19 @@ export function SettingsView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
-  const [ghStatus, setGhStatus] = useState<GitHubStatus | null>(null);
-  const [ghLoading, setGhLoading] = useState(false);
+  const [aioStatus, setAioStatus] = useState<AioStatus | null>(null);
+  const [aioLoading, setAioLoading] = useState(false);
 
-  const checkGitHub = async () => {
-    setGhLoading(true);
+  const checkAioStatus = async () => {
+    setAioLoading(true);
     try {
       const res = await fetch('/api/agent/aio/status');
-      const data = await res.json() as GitHubStatus;
-      setGhStatus(data);
+      const data = await res.json() as AioStatus;
+      setAioStatus(data);
     } catch {
-      setGhStatus({ github_pat_configured: false, error: 'Endpoint nedostupný' });
+      setAioStatus({ github_pat_configured: false, openai_configured: false, perplexity_configured: false, gemini_configured: false });
     }
-    setGhLoading(false);
+    setAioLoading(false);
   };
 
   useEffect(() => {
@@ -103,78 +136,74 @@ export function SettingsView() {
         </p>
       </div>
 
-      {/* GitHub AIO Status */}
+      {/* AI Platforms & GitHub Status */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium text-white flex items-center gap-2">
-            <GitBranch className="w-4 h-4 text-violet-400" /> GitHub AIO Injection
+            <Bot className="w-4 h-4 text-violet-400" /> AI Platformy & Integrace
           </h2>
           <button
-            onClick={checkGitHub}
-            disabled={ghLoading}
+            onClick={checkAioStatus}
+            disabled={aioLoading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-300 hover:text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
           >
-            <RefreshCw className={`w-3 h-3 ${ghLoading ? 'animate-spin' : ''}`} />
-            {ghLoading ? 'Testuji...' : 'Otestovat připojení'}
+            <RefreshCw className={`w-3 h-3 ${aioLoading ? 'animate-spin' : ''}`} />
+            {aioLoading ? 'Testuji...' : 'Otestovat vše'}
           </button>
         </div>
 
-        {!ghStatus && !ghLoading && (
-          <p className="text-xs text-slate-500">Klikni na &quot;Otestovat připojení&quot; pro ověření GitHub PAT a přístupu k repozitářům.</p>
+        {!aioStatus && !aioLoading && (
+          <p className="text-xs text-slate-500">Klikni na &quot;Otestovat vše&quot; pro ověření všech API klíčů a připojení.</p>
         )}
 
-        {ghStatus && (
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">GITHUB_PAT</span>
-              {ghStatus.github_pat_configured ? (
-                <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Nastaveno</span>
-              ) : (
-                <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Chybí</span>
-              )}
+        {aioStatus && (
+          <div className="space-y-4">
+            {/* AI Visibility Platforms */}
+            <div>
+              <p className="text-xs text-slate-500 mb-2 font-medium uppercase tracking-wider">AI Visibility Monitor</p>
+              <div className="space-y-2 text-sm">
+                <StatusRow label="Gemini AI" configured={aioStatus.gemini_configured} auth={aioStatus.gemini_configured} hint="Používá GOOGLE_GENERATIVE_AI_API_KEY" />
+                <StatusRow label="OpenAI (ChatGPT)" configured={aioStatus.openai_configured} auth={aioStatus.openai_auth} error={aioStatus.openai_error} hint="gpt-4o-mini — měří co model ví z tréninku" />
+                <StatusRow label="Perplexity (Sonar)" configured={aioStatus.perplexity_configured} auth={aioStatus.perplexity_auth} error={aioStatus.perplexity_error} hint="Live search — vrací citace a zdroje" />
+              </div>
             </div>
 
-            {ghStatus.github_auth !== undefined && (
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Autentizace</span>
-                {ghStatus.github_auth ? (
-                  <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> {ghStatus.github_user}</span>
-                ) : (
-                  <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Selhala</span>
+            {/* GitHub */}
+            <div>
+              <p className="text-xs text-slate-500 mb-2 font-medium uppercase tracking-wider">GitHub AIO Injection</p>
+              <div className="space-y-2 text-sm">
+                <StatusRow label="GITHUB_PAT" configured={aioStatus.github_pat_configured} auth={aioStatus.github_auth} error={aioStatus.github_error} />
+                {aioStatus.github_auth && aioStatus.github_user && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Uživatel</span>
+                    <span className="text-slate-300">{aioStatus.github_user}</span>
+                  </div>
+                )}
+                {aioStatus.test_repo && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Repo: {aioStatus.test_repo.name}</span>
+                    {aioStatus.test_repo.push_access ? (
+                      <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Push access</span>
+                    ) : (
+                      <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Pouze read</span>
+                    )}
+                  </div>
+                )}
+                {aioStatus.rate_limit && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Rate limit</span>
+                    <span className={`${aioStatus.rate_limit.remaining < 100 ? 'text-amber-400' : 'text-slate-300'}`}>
+                      {aioStatus.rate_limit.remaining} / {aioStatus.rate_limit.limit}
+                    </span>
+                  </div>
                 )}
               </div>
-            )}
-
-            {ghStatus.test_repo && (
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Repo: {ghStatus.test_repo.name}</span>
-                {ghStatus.test_repo.push_access ? (
-                  <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Push access</span>
-                ) : (
-                  <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Pouze read</span>
-                )}
-              </div>
-            )}
-
-            {ghStatus.rate_limit && (
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Rate limit</span>
-                <span className={`${ghStatus.rate_limit.remaining < 100 ? 'text-amber-400' : 'text-slate-300'}`}>
-                  {ghStatus.rate_limit.remaining} / {ghStatus.rate_limit.limit}
-                </span>
-              </div>
-            )}
-
-            {ghStatus.error && (
-              <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                <p className="text-xs text-red-400">{ghStatus.error}</p>
-              </div>
-            )}
+            </div>
           </div>
         )}
 
         <p className="text-xs text-slate-500 mt-3">
-          GitHub PAT se nastavuje ve Vercel Environment Variables. Potřebný scope: <code className="text-slate-400">repo</code> (write access).
+          Klíče se nastavují ve Vercel Environment Variables: <code className="text-slate-400">OPENAI_API_KEY</code>, <code className="text-slate-400">PERPLEXITY_API_KEY</code>, <code className="text-slate-400">GITHUB_PAT</code>
         </p>
       </div>
 

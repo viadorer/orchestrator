@@ -18,6 +18,18 @@ import { supabase } from '@/lib/supabase/client';
 
 export type AiPlatform = 'chatgpt' | 'perplexity' | 'gemini';
 
+export interface SearchResult {
+  title: string;
+  url: string;
+  date?: string;
+}
+
+export interface PlatformResponse {
+  content: string;
+  citations: string[];
+  searchResults: SearchResult[];
+}
+
 export interface AuditResult {
   promptId: string;
   prompt: string;
@@ -28,6 +40,8 @@ export interface AuditResult {
   brandContext: string | null;
   isSource: boolean;
   citationUrl: string | null;
+  citationUrls: string[];
+  searchResults: SearchResult[];
   sentiment: 'positive' | 'neutral' | 'negative' | null;
   competitorsMentioned: string[];
   missedOpportunity: string | null;
@@ -38,10 +52,12 @@ export interface VisibilityScore {
   scoreDate: string;
   visibilityScore: number;
   shareOfVoice: number;
+  citationRate: number;
   promptsTested: number;
   promptsWithBrand: number;
+  promptsWithCitation: number;
   topCompetitors: Array<{ name: string; count: number }>;
-  platformsBreakdown: Record<AiPlatform, { tested: number; mentioned: number }>;
+  platformsBreakdown: Record<AiPlatform, { tested: number; mentioned: number; cited: number }>;
 }
 
 export interface AuditBatchResult {
@@ -94,8 +110,9 @@ async function queryGemini(prompt: string): Promise<string> {
 /**
  * Dotaz přes OpenAI API (ChatGPT).
  * Vyžaduje OPENAI_API_KEY.
+ * Používá gpt-4o-mini — bez web search (měří co model "ví" z tréninku).
  */
-async function queryChatGPT(prompt: string): Promise<string | null> {
+async function queryChatGPT(prompt: string): Promise<PlatformResponse | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
@@ -118,14 +135,16 @@ async function queryChatGPT(prompt: string): Promise<string | null> {
   const data = (await response.json()) as {
     choices: Array<{ message: { content: string } }>;
   };
-  return data.choices[0]?.message?.content || null;
+  const content = data.choices[0]?.message?.content || '';
+  return { content, citations: [], searchResults: [] };
 }
 
 /**
- * Dotaz přes Perplexity API.
+ * Dotaz přes Perplexity Sonar API.
  * Vyžaduje PERPLEXITY_API_KEY.
+ * Vrací citations[] a search_results[] — klíčová data pro měření AI visibility.
  */
-async function queryPerplexity(prompt: string): Promise<string | null> {
+async function queryPerplexity(prompt: string): Promise<PlatformResponse | null> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) return null;
 
@@ -147,8 +166,19 @@ async function queryPerplexity(prompt: string): Promise<string | null> {
 
   const data = (await response.json()) as {
     choices: Array<{ message: { content: string } }>;
+    citations?: string[];
+    search_results?: Array<{ title: string; url: string; date?: string }>;
   };
-  return data.choices[0]?.message?.content || null;
+
+  const content = data.choices[0]?.message?.content || '';
+  const citations = data.citations ?? [];
+  const searchResults: SearchResult[] = (data.search_results ?? []).map(sr => ({
+    title: sr.title,
+    url: sr.url,
+    date: sr.date,
+  }));
+
+  return { content, citations, searchResults };
 }
 
 // ============================================
@@ -158,10 +188,12 @@ async function queryPerplexity(prompt: string): Promise<string | null> {
 async function queryPlatform(
   platform: AiPlatform,
   prompt: string,
-): Promise<string | null> {
+): Promise<PlatformResponse | null> {
   switch (platform) {
-    case 'gemini':
-      return queryGemini(prompt);
+    case 'gemini': {
+      const text = await queryGemini(prompt);
+      return { content: text, citations: [], searchResults: [] };
+    }
     case 'chatgpt':
       return queryChatGPT(prompt);
     case 'perplexity':
@@ -182,10 +214,22 @@ function getAvailablePlatforms(): AiPlatform[] {
 
 async function analyzeResponse(
   prompt: string,
-  response: string,
+  platformResponse: PlatformResponse,
   brandName: string,
+  siteDomains: string[],
 ): Promise<Omit<AuditResult, 'promptId' | 'prompt' | 'platform' | 'response'>> {
-  const analysisPrompt = `${AUDIT_ANALYSIS_PROMPT}\n\nZnačka: ${brandName}\nDotaz uživatele: ${prompt}\nOdpověď AI:\n${response.substring(0, 4000)}`;
+  const citationContext = platformResponse.citations.length > 0
+    ? `\nCitované zdroje: ${platformResponse.citations.join(', ')}`
+    : '';
+
+  const ourCitations = platformResponse.citations.filter(url =>
+    siteDomains.some(domain => url.includes(domain))
+  );
+  const ourSearchResults = platformResponse.searchResults.filter(sr =>
+    siteDomains.some(domain => sr.url.includes(domain))
+  );
+
+  const analysisPrompt = `${AUDIT_ANALYSIS_PROMPT}\n\nZnačka: ${brandName}\nDotaz uživatele: ${prompt}\nOdpověď AI:\n${platformResponse.content.substring(0, 4000)}${citationContext}`;
 
   const { text: rawAnalysis } = await generateText({
     model: google('gemini-2.0-flash'),
@@ -195,14 +239,15 @@ async function analyzeResponse(
 
   const jsonMatch = rawAnalysis.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    // Fallback: simple string match
-    const mentioned = response.toLowerCase().includes(brandName.toLowerCase());
+    const mentioned = platformResponse.content.toLowerCase().includes(brandName.toLowerCase());
     return {
-      brandMentioned: mentioned,
+      brandMentioned: mentioned || ourCitations.length > 0,
       brandPosition: null,
       brandContext: null,
-      isSource: false,
-      citationUrl: null,
+      isSource: ourCitations.length > 0,
+      citationUrl: ourCitations[0] ?? null,
+      citationUrls: ourCitations,
+      searchResults: ourSearchResults,
       sentiment: null,
       competitorsMentioned: [],
       missedOpportunity: null,
@@ -211,12 +256,17 @@ async function analyzeResponse(
 
   const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
 
+  const isSourceFromCitations = ourCitations.length > 0;
+  const isSourceFromAnalysis = !!parsed.is_source;
+
   return {
-    brandMentioned: !!parsed.brand_mentioned,
+    brandMentioned: !!parsed.brand_mentioned || ourCitations.length > 0,
     brandPosition: (parsed.brand_position as number) || null,
     brandContext: (parsed.brand_context as string) || null,
-    isSource: !!parsed.is_source,
-    citationUrl: (parsed.citation_url as string) || null,
+    isSource: isSourceFromCitations || isSourceFromAnalysis,
+    citationUrl: ourCitations[0] ?? (parsed.citation_url as string) ?? null,
+    citationUrls: ourCitations,
+    searchResults: ourSearchResults,
     sentiment: (parsed.sentiment as 'positive' | 'neutral' | 'negative') || null,
     competitorsMentioned: (parsed.competitors as string[]) || [],
     missedOpportunity: (parsed.missed_opportunity as string) || null,
@@ -232,17 +282,18 @@ async function auditSinglePrompt(
   prompt: string,
   platform: AiPlatform,
   brandName: string,
+  siteDomains: string[],
 ): Promise<AuditResult | null> {
-  const response = await queryPlatform(platform, prompt);
-  if (!response) return null;
+  const platformResponse = await queryPlatform(platform, prompt);
+  if (!platformResponse) return null;
 
-  const analysis = await analyzeResponse(prompt, response, brandName);
+  const analysis = await analyzeResponse(prompt, platformResponse, brandName, siteDomains);
 
   return {
     promptId,
     prompt,
     platform,
-    response,
+    response: platformResponse.content,
     ...analysis,
   };
 }
@@ -260,10 +311,10 @@ export async function runVisibilityAudit(
 ): Promise<AuditBatchResult | null> {
   if (!supabase) return null;
 
-  // Load entity profile for brand name
+  // Load entity profile for brand name + website domains
   const { data: entity } = await supabase
     .from('aio_entity_profiles')
-    .select('official_name')
+    .select('official_name, website_url, same_as')
     .eq('project_id', projectId)
     .single();
 
@@ -276,6 +327,12 @@ export async function runVisibilityAudit(
 
   const brandName = (entity?.official_name as string) || (project?.name as string);
   if (!brandName) return null;
+
+  // Extract domains for citation matching
+  const siteDomains = extractDomains(
+    (entity?.website_url as string) ?? '',
+    (entity?.same_as as string[]) ?? [],
+  );
 
   // Load active prompts
   const { data: prompts } = await supabase
@@ -297,6 +354,7 @@ export async function runVisibilityAudit(
           promptEntry.prompt as string,
           platform,
           brandName,
+          siteDomains,
         );
 
         if (result) {
@@ -314,6 +372,8 @@ export async function runVisibilityAudit(
             brand_context: result.brandContext,
             is_source: result.isSource,
             citation_url: result.citationUrl,
+            citation_urls: result.citationUrls,
+            search_results: result.searchResults,
             sentiment: result.sentiment,
             competitors_mentioned: result.competitorsMentioned,
             missed_opportunity: result.missedOpportunity,
@@ -344,8 +404,10 @@ export async function runVisibilityAudit(
       score_date: new Date().toISOString().split('T')[0],
       visibility_score: score.visibilityScore,
       share_of_voice: score.shareOfVoice,
+      citation_rate: score.citationRate,
       prompts_tested: score.promptsTested,
       prompts_with_brand: score.promptsWithBrand,
+      prompts_with_citation: score.promptsWithCitation,
       top_competitors: score.topCompetitors,
       platforms_breakdown: score.platformsBreakdown,
     },
@@ -365,25 +427,50 @@ export async function runVisibilityAudit(
 // Score Calculation
 // ============================================
 
+/**
+ * Extrahuje domény z URL pro matching citací.
+ * "https://www.example.com/page" → "example.com"
+ */
+function extractDomains(websiteUrl: string, sameAs: string[]): string[] {
+  const urls = [websiteUrl, ...sameAs].filter(Boolean);
+  const domains: string[] = [];
+
+  for (const url of urls) {
+    try {
+      const hostname = new URL(url).hostname.replace(/^www\./, '');
+      if (hostname && !domains.includes(hostname)) {
+        domains.push(hostname);
+      }
+    } catch {
+      // Skip invalid URLs
+    }
+  }
+
+  return domains;
+}
+
 function calculateVisibilityScore(
   projectId: string,
   results: AuditResult[],
-  platforms: AiPlatform[],
+  _platforms: AiPlatform[],
 ): VisibilityScore {
   const totalTests = results.length;
   const mentionedTests = results.filter((r) => r.brandMentioned).length;
+  const citedTests = results.filter((r) => r.isSource || r.citationUrls.length > 0).length;
   const shareOfVoice = totalTests > 0 ? (mentionedTests / totalTests) * 100 : 0;
+  const citationRate = totalTests > 0 ? (citedTests / totalTests) * 100 : 0;
 
-  // Weighted score: mention=40, position=20, source=20, sentiment=20
+  // Weighted score: citation=30, mention=25, position=15, source=15, sentiment=15
   let totalScore = 0;
   for (const r of results) {
     let score = 0;
-    if (r.brandMentioned) score += 40;
-    if (r.brandPosition === 1) score += 20;
-    else if (r.brandPosition && r.brandPosition <= 3) score += 10;
-    if (r.isSource) score += 20;
-    if (r.sentiment === 'positive') score += 20;
-    else if (r.sentiment === 'neutral') score += 10;
+    if (r.citationUrls.length > 0) score += 30;
+    if (r.brandMentioned) score += 25;
+    if (r.brandPosition === 1) score += 15;
+    else if (r.brandPosition && r.brandPosition <= 3) score += 8;
+    if (r.isSource) score += 15;
+    if (r.sentiment === 'positive') score += 15;
+    else if (r.sentiment === 'neutral') score += 8;
     totalScore += score;
   }
   const visibilityScore = totalTests > 0 ? totalScore / totalTests : 0;
@@ -401,20 +488,24 @@ function calculateVisibilityScore(
     .map(([name, count]) => ({ name, count }));
 
   // Platform breakdown
-  const platformsBreakdown: Record<AiPlatform, { tested: number; mentioned: number }> = {
-    chatgpt: { tested: 0, mentioned: 0 },
-    perplexity: { tested: 0, mentioned: 0 },
-    gemini: { tested: 0, mentioned: 0 },
+  const platformsBreakdown: Record<AiPlatform, { tested: number; mentioned: number; cited: number }> = {
+    chatgpt: { tested: 0, mentioned: 0, cited: 0 },
+    perplexity: { tested: 0, mentioned: 0, cited: 0 },
+    gemini: { tested: 0, mentioned: 0, cited: 0 },
   };
 
   for (const r of results) {
     platformsBreakdown[r.platform].tested++;
     if (r.brandMentioned) platformsBreakdown[r.platform].mentioned++;
+    if (r.isSource || r.citationUrls.length > 0) platformsBreakdown[r.platform].cited++;
   }
 
-  // Unique prompts where brand was mentioned
   const uniquePromptsMentioned = new Set(
     results.filter((r) => r.brandMentioned).map((r) => r.promptId),
+  ).size;
+
+  const uniquePromptsCited = new Set(
+    results.filter((r) => r.isSource || r.citationUrls.length > 0).map((r) => r.promptId),
   ).size;
 
   return {
@@ -422,8 +513,10 @@ function calculateVisibilityScore(
     scoreDate: new Date().toISOString().split('T')[0],
     visibilityScore: Math.round(visibilityScore * 10) / 10,
     shareOfVoice: Math.round(shareOfVoice * 10) / 10,
+    citationRate: Math.round(citationRate * 10) / 10,
     promptsTested: new Set(results.map((r) => r.promptId)).size,
     promptsWithBrand: uniquePromptsMentioned,
+    promptsWithCitation: uniquePromptsCited,
     topCompetitors,
     platformsBreakdown,
   };

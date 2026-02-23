@@ -17,7 +17,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from('media_assets')
-    .select('id, file_name, file_type, file_size, public_url, ai_description, ai_tags, created_at')
+    .select('id, file_name, file_type, file_size, public_url, ai_description, ai_tags, ai_people, created_at')
     .eq('project_id', projectId)
     .eq('is_active', true)
     .order('created_at', { ascending: false })

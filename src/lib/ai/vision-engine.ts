@@ -29,6 +29,7 @@ export interface MediaAnalysis {
   mood: string;
   scene: string;
   quality_score: number;
+  people: string[];
 }
 
 export interface MediaAsset {
@@ -66,7 +67,8 @@ Vrať POUZE JSON (žádný markdown, žádný text okolo):
   "colors": ["#hex1", "#hex2", "#hex3"],  // 3-5 dominantních barev
   "mood": "professional|casual|happy|dramatic|warm|cold|energetic|calm|luxurious|minimalist",
   "scene": "office|outdoor|home|studio|abstract|city|nature|event|product|food",
-  "quality_score": 7.5  // 0-10, technická kvalita + vhodnost pro sociální sítě
+  "quality_score": 7.5,  // 0-10, technická kvalita + vhodnost pro sociální sítě
+  "people": ["person1", "person2", ...]  // Jména nebo popis osob na fotce (pokud jsou identifikovatelné). Pokud neznáš jména, použij popis: "muž v obleku", "žena s brýlemi". Pokud nejsou žádné osoby, vrať prázdné pole.
 }`;
 
   const { text: rawResponse } = await generateText({
@@ -95,6 +97,7 @@ Vrať POUZE JSON (žádný markdown, žádný text okolo):
         mood: parsed.mood || 'neutral',
         scene: parsed.scene || 'unknown',
         quality_score: typeof parsed.quality_score === 'number' ? parsed.quality_score : 5,
+        people: Array.isArray(parsed.people) ? parsed.people : [],
       };
     }
   } catch {
@@ -102,13 +105,14 @@ Vrať POUZE JSON (žádný markdown, žádný text okolo):
   }
 
   return {
-    description: 'Analýza selhala',
+    description: '',
     tags: [],
     objects: [],
     colors: [],
-    mood: 'unknown',
+    mood: 'neutral',
     scene: 'unknown',
-    quality_score: 0,
+    quality_score: 5,
+    people: [],
   };
 }
 
@@ -186,6 +190,7 @@ export async function processMediaAsset(assetId: string): Promise<boolean> {
       ai_mood: analysis.mood,
       ai_scene: analysis.scene,
       ai_quality_score: analysis.quality_score,
+      ai_people: analysis.people,
       is_processed: true,
       processing_error: null,
     };

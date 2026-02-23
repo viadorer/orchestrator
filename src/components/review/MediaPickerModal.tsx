@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Check, Loader2, ImageIcon, Upload, Trash2, Sparkles } from 'lucide-react';
+import { X, Check, Loader2, ImageIcon, Upload, Trash2, Sparkles, User } from 'lucide-react';
 
 interface StorageAsset {
   id: string;
@@ -10,6 +10,7 @@ interface StorageAsset {
   public_url: string;
   ai_description?: string;
   ai_tags?: string[];
+  ai_people?: string[];
 }
 
 interface MediaPickerModalProps {
@@ -30,6 +31,8 @@ export function MediaPickerModal({ projectId, currentImageUrl, currentMediaUrls,
   const [loading, setLoading] = useState(true);
   const [tagFilter, setTagFilter] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [editingPeople, setEditingPeople] = useState<{ assetId: string; currentPeople: string[] } | null>(null);
+  const [peopleInput, setPeopleInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -250,9 +253,25 @@ export function MediaPickerModal({ projectId, currentImageUrl, currentMediaUrls,
                         <span className="text-[10px] text-white font-bold">{orderIndex + 1}</span>
                       </div>
                     )}
-                    {asset.ai_description && (
+                    {(asset.ai_description || (asset.ai_people && asset.ai_people.length > 0)) && (
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
-                        <p className="text-[9px] text-white/80 line-clamp-2">{asset.ai_description}</p>
+                        {asset.ai_description && (
+                          <p className="text-[9px] text-white/80 line-clamp-2">{asset.ai_description}</p>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingPeople({ assetId: asset.id, currentPeople: asset.ai_people || [] });
+                            setPeopleInput((asset.ai_people || []).join(', '));
+                          }}
+                          className="flex items-center gap-0.5 mt-0.5 hover:bg-white/10 rounded px-1 -mx-1 transition-colors"
+                          title="Klikni pro editaci osob na fotce"
+                        >
+                          <User className="w-2.5 h-2.5 text-blue-400" />
+                          <p className="text-[8px] text-blue-300 line-clamp-1">
+                            {asset.ai_people && asset.ai_people.length > 0 ? asset.ai_people.join(', ') : 'Přidat osoby...'}
+                          </p>
+                        </button>
                       </div>
                     )}
                     {asset.ai_tags && asset.ai_tags.length > 0 && (
@@ -296,6 +315,53 @@ export function MediaPickerModal({ projectId, currentImageUrl, currentMediaUrls,
           </div>
         </div>
       </div>
+
+      {/* People Edit Modal */}
+      {editingPeople && (
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10" onClick={() => setEditingPeople(null)}>
+          <div className="bg-slate-800 rounded-xl p-4 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
+              <User className="w-4 h-4 text-blue-400" />
+              Osoby na fotce
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">Zadej jména oddělená čárkou</p>
+            <input
+              type="text"
+              value={peopleInput}
+              onChange={(e) => setPeopleInput(e.target.value)}
+              placeholder="David Choc, Jana Nováková, ..."
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setEditingPeople(null)}
+                className="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white transition-colors"
+              >
+                Zrušit
+              </button>
+              <button
+                onClick={async () => {
+                  const people = peopleInput.split(',').map(p => p.trim()).filter(Boolean);
+                  await fetch(`/api/media/${editingPeople.assetId}/people`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ people }),
+                  });
+                  // Reload assets
+                  const res = await fetch(`/api/media/project/${projectId}`);
+                  const data = await res.json();
+                  setStorageAssets(data.assets || []);
+                  setEditingPeople(null);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-colors"
+              >
+                Uložit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

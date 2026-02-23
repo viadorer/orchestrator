@@ -45,10 +45,13 @@ export async function POST(request: Request) {
       else if (file.type === 'application/pdf') fileType = 'document';
       else if (file.type.startsWith('image/svg') || file.type.includes('illustrator')) fileType = 'graphic';
 
+      // Determine folder based on file type
+      const folder = fileType === 'video' ? 'videos' : fileType === 'document' ? 'documents' : 'photos';
+
       // Upload to storage (Cloudflare R2 or Supabase fallback)
       const uploadResult = await storage.upload(Buffer.from(buffer), safeName, {
         projectId,
-        folder: 'photos',
+        folder,
         contentType: file.type,
       });
 

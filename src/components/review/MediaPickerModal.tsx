@@ -121,9 +121,15 @@ export function MediaPickerModal({ projectId, currentImageUrl, currentMediaUrls,
           <div className="p-3 border-b border-slate-800 bg-slate-800/30">
             <p className="text-xs text-slate-500 mb-2">Vybrané fotky (pořadí = carousel):</p>
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {selectedUrls.map((url, i) => (
+              {selectedUrls.map((url, i) => {
+                const isVideo = /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(url);
+                return (
                 <div key={i} className="relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 border-violet-500 group">
-                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  {isVideo ? (
+                    <video src={url} className="w-full h-full object-cover" muted />
+                  ) : (
+                    <img src={url} alt="" className="w-full h-full object-cover" />
+                  )}
                   <button
                     onClick={() => removeUrl(i)}
                     className="absolute inset-0 bg-red-500/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -134,7 +140,8 @@ export function MediaPickerModal({ projectId, currentImageUrl, currentMediaUrls,
                     {i + 1}
                   </span>
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>
         )}
@@ -151,7 +158,7 @@ export function MediaPickerModal({ projectId, currentImageUrl, currentMediaUrls,
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             onChange={e => e.target.files && handleUpload(e.target.files)}
             className="hidden"
@@ -217,15 +224,27 @@ export function MediaPickerModal({ projectId, currentImageUrl, currentMediaUrls,
                         : 'border-slate-700 hover:border-slate-500'
                     }`}
                   >
-                    <img
-                      src={asset.public_url}
-                      alt={asset.file_name}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                      onError={(e) => {
-                        e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23334155" width="100" height="100"/%3E%3Ctext x="50" y="55" text-anchor="middle" fill="%2394a3b8" font-size="12"%3EError%3C/text%3E%3C/svg%3E';
-                      }}
-                    />
+                    {asset.file_type === 'video' ? (
+                      <video
+                        src={asset.public_url}
+                        className="w-full h-full object-cover"
+                        muted
+                        loop
+                        playsInline
+                        onMouseEnter={(e) => e.currentTarget.play()}
+                        onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                      />
+                    ) : (
+                      <img
+                        src={asset.public_url}
+                        alt={asset.file_name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23334155" width="100" height="100"/%3E%3Ctext x="50" y="55" text-anchor="middle" fill="%2394a3b8" font-size="12"%3EError%3C/text%3E%3C/svg%3E';
+                        }}
+                      />
+                    )}
                     {isSelected && (
                       <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center">
                         <span className="text-[10px] text-white font-bold">{orderIndex + 1}</span>

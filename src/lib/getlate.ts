@@ -158,8 +158,16 @@ export async function listAccounts(): Promise<LateAccount[]> {
 // ============================================
 
 /**
+ * Map internal platform names to getLate.dev API platform names.
+ * getLate uses "twitter" not "x".
+ */
+const LATE_PLATFORM_MAP: Record<string, string> = {
+  x: 'twitter',
+};
+
+/**
  * Build platforms array from project's late_accounts JSONB.
- * late_accounts format: {"facebook": "698f7c19...", "linkedin": "abc123..."}
+ * late_accounts format: {"facebook": "698f7c19...", "x": "699cae52..."}
  * targetPlatforms: which platforms to publish to (subset of late_accounts keys)
  */
 export function buildPlatformsArray(
@@ -171,7 +179,8 @@ export function buildPlatformsArray(
   for (const platform of targetPlatforms) {
     const accountId = lateAccounts[platform];
     if (accountId) {
-      entries.push({ platform, accountId });
+      const latePlatform = LATE_PLATFORM_MAP[platform] || platform;
+      entries.push({ platform: latePlatform, accountId });
     }
   }
 

@@ -59,6 +59,9 @@ Jsi PŘÍSNÝ. Jsi NESMLOUVAVÝ. Kvalita je vše.`);
     parts.push(`- Tón: ${platformLimits.contentSpec.tone}`);
     parts.push(`- Hook: ${platformLimits.contentSpec.hookStrategy}`);
     parts.push(`KONTROLUJ: Je text v rámci limitu ${platformLimits.optimalChars} znaků? Je hook v prvních ${platformLimits.visibleChars} znacích?`);
+    if (platform === 'x') {
+      parts.push(`\n⚠️ TVRDÝ LIMIT PRO X: Text MUSÍ mít MAXIMÁLNĚ 280 znaků včetně mezer. Pokud původní text překračuje 280 znaků, PŘEPIŠ ho kratší — zachovej hlavní myšlenku, ale zjednoduš. NIKDY neořezávej větu uprostřed.`);
+    }
   }
 
   parts.push(`\n---\nPŮVODNÍ POST K REVIEW:\n"""\n${text}\n"""`);

@@ -560,7 +560,14 @@ ${hashtagRule}
 - ABSOLUTNĚ ŽÁDNÉ emotikony/emoji v textu
 - ŽÁDNÉ URL odkazy
 - Text MUSÍ mít délku kolem ${platformLimits?.optimalChars || 500} znaků (max ${platformLimits?.maxChars || 2200})
-- Hook MUSÍ být v prvních ${platformLimits?.visibleChars || 200} znacích (to je vše co uživatel vidí)
+- Hook MUSÍ být v prvních ${platformLimits?.visibleChars || 200} znacích (to je vše co uživatel vidí)${platform === 'x' ? `
+
+⚠️ TVRDÝ LIMIT PRO X (TWITTER):
+- Text MUSÍ mít MAXIMÁLNĚ 280 znaků včetně mezer.
+- NEOŘEZÁVEJ delší text — piš ROVNOU krátce a úderně.
+- Jedna silná myšlenka, žádné omáčky. Každé slovo musí mít váhu.
+- Pokud se myšlenka nevejde do 280 znaků, zjednoduš ji — NIKDY nepřekračuj limit.
+- Před odesláním si SPOČÍTEJ znaky. Pokud text > 280 znaků, PŘEPIŠ ho kratší.` : ''}
 
 PRAVIDLA PRO image_prompt (KRITICKÉ):
 - MUSÍ být v angličtině

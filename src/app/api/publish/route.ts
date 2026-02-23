@@ -97,7 +97,23 @@ export async function POST(request: Request) {
       : (post.platforms || []);
 
     // Filter to only platforms that have late_accounts configured
-    const targetPlatforms = requestedPlatforms.filter(p => !!lateAccounts[p]);
+    let targetPlatforms = requestedPlatforms.filter(p => !!lateAccounts[p]);
+
+    // Filter out YouTube if post has no video media
+    const hasVideo = (post.media_urls || []).some((url: string) =>
+      typeof url === 'string' && /\.(mp4|mov|avi|webm|mkv)(\?|$)/i.test(url)
+    );
+    if (targetPlatforms.includes('youtube') && !hasVideo) {
+      console.log(`[publish] Post ${post.id}: Skipping YouTube — no video attached`);
+      targetPlatforms = targetPlatforms.filter(p => p !== 'youtube');
+    }
+
+    // Filter out X (Twitter) if text exceeds 280 characters
+    const textLength = (post.text_content || '').length;
+    if (targetPlatforms.includes('x') && textLength > 280) {
+      console.log(`[publish] Post ${post.id}: Skipping X — text too long (${textLength} chars, max 280)`);
+      targetPlatforms = targetPlatforms.filter(p => p !== 'x');
+    }
 
     // Build platforms array: [{platform: "facebook", accountId: "698f7c19..."}]
     const platformEntries = buildPlatformsArray(lateAccounts, targetPlatforms);

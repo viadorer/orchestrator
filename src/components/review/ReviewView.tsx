@@ -53,6 +53,14 @@ const PLATFORM_COLORS: Record<string, string> = {
   'google-business': 'bg-blue-500', telegram: 'bg-sky-600', snapchat: 'bg-yellow-400',
 };
 
+const PLATFORM_BADGE_COLORS: Record<string, string> = {
+  facebook: 'bg-blue-600', instagram: 'bg-purple-600',
+  linkedin: 'bg-blue-700', x: 'bg-zinc-700', tiktok: 'bg-zinc-700',
+  youtube: 'bg-red-600', threads: 'bg-zinc-700', bluesky: 'bg-sky-500',
+  pinterest: 'bg-red-700', reddit: 'bg-orange-600',
+  'google-business': 'bg-blue-500', telegram: 'bg-sky-600', snapchat: 'bg-yellow-500',
+};
+
 export function ReviewView() {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +74,7 @@ export function ReviewView() {
   const [feedbackNote, setFeedbackNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [mediaPickerItem, setMediaPickerItem] = useState<QueueItem | null>(null);
+  const [platformOverrides, setPlatformOverrides] = useState<Record<string, string[]>>({});
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -87,6 +96,7 @@ export function ReviewView() {
       return item;
     });
     setItems(items);
+    setPlatformOverrides({});
     setLoading(false);
   }, [statusFilter]);
 
@@ -364,9 +374,34 @@ export function ReviewView() {
                   <span className="text-xs text-slate-600">•</span>
                   <span className="text-xs text-slate-500">{item.content_type}</span>
                   <span className="text-xs text-slate-600">•</span>
-                  {item.platforms.map(p => (
-                    <span key={p} className="px-1.5 py-0.5 rounded bg-slate-800 text-xs text-slate-400">{p}</span>
-                  ))}
+                  {item.platforms.map(p => {
+                    const activePlatforms = platformOverrides[item.id] || item.platforms;
+                    const isActive = activePlatforms.includes(p);
+                    return (
+                      <button
+                        key={p}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const current = platformOverrides[item.id] || [...item.platforms];
+                          const next = isActive ? current.filter(x => x !== p) : [...current, p];
+                          setPlatformOverrides(prev => ({ ...prev, [item.id]: next }));
+                          await fetch(`/api/queue/${item.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ platforms: next }),
+                          });
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-xs font-medium transition-all cursor-pointer ${
+                          isActive
+                            ? `${PLATFORM_BADGE_COLORS[p] || 'bg-slate-600'} text-white`
+                            : 'bg-slate-800/50 text-slate-600 line-through'
+                        }`}
+                        title={isActive ? `${PLATFORM_LABELS[p] || p} — klikni pro vypnutí` : `${PLATFORM_LABELS[p] || p} — klikni pro zapnutí`}
+                      >
+                        {PLATFORM_LABELS[p] || p}
+                      </button>
+                    );
+                  })}
                   {item.image_url && item.visual_type === 'matched_photo' && (
                     <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-xs text-emerald-400" title="Fotka z Media Library (pgvector match)">📷 library</span>
                   )}

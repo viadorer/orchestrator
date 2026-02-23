@@ -92,18 +92,24 @@ export async function POST(request: Request) {
     const lateAccounts = project?.late_accounts || {};
 
     // Use target_platform (single platform variant) or fall back to platforms[] array
-    const targetPlatforms: string[] = post.target_platform
+    const requestedPlatforms: string[] = post.target_platform
       ? [post.target_platform]
       : (post.platforms || []);
+
+    // Filter to only platforms that have late_accounts configured
+    const targetPlatforms = requestedPlatforms.filter(p => !!lateAccounts[p]);
 
     // Build platforms array: [{platform: "facebook", accountId: "698f7c19..."}]
     const platformEntries = buildPlatformsArray(lateAccounts, targetPlatforms);
 
     if (platformEntries.length === 0) {
+      const unconfigured = requestedPlatforms.filter(p => !lateAccounts[p]);
       results.push({
         id: post.id,
         status: 'failed',
-        error: `No getLate account IDs configured for platforms: ${targetPlatforms.join(', ')}. Set late_accounts in project settings.`,
+        error: unconfigured.length > 0
+          ? `Platforms not configured in getLate: ${unconfigured.join(', ')}. Remove from post or add to project settings.`
+          : `No platforms specified for post.`,
       });
       continue;
     }

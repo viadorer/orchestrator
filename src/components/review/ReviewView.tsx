@@ -22,7 +22,7 @@ interface QueueItem {
   status: string;
   source: string;
   created_at: string;
-  projects?: { name: string; slug: string };
+  projects?: { name: string; slug: string; platforms?: string[] };
   visual_type?: string;
   chart_url?: string | null;
   card_url?: string | null;
@@ -374,34 +374,38 @@ export function ReviewView() {
                   <span className="text-xs text-slate-600">•</span>
                   <span className="text-xs text-slate-500">{item.content_type}</span>
                   <span className="text-xs text-slate-600">•</span>
-                  {item.platforms.map(p => {
+                  {(() => {
+                    const projectPlatforms = item.projects?.platforms || [];
+                    const allPlatforms = [...new Set([...item.platforms, ...projectPlatforms])];
                     const activePlatforms = platformOverrides[item.id] || item.platforms;
-                    const isActive = activePlatforms.includes(p);
-                    return (
-                      <button
-                        key={p}
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const current = platformOverrides[item.id] || [...item.platforms];
-                          const next = isActive ? current.filter(x => x !== p) : [...current, p];
-                          setPlatformOverrides(prev => ({ ...prev, [item.id]: next }));
-                          await fetch(`/api/queue/${item.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ platforms: next }),
-                          });
-                        }}
-                        className={`px-1.5 py-0.5 rounded text-xs font-medium transition-all cursor-pointer ${
-                          isActive
-                            ? `${PLATFORM_BADGE_COLORS[p] || 'bg-slate-600'} text-white`
-                            : 'bg-slate-800/50 text-slate-600 line-through'
-                        }`}
-                        title={isActive ? `${PLATFORM_LABELS[p] || p} — klikni pro vypnutí` : `${PLATFORM_LABELS[p] || p} — klikni pro zapnutí`}
-                      >
-                        {PLATFORM_LABELS[p] || p}
-                      </button>
-                    );
-                  })}
+                    return allPlatforms.map(p => {
+                      const isActive = activePlatforms.includes(p);
+                      return (
+                        <button
+                          key={p}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const current = platformOverrides[item.id] || [...item.platforms];
+                            const next = isActive ? current.filter(x => x !== p) : [...current, p];
+                            setPlatformOverrides(prev => ({ ...prev, [item.id]: next }));
+                            await fetch(`/api/queue/${item.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ platforms: next }),
+                            });
+                          }}
+                          className={`px-1.5 py-0.5 rounded text-xs font-medium transition-all cursor-pointer ${
+                            isActive
+                              ? `${PLATFORM_BADGE_COLORS[p] || 'bg-slate-600'} text-white`
+                              : 'bg-slate-800/50 text-slate-600 line-through'
+                          }`}
+                          title={isActive ? `${PLATFORM_LABELS[p] || p} — klikni pro vypnutí` : `${PLATFORM_LABELS[p] || p} — klikni pro zapnutí`}
+                        >
+                          {PLATFORM_LABELS[p] || p}
+                        </button>
+                      );
+                    });
+                  })()}
                   {item.image_url && item.visual_type === 'matched_photo' && (
                     <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-xs text-emerald-400" title="Fotka z Media Library (pgvector match)">📷 library</span>
                   )}

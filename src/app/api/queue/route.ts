@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   let query = supabase
     .from('content_queue')
-    .select('*, projects(name, slug)')
+    .select('*, projects(name, slug, platforms)')
     .eq('status', status)
     .order('created_at', { ascending: false })
     .limit(100);

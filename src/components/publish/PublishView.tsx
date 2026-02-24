@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Send, Calendar, Loader2, CheckCircle, XCircle, Clock, Pencil, Trash2, Save, X, Eye, Filter, Image as ImageIcon, LayoutList, LayoutGrid } from 'lucide-react';
+import { Send, Calendar, Loader2, CheckCircle, XCircle, Clock, Filter, LayoutList, LayoutGrid, X, Trash2 } from 'lucide-react';
+import { PublishPostCard } from './PublishPostCard';
 
 interface QueueItem {
   id: string;
@@ -278,7 +279,7 @@ export function PublishView() {
       {/* Approved posts */}
       <Section title="Schváleno – připraveno k odeslání" count={approved.length} icon={<CheckCircle className="w-4 h-4 text-emerald-400" />} viewMode={viewMode}>
         {approved.map(item => (
-          <PostCard
+          <PublishPostCard
             key={item.id}
             item={item}
             selected={selectedIds.has(item.id)}
@@ -302,7 +303,7 @@ export function PublishView() {
       {/* Scheduled */}
       <Section title="Naplánováno" count={scheduled.length} icon={<Clock className="w-4 h-4 text-blue-400" />} viewMode={viewMode}>
         {scheduled.map(item => (
-          <PostCard
+          <PublishPostCard
             key={item.id}
             item={item}
             editable
@@ -323,7 +324,7 @@ export function PublishView() {
       {/* Sent */}
       <Section title="Odesláno" count={sent.length} icon={<Send className="w-4 h-4 text-slate-400" />} viewMode={viewMode}>
         {sent.slice(0, 20).map(item => (
-          <PostCard key={item.id} item={item} onPreview={setPreviewItem} />
+          <PublishPostCard key={item.id} item={item} onPreview={setPreviewItem} />
         ))}
       </Section>
 
@@ -412,174 +413,6 @@ function Section({ title, count, icon, children, viewMode }: { title: string; co
       </div>
       <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'space-y-2'}>
         {children}
-      </div>
-    </div>
-  );
-}
-
-function PostCard({
-  item,
-  selected,
-  onToggle,
-  selectable,
-  editable,
-  isEditing,
-  editText,
-  saving,
-  isDeleting,
-  onEdit,
-  onSaveEdit,
-  onCancelEdit,
-  onEditTextChange,
-  onDelete,
-  onPreview,
-}: {
-  item: QueueItem;
-  selected?: boolean;
-  onToggle?: () => void;
-  selectable?: boolean;
-  editable?: boolean;
-  isEditing?: boolean;
-  editText?: string;
-  saving?: boolean;
-  isDeleting?: boolean;
-  onEdit?: () => void;
-  onSaveEdit?: () => void;
-  onCancelEdit?: () => void;
-  onEditTextChange?: (text: string) => void;
-  onDelete?: () => void;
-  onPreview?: (item: QueueItem) => void;
-}) {
-  return (
-    <div
-      className={`bg-slate-900 border rounded-lg p-4 transition-colors ${
-        selected ? 'border-emerald-500/50' : isEditing ? 'border-violet-500/50' : 'border-slate-800'
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        {selectable && onToggle && (
-          <button
-            onClick={onToggle}
-            className={`mt-0.5 w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-              selected ? 'bg-emerald-600 border-emerald-600' : 'border-slate-600 hover:border-slate-400'
-            }`}
-          >
-            {selected && <CheckCircle className="w-3 h-3 text-white" />}
-          </button>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-violet-400">{item.projects?.name}</span>
-            {item.platforms.map(p => (
-              <span key={p} className="px-1.5 py-0.5 rounded bg-slate-800 text-xs text-slate-400">{p}</span>
-            ))}
-            {item.scheduled_for && (
-              <span className="text-xs text-blue-400">
-                {new Date(item.scheduled_for).toLocaleString('cs-CZ')}
-              </span>
-            )}
-            {item.sent_at && (
-              <span className="text-xs text-slate-500">
-                Odesláno {new Date(item.sent_at).toLocaleString('cs-CZ')}
-              </span>
-            )}
-          </div>
-
-          {isEditing ? (
-            <div className="mt-2">
-              <textarea
-                value={editText}
-                onChange={(e) => onEditTextChange?.(e.target.value)}
-                rows={6}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-y"
-              />
-              <div className="flex items-center gap-2 mt-2">
-                <button
-                  onClick={onSaveEdit}
-                  disabled={saving}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors"
-                >
-                  {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                  Uložit
-                </button>
-                <button
-                  onClick={onCancelEdit}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-xs font-medium hover:bg-slate-600 transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                  Zrušit
-                </button>
-                <span className="text-xs text-slate-500 ml-auto">{editText?.length || 0} znaků</span>
-              </div>
-            </div>
-          ) : (
-            <>
-              <p className="text-sm text-slate-300 whitespace-pre-line">{item.text_content}</p>
-              
-              {/* Visual assets preview */}
-              {(item.image_url || item.chart_url || item.card_url) && (
-                <div className="flex items-center gap-2 mt-2">
-                  {item.chart_url && (
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-slate-800 border border-slate-700">
-                      <img src={item.chart_url} alt="Graf" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                        <ImageIcon className="w-4 h-4 text-white" />
-                      </div>
-                    </div>
-                  )}
-                  {item.card_url && (
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-slate-800 border border-slate-700">
-                      <img src={item.card_url} alt="Karta" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                        <ImageIcon className="w-4 h-4 text-white" />
-                      </div>
-                    </div>
-                  )}
-                  {item.image_url && (
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-slate-800 border border-slate-700">
-                      <img src={item.image_url} alt="Fotka" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                        <ImageIcon className="w-4 h-4 text-white" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {!isEditing && (
-            <button
-              onClick={() => onPreview?.(item)}
-              className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-slate-800 transition-colors"
-              title="Náhled"
-            >
-              <Eye className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {editable && !isEditing && (
-            <>
-              <button
-                onClick={onEdit}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-violet-400 hover:bg-slate-800 transition-colors"
-                title="Upravit"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={onDelete}
-                disabled={isDeleting}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors disabled:opacity-50"
-                title="Smazat"
-              >
-                {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-              </button>
-            </>
-          )}
-        </div>
       </div>
     </div>
   );

@@ -77,7 +77,7 @@ export function ReviewView() {
   const [saving, setSaving] = useState(false);
   const [mediaPickerItem, setMediaPickerItem] = useState<QueueItem | null>(null);
   const [platformOverrides, setPlatformOverrides] = useState<Record<string, string[]>>({});
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
 
   const loadItems = useCallback(async () => {
     setLoading(true);

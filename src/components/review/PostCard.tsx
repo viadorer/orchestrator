@@ -143,11 +143,11 @@ export function PostCard({
 
       {/* Media Slider */}
       {hasMedia && (
-        <div className="relative bg-slate-950 aspect-[4/3] overflow-hidden">
+        <div className="relative bg-slate-950 aspect-[4/3] overflow-hidden flex items-center justify-center">
           {isVideo(mediaItems[currentSlide]) ? (
             <video
               src={mediaItems[currentSlide]}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
               controls
               playsInline
             />
@@ -155,7 +155,7 @@ export function PostCard({
             <img
               src={mediaItems[currentSlide]}
               alt=""
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
           )}
           

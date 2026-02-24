@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Send, Calendar, Loader2, CheckCircle, XCircle, Clock, Pencil, Trash2, Save, X, Eye, Filter, Image as ImageIcon } from 'lucide-react';
+import { Send, Calendar, Loader2, CheckCircle, XCircle, Clock, Pencil, Trash2, Save, X, Eye, Filter, Image as ImageIcon, LayoutList, LayoutGrid } from 'lucide-react';
 
 interface QueueItem {
   id: string;
@@ -16,6 +16,8 @@ interface QueueItem {
   image_url: string | null;
   chart_url: string | null;
   card_url: string | null;
+  template_url?: string | null;
+  media_urls?: string[] | null;
   projects?: { name: string; slug: string };
 }
 
@@ -34,6 +36,7 @@ export function PublishView() {
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [previewItem, setPreviewItem] = useState<QueueItem | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -159,9 +162,34 @@ export function PublishView() {
 
   return (
     <div className="p-6 w-full">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Publikovat</h1>
-        <p className="text-slate-400 mt-1">Odeslat schválené příspěvky přes getLate.dev</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Publikovat</h1>
+          <p className="text-slate-400 mt-1">Odeslat schválené příspěvky přes getLate.dev</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* View mode toggle */}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'list' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Seznam"
+            >
+              <LayoutList className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'grid' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Grid"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Project filter */}
@@ -248,7 +276,7 @@ export function PublishView() {
       )}
 
       {/* Approved posts */}
-      <Section title="Schváleno – připraveno k odeslání" count={approved.length} icon={<CheckCircle className="w-4 h-4 text-emerald-400" />}>
+      <Section title="Schváleno – připraveno k odeslání" count={approved.length} icon={<CheckCircle className="w-4 h-4 text-emerald-400" />} viewMode={viewMode}>
         {approved.map(item => (
           <PostCard
             key={item.id}
@@ -272,7 +300,7 @@ export function PublishView() {
       </Section>
 
       {/* Scheduled */}
-      <Section title="Naplánováno" count={scheduled.length} icon={<Clock className="w-4 h-4 text-blue-400" />}>
+      <Section title="Naplánováno" count={scheduled.length} icon={<Clock className="w-4 h-4 text-blue-400" />} viewMode={viewMode}>
         {scheduled.map(item => (
           <PostCard
             key={item.id}
@@ -293,7 +321,7 @@ export function PublishView() {
       </Section>
 
       {/* Sent */}
-      <Section title="Odesláno" count={sent.length} icon={<Send className="w-4 h-4 text-slate-400" />}>
+      <Section title="Odesláno" count={sent.length} icon={<Send className="w-4 h-4 text-slate-400" />} viewMode={viewMode}>
         {sent.slice(0, 20).map(item => (
           <PostCard key={item.id} item={item} onPreview={setPreviewItem} />
         ))}
@@ -373,7 +401,7 @@ export function PublishView() {
   );
 }
 
-function Section({ title, count, icon, children }: { title: string; count: number; icon: React.ReactNode; children: React.ReactNode }) {
+function Section({ title, count, icon, children, viewMode }: { title: string; count: number; icon: React.ReactNode; children: React.ReactNode; viewMode: 'list' | 'grid' }) {
   if (count === 0) return null;
   return (
     <div className="mb-8">
@@ -382,7 +410,9 @@ function Section({ title, count, icon, children }: { title: string; count: numbe
         <h2 className="text-sm font-medium text-white">{title}</h2>
         <span className="text-xs text-slate-500">({count})</span>
       </div>
-      <div className="space-y-2">{children}</div>
+      <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4' : 'space-y-2'}>
+        {children}
+      </div>
     </div>
   );
 }

@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info, Share2, Pencil, Save, Sparkles, TrendingUp, Copy, ImageIcon } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Send, CheckCheck, Trash2, Filter, Info, Share2, Pencil, Save, Sparkles, TrendingUp, Copy, ImageIcon, LayoutList, LayoutGrid } from 'lucide-react';
 import { PostPreview } from './PostPreview';
 import { MediaPickerModal } from './MediaPickerModal';
+import { PostCard } from './PostCard';
+import { EditPostModal } from './EditPostModal';
 
 interface QueueItem {
   id: string;
@@ -75,6 +77,7 @@ export function ReviewView() {
   const [saving, setSaving] = useState(false);
   const [mediaPickerItem, setMediaPickerItem] = useState<QueueItem | null>(null);
   const [platformOverrides, setPlatformOverrides] = useState<Record<string, string[]>>({});
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -269,6 +272,28 @@ export function ReviewView() {
           <p className="text-slate-400 mt-1">{items.length} příspěvků k posouzení</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* View mode toggle */}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'list' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Seznam"
+            >
+              <LayoutList className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded-md transition-colors ${
+                viewMode === 'grid' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Grid"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+
           {/* Status filter */}
           <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
             {['review', 'approved', 'draft'].map((s) => (
@@ -312,25 +337,60 @@ export function ReviewView() {
       )}
 
       {/* Items */}
-      <div className="space-y-3">
-        {items.length === 0 && (
-          <div className="text-center py-12 text-slate-500">
-            <Filter className="w-10 h-10 mx-auto mb-3 opacity-50" />
-            <p>Žádné příspěvky ve stavu &quot;{statusFilter}&quot;</p>
-          </div>
-        )}
+      {items.length === 0 && (
+        <div className="text-center py-12 text-slate-500">
+          <Filter className="w-10 h-10 mx-auto mb-3 opacity-50" />
+          <p>Žádné příspěvky ve stavu &quot;{statusFilter}&quot;</p>
+        </div>
+      )}
 
-        {/* Select all */}
-        {items.length > 0 && (
-          <button
-            onClick={selectAll}
-            className="text-xs text-slate-400 hover:text-white transition-colors mb-2"
-          >
-            {selected.size === items.length ? 'Odznačit vše' : 'Vybrat vše'}
-          </button>
-        )}
+      {/* Select all */}
+      {items.length > 0 && (
+        <button
+          onClick={selectAll}
+          className="text-xs text-slate-400 hover:text-white transition-colors mb-2"
+        >
+          {selected.size === items.length ? 'Odznačit vše' : 'Vybrat vše'}
+        </button>
+      )}
 
-        {sorted.map((item) => (
+      {/* Grid View */}
+      {viewMode === 'grid' && items.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {sorted.map((item) => (
+            <PostCard
+              key={item.id}
+              item={item}
+              selected={selected.has(item.id)}
+              onToggleSelect={() => toggleSelect(item.id)}
+              onEdit={() => startEdit(item)}
+              onMediaPicker={() => setMediaPickerItem(item)}
+              onApprove={() => approveOne(item)}
+              onPublish={() => publishOne(item)}
+              onReject={() => rejectOne(item.id)}
+              platformLabels={PLATFORM_LABELS}
+              platformBadgeColors={PLATFORM_BADGE_COLORS}
+              platformOverrides={platformOverrides[item.id] || item.platforms}
+              onPlatformToggle={async (platform, isActive) => {
+                const current = platformOverrides[item.id] || [...item.platforms];
+                const next = isActive ? current.filter(x => x !== platform) : [...current, platform];
+                setPlatformOverrides(prev => ({ ...prev, [item.id]: next }));
+                await fetch(`/api/queue/${item.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ platforms: next }),
+                });
+              }}
+              statusFilter={statusFilter}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && items.length > 0 && (
+        <div className="space-y-3">
+          {sorted.map((item) => (
           <div
             key={item.id}
             className={`bg-slate-900 border rounded-xl transition-colors ${
@@ -654,7 +714,9 @@ export function ReviewView() {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
+
       {/* Platform Picker Modal */}
       {platformPicker && (
         <PlatformPickerModal
@@ -675,6 +737,24 @@ export function ReviewView() {
           currentMediaUrls={mediaPickerItem.media_urls || undefined}
           onSave={(urls) => saveMedia(mediaPickerItem, urls)}
           onClose={() => setMediaPickerItem(null)}
+        />
+      )}
+
+      {/* Edit Post Modal */}
+      {editingPost && (
+        <EditPostModal
+          postId={editingPost}
+          initialText={editText}
+          onSave={async (text, note) => {
+            setFeedbackNote(note);
+            setEditText(text);
+            const item = items.find(i => i.id === editingPost);
+            if (item) {
+              await saveEdit(item);
+            }
+          }}
+          onClose={cancelEdit}
+          saving={saving}
         />
       )}
     </div>

@@ -359,6 +359,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+
+      // AIO (AI Optimization) Management
+      {
+        name: 'get_aio_status',
+        description: 'Get AIO status for a project (sites, entity profiles, scores, recent injections).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+          },
+          required: ['project_id'],
+        },
+      },
+      {
+        name: 'trigger_aio_injection',
+        description: 'Trigger AIO schema injection to GitHub repository (llms.txt, ai-data.json, schema.org).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID to inject (or omit for all projects)' },
+          },
+        },
+      },
+      {
+        name: 'trigger_aio_audit',
+        description: 'Trigger AIO visibility audit task (checks search engine visibility, schema validation).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+            audit_type: { 
+              type: 'string', 
+              description: 'Audit type',
+              enum: ['visibility', 'entity']
+            },
+          },
+          required: ['project_id'],
+        },
+      },
     ],
   };
 });
@@ -592,9 +631,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'get_agent_log': {
         const params = new URLSearchParams();
-        if (args.project_id) params.append('projectId', args.project_id);
-        params.append('limit', String(args.limit || 50));
+        if (args.project_id) params.append('project_id', args.project_id);
+        if (args.limit) params.append('limit', String(args.limit));
         response = await fetch(`${API_BASE}/api/agent/log?${params}`);
+        break;
+      }
+
+      case 'get_aio_status': {
+        const params = new URLSearchParams();
+        params.append('projectId', args.project_id);
+        response = await fetch(`${API_BASE}/api/agent/aio?${params}`);
+        break;
+      }
+
+      case 'trigger_aio_injection': {
+        const body = {};
+        if (args.project_id) body.projectId = args.project_id;
+        response = await fetch(`${API_BASE}/api/agent/aio`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        break;
+      }
+
+      case 'trigger_aio_audit': {
+        const auditAction = args.audit_type === 'entity' ? 'entity_audit' : 'audit';
+        response = await fetch(`${API_BASE}/api/agent/aio`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: auditAction,
+            projectId: args.project_id,
+          }),
+        });
         break;
       }
 

@@ -482,7 +482,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            entry_id: args.entry_id,
+            kbId: args.entry_id,
             ...updateData,
           }),
         });
@@ -494,7 +494,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            entry_id: args.entry_id,
+            kbId: args.entry_id,
           }),
         });
         break;

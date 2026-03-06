@@ -242,7 +242,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'update_project_settings',
-        description: 'Update project settings (platforms, posting schedule, content mix, semantic anchors, constraints, mood settings).',
+        description: 'Update project settings (platforms, posting schedule, content mix, semantic anchors, constraints, mood settings, style rules).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -257,9 +257,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'object', 
               description: 'Mood settings (tone, energy, style)'
             },
+            content_mix: {
+              type: 'object',
+              description: 'Content mix ratios (educational, soft_sell, hard_sell) - values 0-1'
+            },
+            style_rules: {
+              type: 'object',
+              description: 'Style rules (start_with_question, max_bullets, no_hashtags_in_text, max_length)'
+            },
             orchestrator_config: { 
               type: 'object', 
-              description: 'Orchestrator configuration (posting_times, content_mix, visual_quality, etc.)'
+              description: 'Orchestrator configuration (posting_times, visual_quality, etc.)'
             },
           },
           required: ['project_id'],
@@ -525,6 +533,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.semantic_anchors) updateData.semantic_anchors = args.semantic_anchors;
         if (args.constraints) updateData.constraints = args.constraints;
         if (args.mood_settings) updateData.mood_settings = args.mood_settings;
+        if (args.content_mix) updateData.content_mix = args.content_mix;
+        if (args.style_rules) updateData.style_rules = args.style_rules;
         if (args.orchestrator_config) updateData.orchestrator_config = args.orchestrator_config;
         
         response = await fetch(`${API_BASE}/api/projects/${args.project_id}`, {

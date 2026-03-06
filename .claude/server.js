@@ -233,6 +233,37 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: 'create_project',
+        description: 'Create a new project with initial configuration, starter prompts, and knowledge base.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Project name' },
+            slug: { type: 'string', description: 'URL-friendly slug (lowercase, no spaces)' },
+            description: { type: 'string', description: 'Project description' },
+            platforms: { 
+              type: 'array', 
+              items: { type: 'string' },
+              description: 'Enabled platforms (facebook, instagram, linkedin, x, etc.)'
+            },
+            semantic_anchors: { 
+              type: 'array', 
+              items: { type: 'string' },
+              description: 'Semantic anchors (keywords for content)'
+            },
+            mood_settings: { 
+              type: 'object', 
+              description: 'Mood settings (tone, energy, style)'
+            },
+            constraints: { 
+              type: 'object', 
+              description: 'Content constraints (forbidden_topics, mandatory_terms, max_hashtags)'
+            },
+          },
+          required: ['name', 'slug'],
+        },
+      },
+      {
         name: 'list_projects',
         description: 'List all projects with basic info.',
         inputSchema: {
@@ -433,6 +464,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updateData),
+        });
+        break;
+      }
+
+      case 'create_project': {
+        response = await fetch(`${API_BASE}/api/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: args.name,
+            slug: args.slug,
+            description: args.description,
+            platforms: args.platforms || ['linkedin'],
+            semantic_anchors: args.semantic_anchors || [],
+            mood_settings: args.mood_settings || { tone: 'professional', energy: 'medium', style: 'informative' },
+            constraints: args.constraints || { forbidden_topics: [], mandatory_terms: [], max_hashtags: 5 },
+          }),
         });
         break;
       }

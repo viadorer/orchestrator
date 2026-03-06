@@ -47,7 +47,7 @@ interface PostCardProps {
   platformOverrides: string[];
   onPlatformToggle: (platform: string, isActive: boolean) => void;
   statusFilter: string;
-  onApproveAndSchedule?: (id: string, scheduledFor?: string) => Promise<void>;
+  onApproveAndSchedule?: (id: string, platforms: string[], scheduledFor?: string) => Promise<void>;
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -273,7 +273,7 @@ export function PostCard({
               <button
                 onClick={async () => {
                   setScheduling(true);
-                  await onApproveAndSchedule(item.id, scheduleDate ? new Date(scheduleDate).toISOString() : undefined);
+                  await onApproveAndSchedule(item.id, platformOverrides, scheduleDate ? new Date(scheduleDate).toISOString() : undefined);
                   setScheduling(false);
                   setShowScheduler(false);
                   setScheduleDate('');

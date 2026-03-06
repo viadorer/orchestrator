@@ -188,12 +188,12 @@ export function ReviewView() {
     loadItems();
   };
 
-  const approveAndSchedule = async (id: string, scheduledFor?: string) => {
-    // 1. Approve the post
+  const approveAndSchedule = async (id: string, platforms: string[], scheduledFor?: string) => {
+    // 1. Approve the post + set platforms
     await fetch(`/api/queue/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'approved' }),
+      body: JSON.stringify({ status: 'approved', platforms }),
     });
     // 2. Immediately publish/schedule via getLate
     const pubRes = await fetch('/api/publish', {

@@ -242,7 +242,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'update_project_settings',
-        description: 'Update project settings (platforms, posting schedule, content mix, semantic anchors, constraints, mood settings, style rules).',
+        description: 'Update project settings (platforms, posting schedule, content mix, semantic anchors, constraints, mood settings, style rules, agent_settings incl. rss_feeds).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -268,6 +268,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             orchestrator_config: { 
               type: 'object', 
               description: 'Orchestrator configuration (posting_times, visual_quality, etc.)'
+            },
+            agent_settings: {
+              type: 'object',
+              description: 'Agent settings including rss_feeds array. Example: { rss_feeds: [{ url: "https://...", label: "Blog" }], contextual_pulse: true }'
             },
           },
           required: ['project_id'],
@@ -654,6 +658,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.content_mix) updateData.content_mix = args.content_mix;
         if (args.style_rules) updateData.style_rules = args.style_rules;
         if (args.orchestrator_config) updateData.orchestrator_config = args.orchestrator_config;
+
+        // Merge agent_settings with existing to avoid overwriting other fields
+        if (args.agent_settings) {
+          const currentRes = await fetch(`${API_BASE}/api/projects/${args.project_id}`);
+          if (currentRes.ok) {
+            const current = await currentRes.json();
+            updateData.agent_settings = { ...(current.agent_settings || {}), ...args.agent_settings };
+          } else {
+            updateData.agent_settings = args.agent_settings;
+          }
+        }
         
         response = await fetch(`${API_BASE}/api/projects/${args.project_id}`, {
           method: 'PATCH',

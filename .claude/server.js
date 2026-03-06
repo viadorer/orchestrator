@@ -398,6 +398,60 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['project_id'],
         },
       },
+
+      // AIO Visibility Prompts Management
+      {
+        name: 'get_aio_prompts',
+        description: 'Get AI Visibility test prompts for a project.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+          },
+          required: ['project_id'],
+        },
+      },
+      {
+        name: 'add_aio_prompt',
+        description: 'Add new AI Visibility test prompt for a project.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+            prompt: { type: 'string', description: 'Test prompt text (e.g., "Best real estate agent in Prague")' },
+            category: { 
+              type: 'string', 
+              description: 'Prompt category',
+              enum: ['how_to', 'pricing', 'recommendation', 'comparison', 'purchase_intent']
+            },
+          },
+          required: ['project_id', 'prompt'],
+        },
+      },
+      {
+        name: 'update_aio_prompt',
+        description: 'Update AI Visibility test prompt (activate/deactivate or change text).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            prompt_id: { type: 'string', description: 'Prompt UUID' },
+            is_active: { type: 'boolean', description: 'Activate or deactivate prompt' },
+            prompt: { type: 'string', description: 'New prompt text (optional)' },
+          },
+          required: ['prompt_id'],
+        },
+      },
+      {
+        name: 'delete_aio_prompt',
+        description: 'Delete AI Visibility test prompt.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            prompt_id: { type: 'string', description: 'Prompt UUID' },
+          },
+          required: ['prompt_id'],
+        },
+      },
     ],
   };
 });
@@ -664,6 +718,47 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             action: auditAction,
             projectId: args.project_id,
           }),
+        });
+        break;
+      }
+
+      case 'get_aio_prompts': {
+        const params = new URLSearchParams();
+        params.append('projectId', args.project_id);
+        response = await fetch(`${API_BASE}/api/agent/aio/prompts?${params}`);
+        break;
+      }
+
+      case 'add_aio_prompt': {
+        response = await fetch(`${API_BASE}/api/agent/aio/prompts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: args.project_id,
+            prompt: args.prompt,
+            category: args.category || 'purchase_intent',
+          }),
+        });
+        break;
+      }
+
+      case 'update_aio_prompt': {
+        const updateFields = { id: args.prompt_id };
+        if (args.is_active !== undefined) updateFields.is_active = args.is_active;
+        if (args.prompt) updateFields.prompt = args.prompt;
+        response = await fetch(`${API_BASE}/api/agent/aio/prompts`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateFields),
+        });
+        break;
+      }
+
+      case 'delete_aio_prompt': {
+        const params = new URLSearchParams();
+        params.append('id', args.prompt_id);
+        response = await fetch(`${API_BASE}/api/agent/aio/prompts?${params}`, {
+          method: 'DELETE',
         });
         break;
       }

@@ -120,8 +120,15 @@ export function PublishView() {
     setEditText('');
   };
 
-  const handleScheduleOne = async (id: string, scheduledFor?: string) => {
+  const handleScheduleOne = async (id: string, platforms: string[], scheduledFor?: string) => {
     try {
+      // Update platforms first
+      await fetch(`/api/queue/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platforms }),
+      });
+      // Then publish
       const res = await fetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

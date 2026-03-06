@@ -37,7 +37,7 @@ interface PublishPostCardProps {
   onEditTextChange?: (text: string) => void;
   onDelete?: () => void;
   onPreview?: (item: QueueItem) => void;
-  onSchedule?: (id: string, scheduledFor?: string) => Promise<void>;
+  onSchedule?: (id: string, platforms: string[], scheduledFor?: string) => Promise<void>;
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -77,6 +77,13 @@ export function PublishPostCard({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [scheduleDate, setScheduleDate] = useState('');
   const [sending, setSending] = useState(false);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(item.platforms || []);
+
+  const togglePlatform = (platform: string) => {
+    setSelectedPlatforms(prev =>
+      prev.includes(platform) ? prev.filter(p => p !== platform) : [...prev, platform]
+    );
+  };
   
   const mediaItems = item.media_urls && item.media_urls.length > 0 
     ? item.media_urls 
@@ -248,7 +255,24 @@ export function PublishPostCard({
 
       {/* Per-post scheduling */}
       {!isEditing && onSchedule && item.status === 'approved' && (
-        <div className="px-3 pb-2">
+        <div className="px-3 pb-2 space-y-2">
+          {/* Platform checkboxes */}
+          <div className="flex flex-wrap gap-1">
+            {item.platforms.map(p => (
+              <button
+                key={p}
+                onClick={() => togglePlatform(p)}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-all cursor-pointer ${
+                  selectedPlatforms.includes(p)
+                    ? `${PLATFORM_BADGE_COLORS[p] || 'bg-slate-600'} text-white`
+                    : 'bg-slate-800/50 text-slate-600 line-through'
+                }`}
+              >
+                {PLATFORM_LABELS[p] || p}
+              </button>
+            ))}
+          </div>
+          {/* Date + Send */}
           <div className="flex items-center gap-2">
             <input
               type="datetime-local"
@@ -258,12 +282,13 @@ export function PublishPostCard({
             />
             <button
               onClick={async () => {
+                if (selectedPlatforms.length === 0) return;
                 setSending(true);
-                await onSchedule(item.id, scheduleDate ? new Date(scheduleDate).toISOString() : undefined);
+                await onSchedule(item.id, selectedPlatforms, scheduleDate ? new Date(scheduleDate).toISOString() : undefined);
                 setSending(false);
                 setScheduleDate('');
               }}
-              disabled={sending}
+              disabled={sending || selectedPlatforms.length === 0}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
                 scheduleDate
                   ? 'bg-blue-600 text-white hover:bg-blue-500'

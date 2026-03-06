@@ -188,6 +188,27 @@ export function ReviewView() {
     loadItems();
   };
 
+  const approveAndSchedule = async (id: string, scheduledFor?: string) => {
+    // 1. Approve the post
+    await fetch(`/api/queue/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'approved' }),
+    });
+    // 2. Immediately publish/schedule via getLate
+    const pubRes = await fetch('/api/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [id], scheduledFor }),
+    });
+    const pubData = await pubRes.json();
+    const failed = pubData.results?.filter((r: { status: string; error?: string }) => r.status === 'failed');
+    if (failed?.length > 0) {
+      alert(`Chyba: ${failed.map((f: { error?: string }) => f.error).join(', ')}`);
+    }
+    loadItems();
+  };
+
   const rejectOne = async (id: string) => {
     await fetch(`/api/queue/${id}`, { method: 'DELETE' });
     loadItems();
@@ -368,6 +389,7 @@ export function ReviewView() {
               onApprove={() => approveOne(item)}
               onPublish={() => publishOne(item)}
               onReject={() => rejectOne(item.id)}
+              onApproveAndSchedule={approveAndSchedule}
               platformLabels={PLATFORM_LABELS}
               platformBadgeColors={PLATFORM_BADGE_COLORS}
               platformOverrides={platformOverrides[item.id] || item.platforms}

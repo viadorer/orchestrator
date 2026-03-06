@@ -120,6 +120,29 @@ export function PublishView() {
     setEditText('');
   };
 
+  const handleScheduleOne = async (id: string, scheduledFor?: string) => {
+    try {
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: [id],
+          scheduledFor: scheduledFor || undefined,
+        }),
+      });
+      const data = await res.json();
+      const failed = data.results?.filter((r: { status: string }) => r.status === 'failed');
+      if (failed?.length > 0) {
+        setPublishResult(failed);
+      } else {
+        setPublishResult(data.results || []);
+      }
+      loadData();
+    } catch {
+      setPublishResult([{ id, status: 'failed', error: 'Chyba při publikaci' }]);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     setDeleting(prev => new Set(prev).add(id));
     try {
@@ -296,6 +319,7 @@ export function PublishView() {
             onEditTextChange={setEditText}
             onDelete={() => handleDelete(item.id)}
             onPreview={setPreviewItem}
+            onSchedule={handleScheduleOne}
           />
         ))}
       </Section>

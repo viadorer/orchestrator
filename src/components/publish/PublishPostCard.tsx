@@ -37,6 +37,7 @@ interface PublishPostCardProps {
   onEditTextChange?: (text: string) => void;
   onDelete?: () => void;
   onPreview?: (item: QueueItem) => void;
+  onSchedule?: (id: string, scheduledFor?: string) => Promise<void>;
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -71,8 +72,11 @@ export function PublishPostCard({
   onEditTextChange,
   onDelete,
   onPreview,
+  onSchedule,
 }: PublishPostCardProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [sending, setSending] = useState(false);
   
   const mediaItems = item.media_urls && item.media_urls.length > 0 
     ? item.media_urls 
@@ -239,6 +243,42 @@ export function PublishPostCard({
               {PLATFORM_LABELS[p] || p}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Per-post scheduling */}
+      {!isEditing && onSchedule && item.status === 'approved' && (
+        <div className="px-3 pb-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="datetime-local"
+              value={scheduleDate}
+              onChange={(e) => setScheduleDate(e.target.value)}
+              className="flex-1 px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 min-w-0"
+            />
+            <button
+              onClick={async () => {
+                setSending(true);
+                await onSchedule(item.id, scheduleDate ? new Date(scheduleDate).toISOString() : undefined);
+                setSending(false);
+                setScheduleDate('');
+              }}
+              disabled={sending}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                scheduleDate
+                  ? 'bg-blue-600 text-white hover:bg-blue-500'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-500'
+              } disabled:opacity-50`}
+            >
+              {sending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : scheduleDate ? (
+                <><Clock className="w-3 h-3" /> Naplánovat</>
+              ) : (
+                <><SendIcon className="w-3 h-3" /> Odeslat</>
+              )}
+            </button>
+          </div>
         </div>
       )}
 

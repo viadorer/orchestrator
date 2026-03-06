@@ -144,7 +144,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       // Knowledge Base Management
       {
         name: 'get_project_kb',
-        description: 'Get project knowledge base content.',
+        description: 'Get all knowledge base entries for a project.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -154,17 +154,50 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'update_project_kb',
-        description: 'Update project knowledge base. Add facts, update description, modify safe/ban lists.',
+        name: 'add_kb_entry',
+        description: 'Add a new knowledge base entry to a project.',
         inputSchema: {
           type: 'object',
           properties: {
             project_id: { type: 'string', description: 'Project UUID' },
-            kb_facts: { type: 'string', description: 'Knowledge base facts (markdown)' },
-            safe_list: { type: 'array', items: { type: 'string' }, description: 'Safe topics/keywords' },
-            ban_list: { type: 'array', items: { type: 'string' }, description: 'Banned topics/keywords' },
+            category: { 
+              type: 'string', 
+              description: 'Entry category',
+              enum: ['product', 'audience', 'usp', 'faq', 'process', 'pricing', 'team', 'case_study', 'testimonial', 'competitor', 'industry', 'other']
+            },
+            title: { type: 'string', description: 'Entry title' },
+            content: { type: 'string', description: 'Entry content (markdown supported)' },
+            is_active: { type: 'boolean', description: 'Is entry active (default: true)' },
           },
-          required: ['project_id'],
+          required: ['project_id', 'category', 'title', 'content'],
+        },
+      },
+      {
+        name: 'update_kb_entry',
+        description: 'Update an existing knowledge base entry.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+            entry_id: { type: 'string', description: 'KB entry UUID' },
+            category: { type: 'string', description: 'Entry category' },
+            title: { type: 'string', description: 'Entry title' },
+            content: { type: 'string', description: 'Entry content' },
+            is_active: { type: 'boolean', description: 'Is entry active' },
+          },
+          required: ['project_id', 'entry_id'],
+        },
+      },
+      {
+        name: 'delete_kb_entry',
+        description: 'Delete a knowledge base entry.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+            entry_id: { type: 'string', description: 'KB entry UUID to delete' },
+          },
+          required: ['project_id', 'entry_id'],
         },
       },
 
@@ -424,11 +457,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
 
-      case 'update_project_kb': {
+      case 'add_kb_entry': {
         response = await fetch(`${API_BASE}/api/projects/${args.project_id}/kb`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(args),
+          body: JSON.stringify({
+            category: args.category,
+            title: args.title,
+            content: args.content,
+            is_active: args.is_active !== undefined ? args.is_active : true,
+          }),
+        });
+        break;
+      }
+
+      case 'update_kb_entry': {
+        const updateData = {};
+        if (args.category) updateData.category = args.category;
+        if (args.title) updateData.title = args.title;
+        if (args.content) updateData.content = args.content;
+        if (args.is_active !== undefined) updateData.is_active = args.is_active;
+        
+        response = await fetch(`${API_BASE}/api/projects/${args.project_id}/kb`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entry_id: args.entry_id,
+            ...updateData,
+          }),
+        });
+        break;
+      }
+
+      case 'delete_kb_entry': {
+        response = await fetch(`${API_BASE}/api/projects/${args.project_id}/kb`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entry_id: args.entry_id,
+          }),
         });
         break;
       }

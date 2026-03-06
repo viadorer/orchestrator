@@ -209,12 +209,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'update_project_settings',
-        description: 'Update project settings (platforms, posting schedule, content mix, etc.).',
+        description: 'Update project settings (platforms, posting schedule, content mix, semantic anchors, constraints, mood settings).',
         inputSchema: {
           type: 'object',
           properties: {
             project_id: { type: 'string', description: 'Project UUID' },
             platforms: { type: 'array', items: { type: 'string' }, description: 'Enabled platforms' },
+            semantic_anchors: { type: 'array', items: { type: 'string' }, description: 'Semantic anchors (keywords for content)' },
+            constraints: { 
+              type: 'object', 
+              description: 'Content constraints (forbidden_topics, mandatory_terms, max_hashtags)'
+            },
+            mood_settings: { 
+              type: 'object', 
+              description: 'Mood settings (tone, energy, style)'
+            },
             orchestrator_config: { 
               type: 'object', 
               description: 'Orchestrator configuration (posting_times, content_mix, visual_quality, etc.)'
@@ -413,13 +422,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'update_project_settings': {
+        const updateData = {};
+        if (args.platforms) updateData.platforms = args.platforms;
+        if (args.semantic_anchors) updateData.semantic_anchors = args.semantic_anchors;
+        if (args.constraints) updateData.constraints = args.constraints;
+        if (args.mood_settings) updateData.mood_settings = args.mood_settings;
+        if (args.orchestrator_config) updateData.orchestrator_config = args.orchestrator_config;
+        
         response = await fetch(`${API_BASE}/api/projects/${args.project_id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            platforms: args.platforms,
-            orchestrator_config: args.orchestrator_config,
-          }),
+          body: JSON.stringify(updateData),
         });
         break;
       }

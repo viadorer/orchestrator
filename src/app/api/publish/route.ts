@@ -68,17 +68,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
-  const { ids, scheduledFor } = await request.json();
+  const { ids, scheduledFor, project_id } = await request.json();
 
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return NextResponse.json({ error: 'ids array is required' }, { status: 400 });
+  // If project_id is provided without ids, fetch all approved posts for that project
+  let postIds = ids;
+  if (project_id && (!ids || ids.length === 0)) {
+    const { data: projectPosts } = await supabase
+      .from('content_queue')
+      .select('id')
+      .eq('project_id', project_id)
+      .eq('status', 'approved')
+      .limit(50);
+    postIds = projectPosts?.map(p => p.id) || [];
+  }
+
+  if (!Array.isArray(postIds) || postIds.length === 0) {
+    return NextResponse.json({ error: 'No posts to publish' }, { status: 400 });
   }
 
   // Load posts with project info (late_accounts = per-platform accountIds)
   const { data: posts, error } = await supabase
     .from('content_queue')
     .select('*, projects(name, late_accounts, late_social_set_id)')
-    .in('id', ids)
+    .in('id', postIds)
     .eq('status', 'approved');
 
   if (error || !posts) {

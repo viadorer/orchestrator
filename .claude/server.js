@@ -452,6 +452,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['prompt_id'],
         },
       },
+
+      // Publishing Management
+      {
+        name: 'bulk_approve_posts',
+        description: 'Bulk approve posts in review queue (by project, score threshold, or all).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Filter by project UUID (optional)' },
+            min_score: { type: 'number', description: 'Minimum AI score to approve (optional, default 7.0)' },
+            limit: { type: 'number', description: 'Max posts to approve (optional, default 50)' },
+          },
+        },
+      },
+      {
+        name: 'publish_posts_now',
+        description: 'Immediately publish approved posts without waiting for cron (bypasses hourly schedule).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Filter by project UUID (optional - publishes all if omitted)' },
+            post_ids: { type: 'array', items: { type: 'string' }, description: 'Specific post IDs to publish (optional)' },
+          },
+        },
+      },
     ],
   };
 });
@@ -759,6 +784,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         params.append('id', args.prompt_id);
         response = await fetch(`${API_BASE}/api/agent/aio/prompts?${params}`, {
           method: 'DELETE',
+        });
+        break;
+      }
+
+      case 'bulk_approve_posts': {
+        const params = new URLSearchParams();
+        if (args.project_id) params.append('projectId', args.project_id);
+        if (args.min_score) params.append('minScore', args.min_score.toString());
+        if (args.limit) params.append('limit', args.limit.toString());
+        response = await fetch(`${API_BASE}/api/queue/bulk-approve?${params}`, {
+          method: 'POST',
+        });
+        break;
+      }
+
+      case 'publish_posts_now': {
+        const body = {};
+        if (args.project_id) body.project_id = args.project_id;
+        if (args.post_ids) body.ids = args.post_ids;
+        response = await fetch(`${API_BASE}/api/publish`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
         });
         break;
       }

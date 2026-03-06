@@ -380,57 +380,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_project_kb': {
-        response = await fetch(`${API_BASE}/api/projects/${args.project_id}`);
-        const project = await response.json();
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              kb_facts: project.kb_facts,
-              safe_list: project.safe_list,
-              ban_list: project.ban_list,
-            }, null, 2),
-          }],
-        };
+        response = await fetch(`${API_BASE}/api/projects/${args.project_id}/kb`);
+        break;
       }
 
       case 'update_project_kb': {
-        response = await fetch(`${API_BASE}/api/projects/${args.project_id}`, {
-          method: 'PATCH',
+        response = await fetch(`${API_BASE}/api/projects/${args.project_id}/kb`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            kb_facts: args.kb_facts,
-            safe_list: args.safe_list,
-            ban_list: args.ban_list,
-          }),
+          body: JSON.stringify(args),
         });
         break;
       }
 
       case 'get_project_prompts': {
-        response = await fetch(`${API_BASE}/api/projects/${args.project_id}`);
-        const project = await response.json();
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              tone_of_voice: project.tone_of_voice,
-              custom_system_prompt: project.custom_system_prompt,
-              guardrails: project.guardrails,
-            }, null, 2),
-          }],
-        };
+        response = await fetch(`${API_BASE}/api/projects/${args.project_id}/prompts`);
+        break;
       }
 
       case 'update_project_prompts': {
-        response = await fetch(`${API_BASE}/api/projects/${args.project_id}`, {
-          method: 'PATCH',
+        response = await fetch(`${API_BASE}/api/projects/${args.project_id}/prompts`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tone_of_voice: args.tone_of_voice,
-            custom_system_prompt: args.custom_system_prompt,
-            guardrails: args.guardrails,
-          }),
+          body: JSON.stringify(args),
         });
         break;
       }

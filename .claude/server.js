@@ -457,6 +457,75 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
 
+      // RSS Sources (Contextual Pulse)
+      {
+        name: 'list_rss_sources',
+        description: 'List RSS sources for a project (Contextual Pulse).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+          },
+          required: ['project_id'],
+        },
+      },
+      {
+        name: 'add_rss_source',
+        description: 'Add RSS source to a project for Contextual Pulse news monitoring.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+            name: { type: 'string', description: 'Source name (e.g., "HypoIndex")' },
+            url: { type: 'string', description: 'RSS feed URL' },
+            category: { 
+              type: 'string', 
+              description: 'Feed category',
+              enum: ['general', 'demographics', 'economics', 'real_estate', 'finance', 'legislation', 'technology']
+            },
+            fetch_interval_hours: { type: 'number', description: 'Fetch interval in hours (default 6)' },
+          },
+          required: ['project_id', 'name', 'url'],
+        },
+      },
+      {
+        name: 'update_rss_source',
+        description: 'Update an RSS source (change name, URL, category, or interval).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            source_id: { type: 'string', description: 'RSS source UUID' },
+            name: { type: 'string', description: 'New source name (optional)' },
+            url: { type: 'string', description: 'New RSS feed URL (optional)' },
+            category: { type: 'string', description: 'New category (optional)' },
+            is_active: { type: 'boolean', description: 'Activate/deactivate source (optional)' },
+          },
+          required: ['source_id'],
+        },
+      },
+      {
+        name: 'delete_rss_source',
+        description: 'Delete an RSS source.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            source_id: { type: 'string', description: 'RSS source UUID' },
+          },
+          required: ['source_id'],
+        },
+      },
+      {
+        name: 'fetch_rss_source',
+        description: 'Manually trigger RSS feed fetch for a source.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            source_id: { type: 'string', description: 'RSS source UUID' },
+          },
+          required: ['source_id'],
+        },
+      },
+
       // Publishing Management
       {
         name: 'bulk_approve_posts',
@@ -799,6 +868,56 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         params.append('id', args.prompt_id);
         response = await fetch(`${API_BASE}/api/agent/aio/prompts?${params}`, {
           method: 'DELETE',
+        });
+        break;
+      }
+
+      case 'list_rss_sources': {
+        const params = new URLSearchParams();
+        params.append('project_id', args.project_id);
+        response = await fetch(`${API_BASE}/api/rss?${params}`);
+        break;
+      }
+
+      case 'add_rss_source': {
+        response = await fetch(`${API_BASE}/api/rss`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: args.project_id,
+            name: args.name,
+            url: args.url,
+            category: args.category || 'general',
+            fetch_interval_hours: args.fetch_interval_hours || 6,
+          }),
+        });
+        break;
+      }
+
+      case 'update_rss_source': {
+        const updateFields = {};
+        if (args.name) updateFields.name = args.name;
+        if (args.url) updateFields.url = args.url;
+        if (args.category) updateFields.category = args.category;
+        if (args.is_active !== undefined) updateFields.is_active = args.is_active;
+        response = await fetch(`${API_BASE}/api/rss/${args.source_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateFields),
+        });
+        break;
+      }
+
+      case 'delete_rss_source': {
+        response = await fetch(`${API_BASE}/api/rss/${args.source_id}`, {
+          method: 'DELETE',
+        });
+        break;
+      }
+
+      case 'fetch_rss_source': {
+        response = await fetch(`${API_BASE}/api/rss/${args.source_id}`, {
+          method: 'POST',
         });
         break;
       }

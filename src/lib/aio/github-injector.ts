@@ -622,6 +622,7 @@ export interface BatchInjectionConfig {
   siteType?: SiteType;
   layoutFile?: string | null;
   publicDir?: string;
+  skipHtmlInjection?: boolean;
 }
 
 /**
@@ -656,8 +657,8 @@ export async function processSiteInjection(
   const siteType = config.siteType || 'html';
   const publicDir = config.publicDir ?? (siteType === 'html' ? '' : 'public');
 
-  // For dynamic projects: inject into layout file
-  if (siteType !== 'html' && config.layoutFile) {
+  // For dynamic projects: inject into layout file (skip if configured)
+  if (!config.skipHtmlInjection && siteType !== 'html' && config.layoutFile) {
     const result = await injectSchemaToFile(
       config.repo,
       config.layoutFile,
@@ -671,8 +672,8 @@ export async function processSiteInjection(
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  // For static HTML: inject into each HTML file
-  if (siteType === 'html') {
+  // For static HTML: inject into each HTML file (skip if configured)
+  if (!config.skipHtmlInjection && siteType === 'html') {
     for (const htmlFile of config.htmlFiles) {
       const result = await injectSchemaToFile(
         config.repo,

@@ -150,7 +150,7 @@ export async function processAioSite(
       schemas: bundle,
     };
 
-    // 6. Process injection via GitHub API
+    // 6. Process injection via GitHub API (only llms.txt + ai-data.json, never HTML)
     const injectionResult = await processSiteInjection({
       repo: site.github_repo,
       branch: site.github_branch,
@@ -161,6 +161,7 @@ export async function processAioSite(
       siteType,
       layoutFile,
       publicDir,
+      skipHtmlInjection: true,
     });
 
     result.success = injectionResult.failed === 0;

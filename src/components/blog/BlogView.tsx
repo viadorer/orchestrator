@@ -303,14 +303,11 @@ export function BlogView() {
                     {/* Content Preview */}
                     <div>
                       <h4 className="text-sm font-medium text-gray-700 mb-2">Obsah článku</h4>
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
+                      <div className="bg-white rounded-lg p-6 max-h-[600px] overflow-y-auto border border-gray-200">
                         <div 
-                          className="prose prose-sm max-w-none"
-                          dangerouslySetInnerHTML={{ __html: post.markdown_body.substring(0, 2000) }}
+                          className="prose prose-sm prose-gray max-w-none prose-headings:text-gray-900 prose-p:text-gray-800 prose-strong:text-gray-900 prose-li:text-gray-800"
+                          dangerouslySetInnerHTML={{ __html: post.markdown_body }}
                         />
-                        {post.markdown_body.length > 2000 && (
-                          <p className="text-sm text-gray-500 mt-4">... (zkráceno)</p>
-                        )}
                       </div>
                     </div>
 

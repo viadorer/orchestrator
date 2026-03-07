@@ -61,7 +61,8 @@ export type TaskType =
   | 'visual_consistency_audit'
   | 'aio_schema_inject'
   | 'aio_visibility_audit'
-  | 'aio_entity_audit';
+  | 'aio_entity_audit'
+  | 'generate_blog_post';
 
 export interface AgentTask {
   id: string;
@@ -1609,6 +1610,21 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
           commit_sha: r.lastCommitSha,
           error: r.error,
         })),
+      };
+    } else if (task.task_type === 'generate_blog_post') {
+      // ---- Blog: Generate blog post via blog-generator ----
+      const { generateBlogPost } = await import('@/lib/blog/blog-generator');
+      const blogResult = await generateBlogPost({
+        projectId: task.project_id,
+        topic: ((task.params as Record<string, unknown>)?.topic as string) || undefined,
+        category: ((task.params as Record<string, unknown>)?.category as string) || undefined,
+        postFormat: ((task.params as Record<string, unknown>)?.post_format as 'html' | 'markdown') || undefined,
+      });
+      result = {
+        queue_id: blogResult.queueId,
+        title: blogResult.blogMeta.title,
+        slug: blogResult.blogMeta.slug,
+        word_count: blogResult.body.split(/\s+/).length,
       };
     } else if (task.task_type === 'aio_visibility_audit') {
       // ---- AIO: Visibility Audit (prompt testing across AI platforms) ----

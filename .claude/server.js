@@ -583,6 +583,44 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
 
+      // Blog System
+      {
+        name: 'list_blog_posts',
+        description: 'List blog posts from content queue (generated articles for review/publishing).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Filter by project UUID (optional)' },
+            status: { type: 'string', description: 'Filter by status: review, approved, sent (optional)' },
+          },
+        },
+      },
+      {
+        name: 'generate_blog_post',
+        description: 'Generate a new blog article using AI (Gemini). Uses project KB, entity profile, and RSS pulse for context. Saves to content_queue with status "review".',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+            topic: { type: 'string', description: 'Article topic (optional — AI picks from KB/RSS if not provided)' },
+            category: { type: 'string', description: 'Category ID e.g., "tips", "market", "legal", "guide" (optional)' },
+            post_format: { type: 'string', enum: ['html', 'markdown'], description: 'Output format (default: from project blog_config or "html")' },
+          },
+          required: ['project_id'],
+        },
+      },
+      {
+        name: 'publish_blog_to_github',
+        description: 'Publish an approved blog post to the project GitHub repo. Pushes post file + updates posts.json + optional cover image.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            queue_id: { type: 'string', description: 'Content queue item UUID (must be a blog post)' },
+          },
+          required: ['queue_id'],
+        },
+      },
+
       // Publishing Management
       {
         name: 'bulk_approve_posts',
@@ -1025,6 +1063,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'fetch_rss_source': {
         response = await fetch(`${API_BASE}/api/rss/${args.source_id}`, {
           method: 'POST',
+        });
+        break;
+      }
+
+      case 'list_blog_posts': {
+        const params = new URLSearchParams();
+        if (args.project_id) params.append('project_id', args.project_id);
+        if (args.status) params.append('status', args.status);
+        response = await fetch(`${API_BASE}/api/blog?${params}`);
+        break;
+      }
+
+      case 'generate_blog_post': {
+        const body = { project_id: args.project_id };
+        if (args.topic) body.topic = args.topic;
+        if (args.category) body.category = args.category;
+        if (args.post_format) body.post_format = args.post_format;
+        response = await fetch(`${API_BASE}/api/blog/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        break;
+      }
+
+      case 'publish_blog_to_github': {
+        response = await fetch(`${API_BASE}/api/blog/publish`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ queue_id: args.queue_id }),
         });
         break;
       }

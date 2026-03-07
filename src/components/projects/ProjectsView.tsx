@@ -10,6 +10,7 @@ import { ProjectPrompts } from './ProjectPrompts';
 import { MediaLibrary } from './MediaLibrary';
 import { NewsPanel } from './NewsPanel';
 import { TabAioSite, TabAioEntity, TabAioPrompts, TabAioScores } from './AioSettings';
+import { TabBlog } from './TabBlog';
 import {
   DEFAULT_PLATFORM_CONTENT_MIX,
   CONTENT_TYPE_LABELS,
@@ -75,7 +76,7 @@ const TONES = ['professional', 'casual', 'friendly', 'authoritative', 'playful',
 const ENERGIES = ['low', 'medium', 'high'] as const;
 const STYLES = ['informative', 'entertaining', 'inspirational', 'educational', 'conversational'] as const;
 
-type DetailTab = 'basic' | 'platforms' | 'orchestrator' | 'visual' | 'media' | 'news' | 'chatbot' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts' | 'aio-site' | 'aio-entity' | 'aio-prompts' | 'aio-scores';
+type DetailTab = 'basic' | 'platforms' | 'orchestrator' | 'visual' | 'media' | 'news' | 'chatbot' | 'tone' | 'mix' | 'constraints' | 'style' | 'kb' | 'prompts' | 'blog' | 'aio-site' | 'aio-entity' | 'aio-prompts' | 'aio-scores';
 
 export function ProjectsView() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -281,6 +282,7 @@ const TABS: Array<{ id: DetailTab; label: string; icon: React.ElementType }> = [
   { id: 'style', label: 'Style Rules', icon: Sliders },
   { id: 'kb', label: 'Knowledge Base', icon: BookOpen },
   { id: 'prompts', label: 'Prompty', icon: FileText },
+  { id: 'blog', label: 'Blog', icon: FileText },
   { id: 'aio-site', label: 'AIO GitHub', icon: GitBranch },
   { id: 'aio-entity', label: 'AIO Entity', icon: Globe },
   { id: 'aio-prompts', label: 'AIO Prompty', icon: SearchIcon },
@@ -356,6 +358,7 @@ function ProjectDetail({
         {tab === 'style' && <TabStyle project={project} onSave={saveField} />}
         {tab === 'kb' && <TabKB projectId={project.id} entries={kbEntries} onReload={onKBReload} />}
         {tab === 'prompts' && <ProjectPrompts projectId={project.id} />}
+        {tab === 'blog' && <TabBlog project={project} onSave={saveField} />}
         {tab === 'aio-site' && <TabAioSite projectId={project.id} />}
         {tab === 'aio-entity' && <TabAioEntity projectId={project.id} />}
         {tab === 'aio-prompts' && <TabAioPrompts projectId={project.id} />}

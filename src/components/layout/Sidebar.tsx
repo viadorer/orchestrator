@@ -15,10 +15,11 @@ import {
   Bot,
   MessageCircle,
   PenSquare,
+  FileText,
 } from 'lucide-react';
 import { useState } from 'react';
 
-export type AdminView = 'dashboard' | 'projects' | 'agent' | 'generate' | 'manual-post' | 'review' | 'publish' | 'calendar' | 'chat' | 'settings';
+export type AdminView = 'dashboard' | 'projects' | 'agent' | 'generate' | 'manual-post' | 'review' | 'publish' | 'calendar' | 'chat' | 'blog' | 'settings';
 
 interface SidebarProps {
   currentView: AdminView;
@@ -35,6 +36,7 @@ const NAV_ITEMS: Array<{ view: AdminView; label: string; icon: React.ElementType
   { view: 'publish', label: 'Publikovat', icon: Send },
   { view: 'calendar', label: 'Kalendář', icon: Calendar },
   { view: 'chat', label: 'Chat', icon: MessageCircle },
+  { view: 'blog', label: 'Blog', icon: FileText },
   { view: 'settings', label: 'Nastavení', icon: Settings },
 ];
 

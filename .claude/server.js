@@ -457,6 +457,63 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
 
+      // Entity Profiles (AIO Identity)
+      {
+        name: 'list_entity_profiles',
+        description: 'List AIO entity profiles (all or for a specific project).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Filter by project UUID (optional)' },
+          },
+        },
+      },
+      {
+        name: 'create_entity_profile',
+        description: 'Create an AIO entity profile for a project (official name, description, keywords, sameAs links).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            project_id: { type: 'string', description: 'Project UUID' },
+            official_name: { type: 'string', description: 'Official entity name (e.g., "David Choc")' },
+            short_description: { type: 'string', description: 'Short description (1-2 sentences)' },
+            long_description: { type: 'string', description: 'Detailed description' },
+            category: { type: 'string', description: 'Entity category (e.g., Person, Organization, Service, Product, LocalBusiness)' },
+            keywords: { type: 'array', items: { type: 'string' }, description: 'Keywords for AI identity' },
+            same_as: { type: 'array', items: { type: 'string' }, description: 'sameAs URLs (LinkedIn, Facebook, Wikidata, Firmy.cz, etc.)' },
+          },
+          required: ['project_id', 'official_name'],
+        },
+      },
+      {
+        name: 'update_entity_profile',
+        description: 'Update an existing AIO entity profile.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            profile_id: { type: 'string', description: 'Entity profile UUID' },
+            official_name: { type: 'string', description: 'Official entity name (optional)' },
+            short_description: { type: 'string', description: 'Short description (optional)' },
+            long_description: { type: 'string', description: 'Detailed description (optional)' },
+            category: { type: 'string', description: 'Entity category (optional)' },
+            keywords: { type: 'array', items: { type: 'string' }, description: 'Keywords (optional)' },
+            same_as: { type: 'array', items: { type: 'string' }, description: 'sameAs URLs (optional)' },
+          },
+          required: ['profile_id'],
+        },
+      },
+      {
+        name: 'delete_entity_profile',
+        description: 'Delete an AIO entity profile.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            profile_id: { type: 'string', description: 'Entity profile UUID' },
+          },
+          required: ['profile_id'],
+        },
+      },
+
       // RSS Sources (Contextual Pulse)
       {
         name: 'list_rss_sources',
@@ -867,6 +924,56 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const params = new URLSearchParams();
         params.append('id', args.prompt_id);
         response = await fetch(`${API_BASE}/api/agent/aio/prompts?${params}`, {
+          method: 'DELETE',
+        });
+        break;
+      }
+
+      case 'list_entity_profiles': {
+        const params = new URLSearchParams();
+        if (args.project_id) params.append('project_id', args.project_id);
+        response = await fetch(`${API_BASE}/api/agent/aio/entity?${params}`);
+        break;
+      }
+
+      case 'create_entity_profile': {
+        const body = {
+          project_id: args.project_id,
+          official_name: args.official_name,
+        };
+        if (args.short_description) body.short_description = args.short_description;
+        if (args.long_description) body.long_description = args.long_description;
+        if (args.category) body.category = args.category;
+        if (args.keywords) body.keywords = args.keywords;
+        if (args.same_as) body.same_as = args.same_as;
+        response = await fetch(`${API_BASE}/api/agent/aio/entity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        break;
+      }
+
+      case 'update_entity_profile': {
+        const updateFields = { id: args.profile_id };
+        if (args.official_name) updateFields.official_name = args.official_name;
+        if (args.short_description) updateFields.short_description = args.short_description;
+        if (args.long_description) updateFields.long_description = args.long_description;
+        if (args.category) updateFields.category = args.category;
+        if (args.keywords) updateFields.keywords = args.keywords;
+        if (args.same_as) updateFields.same_as = args.same_as;
+        response = await fetch(`${API_BASE}/api/agent/aio/entity`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateFields),
+        });
+        break;
+      }
+
+      case 'delete_entity_profile': {
+        const params = new URLSearchParams();
+        params.append('id', args.profile_id);
+        response = await fetch(`${API_BASE}/api/agent/aio/entity?${params}`, {
           method: 'DELETE',
         });
         break;

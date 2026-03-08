@@ -84,6 +84,7 @@ export const BLOG_MARKDOWN_FORMAT_PROMPT = `FORMÁT VÝSTUPU — čistý Markdow
 
 export const BLOG_META_PROMPT = `Kromě článku vygeneruj JSON metadata (POUZE validní JSON, žádný markdown):
 {
+  "id": "url-friendly-slug-bez-diakritiky",
   "title": "Hlavní titulek článku",
   "slug": "url-friendly-slug-bez-diakritiky",
   "excerpt": "2-3 věty shrnutí článku pro náhled (max 200 znaků)",

@@ -27,6 +27,9 @@ const IMAGEN_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/
  * Falls back to '4:3' if platform is unknown.
  */
 function getPlatformAspectRatio(platform: string): string {
+  // Blog platform uses 16:9 for cover images
+  if (platform === 'blog') return '16:9';
+  
   const spec = getDefaultImageSpec(platform);
   const ratio = spec?.aspectRatio || '4:3';
   
@@ -846,6 +849,36 @@ function extractTagsFromPrompt(prompt: string): string[] {
     .split(/\s+/)
     .filter(w => w.length > 3 && !stopWords.has(w))
     .slice(0, 10);
+}
+
+/**
+ * Generate blog cover image
+ */
+export async function generateBlogCoverImage(params: {
+  title: string;
+  category: string;
+  projectId: string;
+}): Promise<{ publicUrl: string; mediaAssetId: string }> {
+  const { title, category, projectId } = params;
+
+  // Build prompt for blog cover
+  const prompt = `Professional blog cover image for article titled "${title}". Category: ${category}. Modern, clean design with relevant visual metaphor. High quality, photorealistic. Suitable for web blog header.`;
+
+  // Generate image with Imagen 4 (platform 'blog' → 16:9 aspect ratio)
+  const result = await generateAndStoreImage({
+    projectId,
+    platform: 'blog',
+    imagePrompt: prompt,
+  });
+
+  if (!result.success || !result.public_url || !result.media_asset_id) {
+    throw new Error('Failed to generate blog cover image');
+  }
+
+  return {
+    publicUrl: result.public_url,
+    mediaAssetId: result.media_asset_id,
+  };
 }
 
 /**

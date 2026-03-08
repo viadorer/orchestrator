@@ -230,6 +230,20 @@ export async function generateBlogPost(
 
   const { meta, body } = parseAiResponse(rawResponse);
 
+  // Generate cover image
+  let imageUrl: string | null = null;
+  try {
+    const { generateBlogCoverImage } = await import('@/lib/visual/imagen');
+    const imageResult = await generateBlogCoverImage({
+      title: meta.title,
+      category: meta.categoryName,
+      projectId: request.projectId,
+    });
+    imageUrl = imageResult.publicUrl;
+  } catch (err) {
+    console.error('Failed to generate cover image:', err);
+  }
+
   // Save to content_queue
   const { data: inserted, error } = await supabase
     .from('content_queue')
@@ -239,6 +253,7 @@ export async function generateBlogPost(
       text_content: meta.excerpt,
       markdown_body: body,
       blog_meta: meta,
+      image_url: imageUrl,
       status: 'review',
       platforms: ['blog'],
       ai_scores: {

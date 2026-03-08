@@ -1,4 +1,5 @@
 export interface BlogMeta {
+  id?: string;
   title: string;
   slug: string;
   excerpt: string;

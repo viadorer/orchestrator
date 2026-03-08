@@ -188,8 +188,12 @@ export async function publishBlogToGitHub(
     }
   }
 
-  // Update meta with final image path
-  const finalMeta: BlogMeta = { ...blogMeta, image: imageFinalPath };
+  // Update meta with final image path and ensure id field exists
+  const finalMeta: BlogMeta = { 
+    ...blogMeta, 
+    id: blogMeta.id || blogMeta.slug, // Ensure id exists (fallback to slug for compatibility)
+    image: imageFinalPath 
+  };
 
   // 2. Push post file
   const fileExt = blogConfig.post_format === 'markdown' ? 'md' : 'html';

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileText, Send, Trash2, Filter, ChevronDown, ChevronUp, Sparkles, ExternalLink, Calendar, Clock, Tag, CheckCircle2, AlertCircle } from 'lucide-react';
+import { FileText, Send, Trash2, Filter, ChevronDown, ChevronUp, Sparkles, ExternalLink, Calendar, Clock, Tag, CheckCircle2, AlertCircle, Edit2, Save, X } from 'lucide-react';
 
 interface BlogPost {
   id: string;
@@ -51,6 +51,10 @@ export function BlogView() {
   const [statusFilter, setStatusFilter] = useState<string>('review');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editedContent, setEditedContent] = useState<string>('');
+  const [editedMeta, setEditedMeta] = useState<BlogPost['blog_meta'] | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const loadPosts = async () => {
     setLoading(true);
@@ -99,13 +103,56 @@ export function BlogView() {
   };
 
   const handleDelete = async (postId: string) => {
-    if (!confirm('Smazat tento článek?')) return;
+    if (!confirm('Opravdu smazat tento článek?')) return;
     
     try {
-      await fetch(`/api/queue/${postId}`, { method: 'DELETE' });
+      await fetch(`/api/blog/${postId}`, { method: 'DELETE' });
       loadPosts();
     } catch (err) {
-      alert(`❌ Chyba: ${err instanceof Error ? err.message : 'Unknown'}`);
+      alert('Chyba při mazání článku');
+    }
+  };
+
+  const handleEdit = (post: BlogPost) => {
+    setEditing(post.id);
+    setEditedContent(post.markdown_body);
+    setEditedMeta(post.blog_meta);
+    setExpanded(post.id);
+  };
+
+  const handleCancelEdit = () => {
+    setEditing(null);
+    setEditedContent('');
+    setEditedMeta(null);
+  };
+
+  const handleSave = async (postId: string) => {
+    if (!editedMeta) return;
+    
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/blog/${postId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          markdown_body: editedContent,
+          blog_meta: editedMeta,
+        }),
+      });
+
+      if (res.ok) {
+        setEditing(null);
+        setEditedContent('');
+        setEditedMeta(null);
+        loadPosts();
+      } else {
+        const data = await res.json();
+        alert(`Chyba: ${data.error}`);
+      }
+    } catch (err) {
+      alert('Chyba při ukládání článku');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -218,6 +265,16 @@ export function BlogView() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2">
+                    {editing !== post.id && (
+                      <button
+                        onClick={() => handleEdit(post)}
+                        className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                        title="Editovat článek"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+
                     {post.status === 'review' && (
                       <button
                         onClick={() => handleApprove(post.id)}
@@ -275,52 +332,143 @@ export function BlogView() {
                   </div>
                 </div>
 
-                {/* SEO Info */}
+                {/* Expanded Detail */}
                 {expanded === post.id && (
                   <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">SEO metadata</h4>
-                      <div className="space-y-2 text-sm">
-                        <div>
-                          <span className="text-gray-500">Title:</span>
-                          <span className="ml-2 text-gray-900">{post.blog_meta.seoTitle}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Description:</span>
-                          <span className="ml-2 text-gray-900">{post.blog_meta.seoDescription}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Slug:</span>
-                          <span className="ml-2 font-mono text-gray-900">{post.blog_meta.slug}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Keywords:</span>
-                          <span className="ml-2 text-gray-900">{post.blog_meta.keywords}</span>
-                        </div>
-                      </div>
-                    </div>
+                    {editing === post.id ? (
+                      <>
+                        {/* Edit Mode */}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-medium text-gray-700">Editace článku</h4>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={handleCancelEdit}
+                                className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+                              >
+                                <X className="w-4 h-4" />
+                                Zrušit
+                              </button>
+                              <button
+                                onClick={() => handleSave(post.id)}
+                                disabled={saving}
+                                className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                              >
+                                {saving ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                    Ukládám...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="w-4 h-4" />
+                                    Uložit
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
 
-                    {/* Content Preview */}
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Obsah článku</h4>
-                      <div className="bg-white rounded-lg p-6 max-h-[600px] overflow-y-auto border border-gray-200">
-                        <div 
-                          className="prose prose-sm prose-gray max-w-none prose-headings:text-gray-900 prose-p:text-gray-800 prose-strong:text-gray-900 prose-li:text-gray-800"
-                          dangerouslySetInnerHTML={{ __html: post.markdown_body }}
-                        />
-                      </div>
-                    </div>
+                          {/* Metadata Inputs */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Titulek</label>
+                              <input
+                                type="text"
+                                value={editedMeta?.title || ''}
+                                onChange={(e) => setEditedMeta(editedMeta ? { ...editedMeta, title: e.target.value } : null)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">SEO Title</label>
+                              <input
+                                type="text"
+                                value={editedMeta?.seoTitle || ''}
+                                onChange={(e) => setEditedMeta(editedMeta ? { ...editedMeta, seoTitle: e.target.value } : null)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Excerpt</label>
+                              <textarea
+                                value={editedMeta?.excerpt || ''}
+                                onChange={(e) => setEditedMeta(editedMeta ? { ...editedMeta, excerpt: e.target.value } : null)}
+                                rows={2}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">SEO Description</label>
+                              <textarea
+                                value={editedMeta?.seoDescription || ''}
+                                onChange={(e) => setEditedMeta(editedMeta ? { ...editedMeta, seoDescription: e.target.value } : null)}
+                                rows={2}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              />
+                            </div>
+                          </div>
 
-                    {/* Cover Image */}
-                    {post.image_url && (
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Cover image</h4>
-                        <img
-                          src={post.image_url}
-                          alt={post.blog_meta.imageAlt}
-                          className="rounded-lg max-w-md border border-gray-200"
-                        />
-                      </div>
+                          {/* Content Editor */}
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Obsah článku (HTML/Markdown)</label>
+                            <textarea
+                              value={editedContent}
+                              onChange={(e) => setEditedContent(e.target.value)}
+                              rows={20}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* View Mode */}
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">SEO metadata</h4>
+                          <div className="space-y-2 text-sm">
+                            <div>
+                              <span className="text-gray-500">Title:</span>
+                              <span className="ml-2 text-gray-900">{post.blog_meta.seoTitle}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Description:</span>
+                              <span className="ml-2 text-gray-900">{post.blog_meta.seoDescription}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Slug:</span>
+                              <span className="ml-2 font-mono text-gray-900">{post.blog_meta.slug}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Keywords:</span>
+                              <span className="ml-2 text-gray-900">{post.blog_meta.keywords}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Content Preview */}
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Obsah článku</h4>
+                          <div className="bg-white rounded-lg p-6 max-h-[600px] overflow-y-auto border border-gray-200">
+                            <div 
+                              className="prose prose-sm prose-gray max-w-none prose-headings:text-gray-900 prose-p:text-gray-800 prose-strong:text-gray-900 prose-li:text-gray-800"
+                              dangerouslySetInnerHTML={{ __html: post.markdown_body }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Cover Image */}
+                        {post.image_url && (
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-700 mb-2">Cover image</h4>
+                            <img
+                              src={post.image_url}
+                              alt={post.blog_meta.imageAlt}
+                              className="rounded-lg max-w-md border border-gray-200"
+                            />
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

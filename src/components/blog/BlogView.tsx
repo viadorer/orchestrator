@@ -451,7 +451,7 @@ export function BlogView() {
                           <h4 className="text-sm font-medium text-gray-700 mb-2">Obsah článku</h4>
                           <div className="bg-white rounded-lg p-6 max-h-[600px] overflow-y-auto border border-gray-200">
                             <div 
-                              className="prose prose-sm prose-gray max-w-none prose-headings:text-gray-900 prose-p:text-gray-800 prose-strong:text-gray-900 prose-li:text-gray-800"
+                              className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-900 prose-strong:text-gray-900 prose-li:text-gray-900 prose-a:text-blue-600"
                               dangerouslySetInnerHTML={{ __html: post.markdown_body }}
                             />
                           </div>

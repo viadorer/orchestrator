@@ -13,13 +13,14 @@ PRAVIDLA:
 
 export const BLOG_HTML_FORMAT_PROMPT = `FORMÁT VÝSTUPU — HTML fragment (ne celý HTML dokument):
 - Používej Tailwind CSS třídy z šablony
-- Úvodní odstavec: <p class="lead text-xl text-gray-700 mb-8">...</p>
-- Hlavní nadpisy: <h2>...</h2>
-- Podnadpisy: <h3>...</h3>
-- Odstavce: <p>...</p>
-- Seznamy: <ul><li>...</li></ul> nebo <ol><li>...</li></ol>
-- Tučné: <strong>...</strong>
-- Kurzíva: <em>...</em>
+- Úvodní odstavec: <p class="lead text-xl text-gray-900 font-medium mb-8">...</p>
+- Hlavní nadpisy: <h2 class="text-2xl font-bold text-gray-900 mt-12 mb-6">...</h2>
+- Podnadpisy: <h3 class="text-xl font-semibold text-gray-900 mt-8 mb-4">...</h3>
+- Odstavce: <p class="text-gray-900 mb-4 leading-relaxed">...</p>
+- Seznamy: <ul class="list-disc pl-6 mb-6 space-y-2"><li class="text-gray-900">...</li></ul>
+- Číslované seznamy: <ol class="list-decimal pl-6 mb-6 space-y-2"><li class="text-gray-900">...</li></ol>
+- Tučné: <strong class="font-semibold text-gray-900">...</strong>
+- Kurzíva: <em class="italic">...</em>
 
 SPECIÁLNÍ BLOKY (použij 1-3 v článku):
 

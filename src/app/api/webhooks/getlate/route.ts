@@ -44,6 +44,9 @@ export async function POST(request: Request) {
 
     // Verify HMAC signature if secret is configured
     const webhookSecret = process.env.GETLATE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      console.warn('[webhook-getlate] GETLATE_WEBHOOK_SECRET not set - signature verification skipped. Set it in .env.local for security.');
+    }
     if (webhookSecret) {
       const signature = request.headers.get('x-late-signature');
       if (!signature) {

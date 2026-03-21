@@ -20,7 +20,7 @@ import { NextResponse } from 'next/server';
 
 function getCorsHeaders(origin?: string | null): Record<string, string> {
   return {
-    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Origin': origin || '',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
@@ -64,7 +64,13 @@ export async function POST(
 
     // Origin check
     const allowedOrigins = (project?.chat_allowed_origins as string[]) || [];
-    if (allowedOrigins.length > 0 && origin) {
+    if (allowedOrigins.length > 0) {
+      if (!origin) {
+        return NextResponse.json(
+          { error: 'Origin header required' },
+          { status: 403, headers: cors }
+        );
+      }
       const isAllowed = allowedOrigins.some(o =>
         origin === o || origin.endsWith('.' + o.replace(/^https?:\/\//, ''))
       );

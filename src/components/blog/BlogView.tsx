@@ -3,6 +3,14 @@
 import { useEffect, useState } from 'react';
 import { FileText, Send, Trash2, Filter, ChevronDown, ChevronUp, Sparkles, ExternalLink, Calendar, Clock, Tag, CheckCircle2, AlertCircle, Edit2, Save, X } from 'lucide-react';
 
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/javascript:/gi, '');
+}
+
 interface BlogPost {
   id: string;
   project_id: string;
@@ -452,7 +460,7 @@ export function BlogView() {
                           <div className="bg-white rounded-lg p-6 max-h-[600px] overflow-y-auto border border-gray-200">
                             <div 
                               className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-900 prose-strong:text-gray-900 prose-li:text-gray-900 prose-a:text-blue-600"
-                              dangerouslySetInnerHTML={{ __html: post.markdown_body }}
+                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.markdown_body) }}
                             />
                           </div>
                         </div>

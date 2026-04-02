@@ -525,6 +525,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         logoUrl: (visualIdentity as Record<string, string>).logo_url || null,
         forcePhoto: req.forcePhoto,
         photographyPreset: (visualIdentity.photography_preset as Record<string, unknown>) || null,
+        mediaMatchThreshold: (mediaOrchConfig.media_match_threshold as number) || undefined,
       });
       content.visual = visual;
       reasoning.visual_decision = {

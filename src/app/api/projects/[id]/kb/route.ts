@@ -1,7 +1,10 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
@@ -30,6 +33,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
@@ -56,6 +61,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
@@ -83,6 +90,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }

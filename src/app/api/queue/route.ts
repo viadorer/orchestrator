@@ -1,7 +1,12 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
+import { safeParseJson, validateBody, queuePatchSchema, queueDeleteSchema } from '@/lib/api/validate';
 
 export async function GET(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
@@ -31,15 +36,20 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
-  const { id, text_content } = await request.json();
+  const json = await safeParseJson(request);
+  if (!json.ok) return json.response;
 
-  if (!id || !text_content) {
-    return NextResponse.json({ error: 'id and text_content are required' }, { status: 400 });
-  }
+  const v = validateBody(json.data, queuePatchSchema);
+  if (!v.ok) return v.response;
+
+  const { id, text_content } = v.data;
 
   const { data, error } = await supabase
     .from('content_queue')
@@ -57,15 +67,20 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
-  const { ids } = await request.json();
+  const json = await safeParseJson(request);
+  if (!json.ok) return json.response;
 
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return NextResponse.json({ error: 'ids array is required' }, { status: 400 });
-  }
+  const v = validateBody(json.data, queueDeleteSchema);
+  if (!v.ok) return v.response;
+
+  const { ids } = v.data;
 
   const { error } = await supabase
     .from('content_queue')

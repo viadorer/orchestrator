@@ -1,13 +1,16 @@
 import { saveFeedback } from '@/lib/ai/agent-orchestrator';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Feedback Loop – Admin upraví post, úprava se uloží jako learning pro Huga
- * 
+ *
  * POST /api/agent/feedback
  * Body: { contentId, editedText, feedbackNote? }
  */
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const body = await request.json();
   const { contentId, editedText, feedbackNote } = body;
 

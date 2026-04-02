@@ -1,5 +1,6 @@
 import { listAccounts } from '@/lib/getlate';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * GET /api/getlate/accounts
@@ -7,6 +8,8 @@ import { NextResponse } from 'next/server';
  * Use this to find accountIds for each platform.
  */
 export async function GET() {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   try {
     const accounts = await listAccounts();
     return NextResponse.json({ accounts });

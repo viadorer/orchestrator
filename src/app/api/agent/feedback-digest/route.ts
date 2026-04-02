@@ -2,6 +2,7 @@ import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Weekly Digest - Feedback Loop Automation
@@ -30,6 +31,8 @@ interface DigestSuggestion {
 }
 
 export async function GET(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Not configured' }, { status: 500 });
   }
@@ -142,6 +145,8 @@ export async function GET(request: Request) {
  * Body: { projectId, suggestion: DigestSuggestion }
  */
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Not configured' }, { status: 500 });
   }

@@ -18,6 +18,21 @@ const parser = new Parser({
   },
 });
 
+/**
+ * Sanitize text from external sources (RSS feeds, scraped articles).
+ * Strips HTML tags, control characters, and potential prompt injection patterns.
+ */
+function sanitizeText(text: string): string {
+  return text
+    // Strip any remaining HTML tags
+    .replace(/<[^>]*>/g, '')
+    // Remove control characters (except newlines and tabs)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    // Collapse excessive whitespace
+    .replace(/[ \t]{10,}/g, '  ')
+    .trim();
+}
+
 // ============================================
 // Fetch single RSS feed
 // ============================================
@@ -67,15 +82,15 @@ export async function fetchRssFeed(
         // Calculate relevance to project KB
         const relevanceScore = await calculateRelevance(projectId, embeddingVector);
 
-        // Save to DB
+        // Save to DB (sanitize text to prevent stored XSS / prompt injection)
         await supabase.from('project_news').insert({
           project_id: projectId,
           rss_source_id: sourceId,
-          source_name: sourceName,
-          title: item.title || 'Bez titulku',
+          source_name: sanitizeText(sourceName),
+          title: sanitizeText(item.title || 'Bez titulku'),
           link: item.link,
-          content: (articleText || '').substring(0, 10000),
-          summary,
+          content: sanitizeText((articleText || '').substring(0, 10000)),
+          summary: sanitizeText(summary),
           relevance_score: relevanceScore,
           published_at: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
           embedding: embeddingVector ? JSON.stringify(embeddingVector) : null,

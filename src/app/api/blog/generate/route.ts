@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { generateBlogPost } from '@/lib/blog/blog-generator';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   try {
     const body = await request.json();
     const { project_id, topic, category, post_format } = body as {

@@ -1,7 +1,10 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function GET(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get('projectId');

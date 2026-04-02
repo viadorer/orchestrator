@@ -1,5 +1,6 @@
 import { searchWikidata, getWikidataEntity, lookupSameAsEntities } from '@/lib/aio/wikidata-lookup';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * GET /api/agent/aio/wikidata?action=search&q=odhad.online
@@ -7,6 +8,8 @@ import { NextResponse } from 'next/server';
  * GET /api/agent/aio/wikidata?action=lookup&name=odhad.online&category=software&keywords=nemovitosti,odhad
  */
 export async function GET(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action') || 'search';
 

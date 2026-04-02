@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function GET() {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const ghToken = process.env.GITHUB_PAT;
   const openaiKey = process.env.OPENAI_API_KEY;
   const perplexityKey = process.env.PERPLEXITY_API_KEY;

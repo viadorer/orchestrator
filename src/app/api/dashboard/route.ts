@@ -1,10 +1,13 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Dashboard API – aggregated stats for the main dashboard
  */
 export async function GET() {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }

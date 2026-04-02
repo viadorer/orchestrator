@@ -1,7 +1,10 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   const body = await request.json();
   const { data, error } = await supabase.from('aio_sites').insert(body).select().single();
@@ -10,6 +13,8 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   const body = await request.json();
   const { id, ...fields } = body as Record<string, unknown>;

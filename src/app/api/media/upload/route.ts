@@ -1,19 +1,37 @@
 import { supabase } from '@/lib/supabase/client';
 import { storage } from '@/lib/storage';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
+import { checkRateLimit } from '@/lib/api/rate-limit';
+
+/** Max file size: 10 MB */
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+/** Allowed MIME types */
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+  'video/mp4', 'video/quicktime', 'video/webm',
+  'application/pdf',
+]);
 
 /**
  * Media Upload API
  * POST /api/media/upload
- * 
+ *
  * Accepts multipart/form-data with:
  * - files: File[] (images, videos, documents)
  * - project_id: string
- * 
+ *
  * Uploads to Supabase Storage bucket 'project-media'
  * Path: {project_id}/{timestamp}_{filename}
  */
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
+  const rl = checkRateLimit(auth.userId, 'upload');
+  if (!rl.ok) return rl.response;
+
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const formData = await request.formData();
@@ -28,6 +46,22 @@ export async function POST(request: Request) {
 
   if (files.length === 0) {
     return NextResponse.json({ error: 'No files provided' }, { status: 400 });
+  }
+
+  // Validate file sizes and MIME types
+  for (const file of files) {
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `File "${file.name}" exceeds max size of ${MAX_FILE_SIZE / 1024 / 1024} MB` },
+        { status: 400 },
+      );
+    }
+    if (!ALLOWED_MIME_TYPES.has(file.type)) {
+      return NextResponse.json(
+        { error: `File "${file.name}" has unsupported type: ${file.type}` },
+        { status: 400 },
+      );
+    }
   }
 
   const results: Array<{ file_name: string; success: boolean; asset_id?: string; public_url?: string; error?: string }> = [];

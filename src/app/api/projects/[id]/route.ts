@@ -1,12 +1,21 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
+import { safeParseJson, validateBody, projectUpdateSchema, uuidSchema } from '@/lib/api/validate';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
   const { id } = await params;
+  const idCheck = uuidSchema.safeParse(id);
+  if (!idCheck.success) {
+    return NextResponse.json({ error: 'Invalid project ID' }, { status: 400 });
+  }
 
   const [projectRes, kbRes, queueRes] = await Promise.all([
     supabase.from('projects').select('*').eq('id', id).single(),
@@ -26,16 +35,28 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
   const { id } = await params;
-  const body = await request.json();
+  const idCheck = uuidSchema.safeParse(id);
+  if (!idCheck.success) {
+    return NextResponse.json({ error: 'Invalid project ID' }, { status: 400 });
+  }
+
+  const json = await safeParseJson(request);
+  if (!json.ok) return json.response;
+
+  const v = validateBody(json.data, projectUpdateSchema);
+  if (!v.ok) return v.response;
 
   const { data, error } = await supabase
     .from('projects')
-    .update(body)
+    .update(v.data)
     .eq('id', id)
     .select()
     .single();
@@ -48,11 +69,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
   const { id } = await params;
+  const idCheck = uuidSchema.safeParse(id);
+  if (!idCheck.success) {
+    return NextResponse.json({ error: 'Invalid project ID' }, { status: 400 });
+  }
 
   const { error } = await supabase
     .from('projects')

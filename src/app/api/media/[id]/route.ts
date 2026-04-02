@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import { processMediaAsset } from '@/lib/ai/vision-engine';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Single Media Asset API
@@ -14,6 +15,8 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const { id } = await params;
@@ -32,6 +35,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const { id } = await params;
@@ -53,6 +58,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const { id } = await params;
@@ -84,6 +91,8 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const { id } = await params;

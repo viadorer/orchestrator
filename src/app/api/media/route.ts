@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import { processMediaAsset } from '@/lib/ai/vision-engine';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Media Library API
@@ -9,6 +10,8 @@ import { NextResponse } from 'next/server';
  */
 
 export async function GET(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const { searchParams } = new URL(request.url);
@@ -37,6 +40,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const body = await request.json();

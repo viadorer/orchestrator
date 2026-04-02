@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * RSS Sources API
@@ -7,6 +8,8 @@ import { NextResponse } from 'next/server';
  * POST /api/rss - Add new RSS source
  */
 export async function GET(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const { searchParams } = new URL(request.url);
@@ -26,6 +29,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const body = await request.json();

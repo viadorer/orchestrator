@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const { id } = await params;
 
   if (!supabase) {
@@ -29,6 +32,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const { id } = await params;
   const body = await request.json();
 
@@ -76,6 +81,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const { id } = await params;
 
   if (!supabase) {

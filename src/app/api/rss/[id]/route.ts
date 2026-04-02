@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import { fetchRssFeed } from '@/lib/rss/fetcher';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Single RSS Source API
@@ -9,6 +10,8 @@ import { NextResponse } from 'next/server';
  * POST /api/rss/[id]?action=fetch - Manually trigger fetch
  */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   const { id } = await params;
   const body = await request.json();
@@ -23,6 +26,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   const { id } = await params;
 
@@ -31,6 +36,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   const { id } = await params;
 

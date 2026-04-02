@@ -1,10 +1,13 @@
 import { executeTask } from '@/lib/ai/agent-orchestrator';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 // Allow up to 60s for task execution (Gemini API + editor + visual)
 export const maxDuration = 60;
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const { id } = await params;
 
   try {

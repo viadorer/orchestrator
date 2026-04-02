@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * GET /api/agent/cron-plan
@@ -7,6 +8,8 @@ import { NextResponse } from 'next/server';
  * Used by Agent Hugo > Cron Plán tab
  */
 export async function GET() {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Not configured' }, { status: 500 });
   }

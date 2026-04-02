@@ -39,6 +39,7 @@ interface VisualContext {
   logoUrl?: string | null;
   forcePhoto?: boolean;
   photographyPreset?: Partial<PhotographyPreset> | null;
+  mediaMatchThreshold?: number;
 }
 
 /**
@@ -548,13 +549,14 @@ function buildPhotoTemplateUrl(
 // Media Library matching (pgvector similarity)
 // ============================================
 
-const MATCH_THRESHOLD = 0.45; // Minimum similarity to use a library photo
+const DEFAULT_MATCH_THRESHOLD = 0.30; // Default minimum similarity to use a library photo
 
 async function matchMediaFromLibrary(
   projectId: string,
   postText: string,
   imagePrompt: string,
   platform: string,
+  threshold?: number,
 ): Promise<{ public_url: string; asset_id: string; similarity: number } | null> {
   if (!supabase) return null;
 
@@ -568,7 +570,7 @@ async function matchMediaFromLibrary(
     const { data, error } = await supabase.rpc('match_media_assets', {
       query_embedding: JSON.stringify(embedding),
       match_project_id: projectId,
-      match_threshold: MATCH_THRESHOLD,
+      match_threshold: threshold ?? DEFAULT_MATCH_THRESHOLD,
       match_count: 3,
       filter_file_type: 'image',
       exclude_recently_used: true,
@@ -634,7 +636,7 @@ async function generatePhotoVisual(
   const subtitleText = decision.card_subtitle || undefined;
 
   // Step 1: Try Media Library match (pgvector)
-  const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform);
+  const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, ctx.mediaMatchThreshold);
   if (match) {
     console.log(`[visual-agent] Using library photo (similarity: ${match.similarity.toFixed(3)})`);
     const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });

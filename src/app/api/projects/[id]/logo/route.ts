@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Logo Upload API
@@ -13,6 +14,8 @@ import { NextResponse } from 'next/server';
  * Updates visual_identity.logo_url in projects table
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const { id: projectId } = await params;
@@ -97,6 +100,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
  * Remove logo from storage and clear logo_url
  */
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const { id: projectId } = await params;

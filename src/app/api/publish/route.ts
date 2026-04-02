@@ -4,13 +4,12 @@ import { validatePostMultiPlatform } from '@/lib/platforms';
 import { ensureImageAspectRatio } from '@/lib/visual/image-resize';
 import { storage } from '@/lib/storage';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
+import { safeParseJson, validateBody, publishSchema } from '@/lib/api/validate';
+import { checkRateLimit } from '@/lib/api/rate-limit';
 
 /**
  * Pre-render a dynamic template URL into a static PNG and upload to storage.
- * getLate expects a stable, publicly-accessible image URL — not a dynamic endpoint
- * that needs server-side rendering on fetch.
- * 
- * Returns the static public URL, or falls back to the original resolved URL on error.
  */
 async function resolveTemplateToStaticUrl(
   templateUrl: string,
@@ -64,11 +63,23 @@ async function resolveTemplateToStaticUrl(
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
+  const rl = checkRateLimit(auth.userId, 'publish');
+  if (!rl.ok) return rl.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
-  const { ids, scheduledFor, project_id } = await request.json();
+  const json = await safeParseJson(request);
+  if (!json.ok) return json.response;
+
+  const v = validateBody(json.data, publishSchema);
+  if (!v.ok) return v.response;
+
+  const { ids, scheduledFor, project_id } = v.data;
 
   // If project_id is provided without ids, fetch all approved posts for that project
   let postIds = ids;
@@ -103,15 +114,12 @@ export async function POST(request: Request) {
     const project = post.projects as { name: string; late_accounts: Record<string, string> | null; late_social_set_id: string | null };
     const lateAccounts = project?.late_accounts || {};
 
-    // Use target_platform (single platform variant) or fall back to platforms[] array
     const requestedPlatforms: string[] = post.target_platform
       ? [post.target_platform]
       : (post.platforms || []);
 
-    // Filter to only platforms that have late_accounts configured
     let targetPlatforms = requestedPlatforms.filter(p => !!lateAccounts[p]);
 
-    // Filter out YouTube if post has no video media
     const hasVideo = (post.media_urls || []).some((url: string) =>
       typeof url === 'string' && /\.(mp4|mov|avi|webm|mkv)(\?|$)/i.test(url)
     );
@@ -120,14 +128,12 @@ export async function POST(request: Request) {
       targetPlatforms = targetPlatforms.filter(p => p !== 'youtube');
     }
 
-    // Filter out X (Twitter) if text exceeds 280 characters
     const textLength = (post.text_content || '').length;
     if (targetPlatforms.includes('x') && textLength > 280) {
       console.log(`[publish] Post ${post.id}: Skipping X — text too long (${textLength} chars, max 280)`);
       targetPlatforms = targetPlatforms.filter(p => p !== 'x');
     }
 
-    // Build platforms array: [{platform: "facebook", accountId: "698f7c19..."}]
     const platformEntries = buildPlatformsArray(lateAccounts, targetPlatforms);
 
     if (platformEntries.length === 0) {
@@ -142,7 +148,6 @@ export async function POST(request: Request) {
       continue;
     }
 
-    // Validate content against platform limits before sending
     const validations = validatePostMultiPlatform(post.text_content || '', targetPlatforms);
     const failedPlatforms = Object.entries(validations)
       .filter(([, v]) => !v.valid)
@@ -158,10 +163,8 @@ export async function POST(request: Request) {
     }
 
     try {
-      // Build media items from visual assets
       const mediaItems: MediaItem[] = [];
 
-      // Helper: resolve relative URLs (e.g. /api/visual/template?...) to absolute
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL
         || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
         || 'http://localhost:3000';
@@ -170,24 +173,19 @@ export async function POST(request: Request) {
         if (url.startsWith('/')) return `${baseUrl}${url}`;
         return url;
       };
-      
-      // Fallback: read template_url from generation_context if column is empty
+
       if (!post.template_url && !post.card_url && post.generation_context?.template_url_value) {
         post.template_url = post.generation_context.template_url_value;
         console.log(`[publish] Using template_url from generation_context for post ${post.id}`);
       }
 
-      // Priority 1: Brand template (photo + brand frame + logo + text)
-      // If template_url exists AND media_urls has multiple photos → carousel with brand templates
       let usedTemplate = false;
       if (post.template_url || post.card_url) {
         const templateBase = post.template_url || post.card_url;
         const isTemplateEndpoint = templateBase.includes('/api/visual/template');
 
-        // Collect photos: if media_urls has multiple, use all; otherwise just the one in template
         const carouselPhotos: string[] = [];
         if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 1 && isTemplateEndpoint) {
-          // Multi-photo carousel: each photo gets its own brand template
           for (const url of post.media_urls) {
             if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) {
               carouselPhotos.push(url);
@@ -196,7 +194,6 @@ export async function POST(request: Request) {
         }
 
         if (carouselPhotos.length > 1) {
-          // Carousel mode: generate a branded template for each photo
           console.log(`[publish] Carousel mode: ${carouselPhotos.length} photos with brand template`);
           for (let ci = 0; ci < carouselPhotos.length; ci++) {
             let templateSrc = templateBase;
@@ -219,7 +216,6 @@ export async function POST(request: Request) {
             mediaItems.push({ type: 'image', url: staticUrl });
           }
         } else {
-          // Single template (original flow)
           let templateSrc = templateBase;
           if (isTemplateEndpoint && targetPlatforms[0]) {
             try {
@@ -243,23 +239,18 @@ export async function POST(request: Request) {
         }
         usedTemplate = true;
       } else if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
-        // Priority 2: media_urls array (multiple raw images from manual post)
         for (const url of post.media_urls) {
           if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) {
             mediaItems.push({ type: 'image', url: resolveUrl(url) });
           }
         }
       } else if (post.image_url) {
-        // Priority 3: single image fallback
         mediaItems.push({ type: 'image', url: post.image_url });
       }
-      // Chart (absolute URL from QuickChart.io)
       if (post.chart_url) {
         mediaItems.push({ type: 'image', url: post.chart_url });
       }
 
-      // Enforce aspect ratio for platform compliance (Instagram: 0.75-1.91)
-      // Skip for template URLs — they already generate correct dimensions per platform
       if (!usedTemplate) {
         for (let i = 0; i < mediaItems.length; i++) {
           if (mediaItems[i].type === 'image') {
@@ -278,7 +269,6 @@ export async function POST(request: Request) {
 
       console.log(`[publish] Post ${post.id} → platforms: ${targetPlatforms.join(',')}, mediaItems: ${JSON.stringify(mediaItems.map(m => ({ type: m.type, url: m.url.substring(0, 150) })))}, template: ${usedTemplate}`);
 
-      // Add first_comment to platformSpecificData for supported platforms
       const platformsWithFirstComment = platformEntries.map(entry => {
         const supportsFirstComment = ['facebook', 'instagram', 'linkedin'].includes(entry.platform);
         if (supportsFirstComment && post.first_comment) {
@@ -308,7 +298,6 @@ export async function POST(request: Request) {
       }
       console.log(`[publish] Post ${post.id} published OK: status=${publishResult.data.status}, externalId=${publishResult.data.externalId}`);
 
-      // Update status in DB
       await supabase
         .from('content_queue')
         .update({
@@ -319,7 +308,6 @@ export async function POST(request: Request) {
         })
         .eq('id', post.id);
 
-      // Record in post_history
       await supabase
         .from('post_history')
         .insert({
@@ -329,7 +317,6 @@ export async function POST(request: Request) {
           platform: post.target_platform || targetPlatforms[0] || null,
         });
 
-      // Update media_assets: mark which post used this photo
       if (post.matched_media_id) {
         await supabase
           .from('media_assets')
@@ -348,7 +335,6 @@ export async function POST(request: Request) {
         .from('content_queue')
         .update({ status: 'failed' })
         .eq('id', post.id);
-      // Also log to agent_log for visibility in admin
       try {
         await supabase.from('agent_log').insert({
           project_id: post.project_id,

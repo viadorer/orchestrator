@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { publishBlogToGitHub } from '@/lib/blog/github-publisher';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   try {
     const body = await request.json();
     const { queue_id } = body as { queue_id: string };

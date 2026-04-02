@@ -1,13 +1,16 @@
 import { createHumanPriorityTask } from '@/lib/ai/agent-orchestrator';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Priority Route – Admin vloží téma, Hugo ho okamžitě zpracuje (priority 10)
- * 
+ *
  * POST /api/agent/priority
  * Body: { projectId, topic, notes?, platform?, contentType? }
  */
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const body = await request.json();
   const { projectId, topic, notes, platform, contentType } = body;
 

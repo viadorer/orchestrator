@@ -1,7 +1,13 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
+import { safeParseJson, validateBody, projectCreateSchema } from '@/lib/api/validate';
+import { checkRateLimit } from '@/lib/api/rate-limit';
 
 export async function GET() {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
@@ -20,11 +26,23 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
+  const rl = checkRateLimit(auth.userId, 'default');
+  if (!rl.ok) return rl.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
-  const body = await request.json();
+  const json = await safeParseJson(request);
+  if (!json.ok) return json.response;
+
+  const v = validateBody(json.data, projectCreateSchema);
+  if (!v.ok) return v.response;
+
+  const body = v.data;
 
   const { data, error } = await supabase
     .from('projects')
@@ -276,4 +294,3 @@ function getStarterKB(projectId: string, projectName: string) {
     },
   ];
 }
-

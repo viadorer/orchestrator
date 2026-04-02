@@ -3,18 +3,28 @@ import { generateContent } from '@/lib/ai/content-engine';
 import { type VisualAssets } from '@/lib/visual/visual-agent';
 import { getDefaultImageSpec } from '@/lib/platforms';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
+import { safeParseJson, validateBody, generateSchema } from '@/lib/api/validate';
+import { checkRateLimit } from '@/lib/api/rate-limit';
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
+  const rl = checkRateLimit(auth.userId, 'generate');
+  if (!rl.ok) return rl.response;
+
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
-  const body = await request.json();
-  const { projectId, platform, contentType, patternId, forcePhoto } = body;
+  const json = await safeParseJson(request);
+  if (!json.ok) return json.response;
 
-  if (!projectId || !platform) {
-    return NextResponse.json({ error: 'projectId and platform are required' }, { status: 400 });
-  }
+  const v = validateBody(json.data, generateSchema);
+  if (!v.ok) return v.response;
+
+  const { projectId, platform, contentType, patternId, forcePhoto } = v.data;
 
   try {
     const content = await generateContent({

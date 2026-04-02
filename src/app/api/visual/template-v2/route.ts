@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { NextRequest, NextResponse } from 'next/server';
 import opentype from 'opentype.js';
 import path from 'path';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 15;
@@ -18,6 +19,8 @@ export const maxDuration = 15;
  * GET /api/visual/template-v2?t=quote_card&hook=...&body=...&bg=1a1a2e&accent=e94560&...
  */
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const { searchParams } = request.nextUrl;
 
   const template = searchParams.get('t') || 'bold_card';

@@ -14,8 +14,11 @@
 
 import { NextResponse } from 'next/server';
 import { generateAndStoreImage, buildCleanImagePrompt } from '@/lib/visual/imagen';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   try {
     const body = await request.json();
     const { projectId, prompt, platform = 'linkedin' } = body;
@@ -68,6 +71,8 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   return NextResponse.json({
     endpoint: 'POST /api/media/test-imagen',
     description: 'Test Imagen 4 API - generování + uložení obrázku',

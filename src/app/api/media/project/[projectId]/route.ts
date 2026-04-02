@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Get all media assets for a project
@@ -9,6 +10,8 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }

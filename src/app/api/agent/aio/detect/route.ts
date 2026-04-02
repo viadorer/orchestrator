@@ -1,7 +1,10 @@
 import { detectProjectType } from '@/lib/aio/github-injector';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function GET(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
   const repo = searchParams.get('repo');
   const branch = searchParams.get('branch') || 'main';

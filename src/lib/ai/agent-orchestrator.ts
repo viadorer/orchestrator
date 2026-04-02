@@ -1700,6 +1700,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
       };
       try {
         const visualIdentity = (ctx.project.visual_identity as Record<string, unknown>) || {};
+        const agentOrchConfig = (ctx.project.orchestrator_config as Record<string, unknown>) || {};
         visualData = await generateVisualAssets({
           text: result.text as string,
           projectName: ctx.project.name as string,
@@ -1709,6 +1710,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
           projectId: task.project_id,
           logoUrl: (visualIdentity as Record<string, string>).logo_url || null,
           photographyPreset: (visualIdentity.photography_preset as Record<string, unknown>) || null,
+          mediaMatchThreshold: (agentOrchConfig.media_match_threshold as number) || undefined,
         });
       } catch {
         // Visual generation failed, continue without

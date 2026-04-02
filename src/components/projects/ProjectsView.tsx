@@ -502,6 +502,7 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
     enabled: true, posting_frequency: 'daily', posting_times: ['09:00', '15:00'],
     max_posts_per_day: 2, content_strategy: '4-1-1', auto_publish: false,
     auto_publish_threshold: 8.5, timezone: 'Europe/Prague', media_strategy: 'auto',
+    media_match_threshold: 0.30,
     platforms_priority: [] as string[], pause_weekends: false,
   };
   const cfg = { ...defaults, ...(project.orchestrator_config || {}) } as typeof defaults;
@@ -514,6 +515,7 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
   const [threshold, setThreshold] = useState(cfg.auto_publish_threshold);
   const [timezone, setTimezone] = useState(cfg.timezone);
   const [mediaStrategy, setMediaStrategy] = useState(cfg.media_strategy);
+  const [mediaMatchThreshold, setMediaMatchThreshold] = useState(cfg.media_match_threshold);
   const [pauseWeekends, setPauseWeekends] = useState(cfg.pause_weekends);
 
   const buildConfig = () => ({
@@ -523,7 +525,7 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
       posting_times: times.split(',').map(t => t.trim()).filter(Boolean),
       max_posts_per_day: maxPerDay, content_strategy: cfg.content_strategy,
       auto_publish: autoPublish, auto_publish_threshold: threshold,
-      timezone, media_strategy: mediaStrategy,
+      timezone, media_strategy: mediaStrategy, media_match_threshold: mediaMatchThreshold,
       platforms_priority: cfg.platforms_priority, pause_weekends: pauseWeekends,
     },
   });
@@ -612,6 +614,27 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
                 </button>
               ))}
             </div>
+            {mediaStrategy === 'auto' && (
+              <div className="mt-3 p-3 rounded-lg bg-slate-800 border border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-slate-400">Podobnost pro match reálných fotek</label>
+                  <span className="text-xs font-mono text-violet-300">{mediaMatchThreshold.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0.10}
+                  max={0.60}
+                  step={0.05}
+                  value={mediaMatchThreshold}
+                  onChange={e => setMediaMatchThreshold(parseFloat(e.target.value))}
+                  className="w-full accent-violet-500"
+                />
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>0.10 — volnější (více reálných)</span>
+                  <span>0.60 — přísnější (více AI)</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Auto-publish */}

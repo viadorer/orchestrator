@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
+import { requireAuth } from '@/lib/api/require-auth';
 
 export async function GET(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }

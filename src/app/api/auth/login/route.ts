@@ -1,9 +1,22 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { safeParseJson, validateBody, loginSchema } from '@/lib/api/validate';
+import { checkRateLimit } from '@/lib/api/rate-limit';
 
 export async function POST(request: Request) {
-  const { email, password } = await request.json();
+  // Rate limit login attempts by IP
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const rl = checkRateLimit(`auth:${ip}`, 'auth');
+  if (!rl.ok) return rl.response;
+
+  const json = await safeParseJson(request);
+  if (!json.ok) return json.response;
+
+  const v = validateBody(json.data, loginSchema);
+  if (!v.ok) return v.response;
+
+  const { email, password } = v.data;
   const cookieStore = await cookies();
 
   const supabase = createServerClient(

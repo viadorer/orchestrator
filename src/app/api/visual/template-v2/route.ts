@@ -23,24 +23,35 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) return auth.response;
   const { searchParams } = request.nextUrl;
 
-  const template = searchParams.get('t') || 'bold_card';
-  const hook = searchParams.get('hook') || '';
-  const body = searchParams.get('body') || '';
-  const subtitle = searchParams.get('subtitle') || '';
-  const project = searchParams.get('project') || '';
-  const bg = searchParams.get('bg') || '0f0f23';
-  const accent = searchParams.get('accent') || 'e94560';
-  const textColor = searchParams.get('text') || 'ffffff';
+  const VALID_TEMPLATE_KEYS = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'minimal', 'quote_card', 'diagonal', 'quote_overlay', 'cta_card', 'circle_cta'];
+  const rawTemplate = searchParams.get('t') || 'bold_card';
+  const template = VALID_TEMPLATE_KEYS.includes(rawTemplate) ? rawTemplate : 'bold_card';
+
+  const hook = (searchParams.get('hook') || '').substring(0, 500);       // Max 500 chars
+  const body = (searchParams.get('body') || '').substring(0, 500);
+  const subtitle = (searchParams.get('subtitle') || '').substring(0, 300);
+  const project = (searchParams.get('project') || '').substring(0, 100);
+  const bg = (searchParams.get('bg') || '0f0f23').replace(/[^a-fA-F0-9]/g, '').substring(0, 6) || '0f0f23';
+  const accent = (searchParams.get('accent') || 'e94560').replace(/[^a-fA-F0-9]/g, '').substring(0, 6) || 'e94560';
+  const textColor = (searchParams.get('text') || 'ffffff').replace(/[^a-fA-F0-9]/g, '').substring(0, 6) || 'ffffff';
   const logoUrl = searchParams.get('logo') || '';
   const photoUrl = searchParams.get('photo') || '';
   const platform = searchParams.get('platform') || 'facebook';
+  const fontParam = (searchParams.get('font') || 'inter').toLowerCase() as FontFamily;
+  _currentFontFamily = VALID_FONTS.includes(fontParam) ? fontParam : 'inter';
 
   const dims = getPlatformDimensions(platform);
-  const width = parseInt(searchParams.get('w') || String(dims.w));
-  const height = parseInt(searchParams.get('h') || String(dims.h));
+  const rawW = parseInt(searchParams.get('w') || String(dims.w));
+  const rawH = parseInt(searchParams.get('h') || String(dims.h));
+  // Clamp dimensions to reasonable range (100-4000px)
+  const width = Math.max(100, Math.min(4000, isNaN(rawW) ? dims.w : rawW));
+  const height = Math.max(100, Math.min(4000, isNaN(rawH) ? dims.h : rawH));
+
+  // Auto-fix text contrast (WCAG AA: 3:1 minimum for large text)
+  const safeTextColor = ensureContrast(textColor, bg, 3);
 
   const ctx: TemplateContext = {
-    hook, body, subtitle, project, bg, accent, textColor,
+    hook, body, subtitle, project, bg, accent, textColor: safeTextColor,
     logoUrl, photoUrl, width, height,
   };
 
@@ -195,19 +206,35 @@ function sizing(w: number, h: number): Sizing {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-let _fontBold: opentype.Font | null = null;
-let _fontReg: opentype.Font | null = null;
+// ─── Font Registry ──────────────────────────────────────────
+// Supported fonts: inter (default), poppins, montserrat
+// Each font has bold + regular variants for Czech diacritics.
+
+type FontFamily = 'inter' | 'poppins' | 'montserrat';
+
+const FONT_FILES: Record<FontFamily, { bold: string; regular: string }> = {
+  inter: { bold: 'Inter-Bold.ttf', regular: 'Inter-Regular.ttf' },
+  poppins: { bold: 'Poppins-Bold.ttf', regular: 'Poppins-Regular.ttf' },
+  montserrat: { bold: 'Montserrat-Bold.ttf', regular: 'Montserrat-Regular.ttf' },
+};
+
+const VALID_FONTS = Object.keys(FONT_FILES) as FontFamily[];
+
+const _fontCache: Record<string, opentype.Font> = {};
+
+/** Current font family — set per request from ?font= param */
+let _currentFontFamily: FontFamily = 'inter';
+
 function getFont(bold: boolean = false): opentype.Font {
-  if (bold) {
-    if (!_fontBold) {
-      _fontBold = opentype.loadSync(path.join(process.cwd(), 'fonts', 'Inter-Bold.ttf'));
-    }
-    return _fontBold;
+  const family = _currentFontFamily;
+  const variant = bold ? 'bold' : 'regular';
+  const cacheKey = `${family}_${variant}`;
+
+  if (!_fontCache[cacheKey]) {
+    const fileName = FONT_FILES[family]?.[variant] || FONT_FILES.inter[variant];
+    _fontCache[cacheKey] = opentype.loadSync(path.join(process.cwd(), 'fonts', fileName));
   }
-  if (!_fontReg) {
-    _fontReg = opentype.loadSync(path.join(process.cwd(), 'fonts', 'Inter-Regular.ttf'));
-  }
-  return _fontReg;
+  return _fontCache[cacheKey];
 }
 
 function textToPath(text: string, x: number, y: number, fontSize: number, fill: string, opacity: number = 1, bold: boolean = true): string {
@@ -221,29 +248,90 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   return { r: parseInt(h.substring(0, 2), 16) || 0, g: parseInt(h.substring(2, 4), 16) || 0, b: parseInt(h.substring(4, 6), 16) || 0 };
 }
 
-/** Word-wrap text, clamped to maxLines. Last line gets "…" if truncated. */
+/** WCAG relative luminance for a color channel */
+function luminanceChannel(c: number): number {
+  const s = c / 255;
+  return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
+
+/** WCAG relative luminance of RGB color */
+function relativeLuminance(r: number, g: number, b: number): number {
+  return 0.2126 * luminanceChannel(r) + 0.7152 * luminanceChannel(g) + 0.0722 * luminanceChannel(b);
+}
+
+/** WCAG contrast ratio between two hex colors (without #) */
+function contrastRatio(hex1: string, hex2: string): number {
+  const c1 = hexToRgb(hex1);
+  const c2 = hexToRgb(hex2);
+  const l1 = relativeLuminance(c1.r, c1.g, c1.b);
+  const l2 = relativeLuminance(c2.r, c2.g, c2.b);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** Ensure text color has sufficient contrast against background.
+ *  WCAG AA requires 4.5:1 for normal text, 3:1 for large text.
+ *  If insufficient, returns white or black — whichever has better contrast. */
+function ensureContrast(textHex: string, bgHex: string, minRatio: number = 3): string {
+  const ratio = contrastRatio(textHex, bgHex);
+  if (ratio >= minRatio) return textHex;
+  // Pick white or black based on which has better contrast with bg
+  const whiteRatio = contrastRatio('ffffff', bgHex);
+  const blackRatio = contrastRatio('000000', bgHex);
+  return whiteRatio >= blackRatio ? 'ffffff' : '000000';
+}
+
+/** Word-wrap text using real font metrics (opentype.js getAdvanceWidth).
+ *  Clamped to maxLines. Last line gets "…" if truncated. */
 function wrap(text: string, fontSize: number, maxPx: number, bold: boolean, maxLines: number): string[] {
   if (!text) return [];
-  const cw = fontSize * (bold ? 0.57 : 0.47);
-  const maxChars = Math.max(6, Math.floor(maxPx / cw));
+  const font = getFont(bold);
   const words = text.split(' ');
   const lines: string[] = [];
   let cur = '';
+
   for (const word of words) {
     const test = cur ? `${cur} ${word}` : word;
-    if (test.length > maxChars && cur) {
+    const testWidth = font.getAdvanceWidth(test, fontSize);
+    if (testWidth > maxPx && cur) {
       lines.push(cur);
-      if (lines.length >= maxLines) { lines[lines.length - 1] += '…'; return lines; }
+      if (lines.length >= maxLines) {
+        // Truncate last line with ellipsis
+        lines[lines.length - 1] = truncateToFit(lines[lines.length - 1], font, fontSize, maxPx);
+        return lines;
+      }
       cur = word;
     } else {
       cur = test;
     }
   }
   if (cur) {
-    if (lines.length >= maxLines) { lines[lines.length - 1] += '…'; }
-    else lines.push(cur);
+    if (lines.length >= maxLines) {
+      lines[lines.length - 1] = truncateToFit(lines[lines.length - 1], font, fontSize, maxPx);
+    } else {
+      lines.push(cur);
+    }
   }
   return lines;
+}
+
+/** Truncate text to fit within maxPx, adding "…" */
+function truncateToFit(text: string, font: opentype.Font, fontSize: number, maxPx: number): string {
+  const ellipsis = '…';
+  const ellipsisW = font.getAdvanceWidth(ellipsis, fontSize);
+  if (font.getAdvanceWidth(text, fontSize) <= maxPx) return text;
+  // Binary search for max length that fits
+  let lo = 0, hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (font.getAdvanceWidth(text.substring(0, mid) + ellipsis, fontSize) <= maxPx) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return text.substring(0, lo) + ellipsis;
 }
 
 /** Render SVG text lines using opentype.js paths. Returns { svg, totalH }. */
@@ -300,6 +388,26 @@ function logoBgCircle(x: number, y: number, r: number): string {
 
 function rrMask(w: number, h: number, r: number): Buffer {
   return Buffer.from(`<svg width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${r}" ry="${r}" fill="white"/></svg>`, 'utf-8');
+}
+
+/** Final render: create base image, apply SVG overlay + composites, output PNG */
+async function renderFinal(
+  ctx: TemplateContext,
+  svgContent: string,
+  composites: sharp.OverlayOptions[],
+  bgOverride?: { r: number; g: number; b: number },
+): Promise<Buffer> {
+  const bg = bgOverride || hexToRgb(ctx.bg);
+  const svgBuf = Buffer.from(
+    `<svg width="${ctx.width}" height="${ctx.height}" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>`,
+    'utf-8',
+  );
+  return sharp({
+    create: { width: ctx.width, height: ctx.height, channels: 4, background: bg },
+  })
+    .composite([{ input: svgBuf, top: 0, left: 0 }, ...composites])
+    .png()
+    .toBuffer();
 }
 
 /** Add logo to composite array — always bottom-right with padding, optional bg circle */

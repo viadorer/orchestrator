@@ -1695,7 +1695,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
       }
 
       // Generate visual assets (chart/card/photo)
-      let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null; generated_image_url?: string | null; media_asset_id?: string | null; template_url?: string | null } = {
+      let visualData: { visual_type: string; chart_url: string | null; card_url: string | null; image_prompt: string | null; generated_image_url?: string | null; media_asset_id?: string | null; template_url?: string | null; media_source_label?: string; media_is_shared?: boolean } = {
         visual_type: 'none', chart_url: null, card_url: null, image_prompt: (result.image_prompt as string) || null,
       };
       try {
@@ -1829,6 +1829,16 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
       };
       if (matchedImageUrl) fullInsert.image_url = matchedImageUrl;
       if (matchedMediaId) fullInsert.matched_media_id = matchedMediaId;
+      if (visualData.media_source_label) fullInsert.media_source_label = visualData.media_source_label;
+      // Extract template_key for A/B tracking
+      const templateSrc = (visualData.template_url || '') as string;
+      if (templateSrc) {
+        try {
+          const tUrl = new URL(templateSrc, 'http://localhost');
+          const tKey = tUrl.searchParams.get('t');
+          if (tKey) fullInsert.template_key = tKey;
+        } catch { /* ignore */ }
+      }
 
       const { error: queueError } = await supabase.from('content_queue').insert(fullInsert);
 

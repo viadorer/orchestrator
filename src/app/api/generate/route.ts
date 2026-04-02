@@ -90,6 +90,15 @@ export async function POST(request: Request) {
     };
     if (imageUrl) insertData.image_url = imageUrl;
     if (mediaId) insertData.matched_media_id = mediaId;
+    if (visual.media_source_label) insertData.media_source_label = visual.media_source_label;
+    // Extract template_key for A/B tracking
+    if (visual.template_url) {
+      try {
+        const tUrl = new URL(visual.template_url, 'http://localhost');
+        const tKey = tUrl.searchParams.get('t');
+        if (tKey) insertData.template_key = tKey;
+      } catch { /* ignore parse errors */ }
+    }
 
     let { data: saved, error } = await supabase
       .from('content_queue')

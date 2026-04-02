@@ -5,7 +5,7 @@ import { Upload, Image, Film, FileText, RefreshCw, Trash2, Eye, Sparkles, X } fr
 
 interface MediaAsset {
   id: string;
-  project_id: string;
+  project_id: string | null;
   storage_path: string;
   public_url: string;
   file_name: string;
@@ -24,6 +24,7 @@ interface MediaAsset {
   last_used_in: string | null;
   last_used_at: string | null;
   source: string | null;
+  is_shared: boolean;
 }
 
 interface MediaLibraryProps {
@@ -40,10 +41,18 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
   const [processing, setProcessing] = useState<string | null>(null);
   const [selected, setSelected] = useState<MediaAsset | null>(null);
   const [filter, setFilter] = useState<'all' | 'image' | 'video' | 'unprocessed'>('all');
+  const [libraryTab, setLibraryTab] = useState<'project' | 'shared'>('project');
 
   const loadAssets = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ project_id: projectId, limit: '200' });
+    const params = new URLSearchParams({ limit: '200' });
+
+    if (libraryTab === 'shared') {
+      params.set('shared', 'true');
+    } else {
+      params.set('project_id', projectId);
+    }
+
     if (filter === 'unprocessed') params.set('processed', 'false');
     else if (filter !== 'all') params.set('file_type', filter);
 
@@ -51,7 +60,7 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
     const data = await res.json();
     setAssets(data.assets || []);
     setLoading(false);
-  }, [projectId, filter]);
+  }, [projectId, filter, libraryTab]);
 
   useEffect(() => { loadAssets(); }, [loadAssets]);
 
@@ -66,7 +75,11 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
     // Upload one file at a time for maximum reliability
     for (let i = 0; i < fileArray.length; i++) {
       const formData = new FormData();
-      formData.append('project_id', projectId);
+      if (libraryTab === 'shared') {
+        formData.append('is_shared', 'true');
+      } else {
+        formData.append('project_id', projectId);
+      }
       formData.append('files', fileArray[i]);
 
       try {
@@ -152,11 +165,38 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
 
   return (
     <div className="space-y-4">
+      {/* Library Tabs: Project / Shared */}
+      <div className="flex gap-1 p-1 bg-slate-800 rounded-lg w-fit">
+        <button
+          onClick={() => setLibraryTab('project')}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            libraryTab === 'project' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          📁 Projekt
+        </button>
+        <button
+          onClick={() => setLibraryTab('shared')}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            libraryTab === 'shared' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          🌐 Sdílená knihovna
+        </button>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">Media Library</h3>
-          <p className="text-xs text-slate-400">{projectName} · {stats.total} médií · {stats.processed} otagováno</p>
+          <h3 className="text-lg font-semibold text-white">
+            {libraryTab === 'shared' ? '🌐 Sdílená knihovna' : 'Media Library'}
+          </h3>
+          <p className="text-xs text-slate-400">
+            {libraryTab === 'shared'
+              ? `Reálné fotky dostupné všem projektům · ${stats.total} médií · ${stats.processed} otagováno`
+              : `${projectName} · ${stats.total} médií · ${stats.processed} otagováno`
+            }
+          </p>
         </div>
         <div className="flex gap-2">
           {stats.unprocessed > 0 && (

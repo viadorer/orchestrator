@@ -35,11 +35,15 @@ export async function POST(request: Request) {
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const formData = await request.formData();
-  const projectId = formData.get('project_id') as string;
+  const projectId = formData.get('project_id') as string | null;
+  const isShared = formData.get('is_shared') === 'true';
 
-  if (!projectId) {
-    return NextResponse.json({ error: 'project_id is required' }, { status: 400 });
+  if (!projectId && !isShared) {
+    return NextResponse.json({ error: 'Either project_id or is_shared=true is required' }, { status: 400 });
   }
+
+  // For shared uploads, use 'shared' as folder prefix
+  const effectiveProjectId = projectId || 'shared';
 
   // Collect all files from form data (getAll handles multiple files with same key)
   const files = formData.getAll('files').filter((v): v is File => v instanceof File);
@@ -84,7 +88,7 @@ export async function POST(request: Request) {
 
       // Upload to storage (Cloudflare R2 or Supabase fallback)
       const uploadResult = await storage.upload(Buffer.from(buffer), safeName, {
-        projectId,
+        projectId: effectiveProjectId,
         folder,
         contentType: file.type,
       });
@@ -101,13 +105,14 @@ export async function POST(request: Request) {
       const { data: asset, error: dbError } = await supabase
         .from('media_assets')
         .insert({
-          project_id: projectId,
+          project_id: projectId || null,
           storage_path: storagePath,
           public_url: publicUrl,
           file_name: file.name,
           file_type: fileType,
           mime_type: file.type,
           file_size: file.size,
+          is_shared: isShared,
         })
         .select('id')
         .single();

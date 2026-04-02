@@ -31,6 +31,7 @@ interface QueueItem {
   engagement_score?: number | null;
   engagement_metrics?: Record<string, unknown> | null;
   media_urls?: string[] | null;
+  media_source_label?: string | null;
 }
 
 interface PostCardProps {
@@ -196,7 +197,11 @@ export function PostCard({
           {/* Visual type badges */}
           <div className="absolute top-2 left-2 flex gap-1">
             {item.visual_type === 'matched_photo' && (
-              <span className="px-1.5 py-0.5 rounded bg-emerald-500/90 text-xs text-white font-medium">📷 library</span>
+              <span className={`px-1.5 py-0.5 rounded text-xs text-white font-medium ${
+                item.media_source_label === 'shared' ? 'bg-amber-500/90' : 'bg-emerald-500/90'
+              }`}>
+                {item.media_source_label === 'shared' ? '🌐 shared' : '📷 library'}
+              </span>
             )}
             {item.visual_type === 'generated_photo' && (
               <span className="px-1.5 py-0.5 rounded bg-violet-500/90 text-xs text-white font-medium">🎨 imagen</span>

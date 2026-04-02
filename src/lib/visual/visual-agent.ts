@@ -19,7 +19,7 @@ import { supabase } from '@/lib/supabase/client';
 import { getDefaultImageSpec, PLATFORM_LIMITS } from '@/lib/platforms';
 
 export interface VisualAssets {
-  visual_type: 'chart' | 'card' | 'photo' | 'generated_photo' | 'matched_photo' | 'none';
+  visual_type: 'chart' | 'card' | 'photo' | 'generated_photo' | 'matched_photo' | 'carousel' | 'none';
   chart_url: string | null;
   card_url: string | null;
   image_prompt: string | null;
@@ -27,6 +27,12 @@ export interface VisualAssets {
   media_asset_id?: string | null;
   match_similarity?: number;
   template_url?: string | null;
+  /** Whether the matched photo came from the shared library */
+  media_is_shared?: boolean;
+  /** 'project' or 'shared' — where the matched photo came from */
+  media_source_label?: string;
+  /** Carousel slide URLs (for multi-image posts) */
+  carousel_urls?: string[];
 }
 
 interface VisualContext {
@@ -542,7 +548,45 @@ function buildPhotoTemplateUrl(
     params.set('logo', vi.logo_url);
   }
 
+  // Pass font family from visual identity if set
+  if (vi.font && ['inter', 'poppins', 'montserrat'].includes(vi.font.toLowerCase())) {
+    params.set('font', vi.font.toLowerCase());
+  }
+
   return `/api/visual/template-v2?${params.toString()}`;
+}
+
+// ============================================
+// Placeholder Photo Pool
+// ============================================
+
+const PLACEHOLDER_PHOTOS = [
+  // Business / Office
+  'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1080&h=1350&fit=crop',  // glass building
+  'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1080&h=1350&fit=crop',  // modern office
+  'https://images.unsplash.com/photo-1497215842964-222b430dc094?w=1080&h=1350&fit=crop',  // workspace
+  // Real estate
+  'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=1080&h=1350&fit=crop',  // keys + house
+  'https://images.unsplash.com/photo-1582407947304-fd86f028f716?w=1080&h=1350&fit=crop',  // modern house
+  'https://images.unsplash.com/photo-1560185007-cde436f6a4d0?w=1080&h=1350&fit=crop',  // apartment
+  // Finance / Documents
+  'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1080&h=1350&fit=crop',  // charts
+  'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=1080&h=1350&fit=crop',  // signing doc
+  // People
+  'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=1080&h=1350&fit=crop',  // professional woman
+  'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=1080&h=1350&fit=crop',  // businessman
+  // Abstract / Texture
+  'https://images.unsplash.com/photo-1557683316-973673baf926?w=1080&h=1350&fit=crop',  // gradient
+  'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1080&h=1350&fit=crop',  // mountain
+];
+
+/** Pick a placeholder photo based on content hash (deterministic per post) */
+function pickPlaceholderPhoto(text: string): string {
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  }
+  return PLACEHOLDER_PHOTOS[Math.abs(hash) % PLACEHOLDER_PHOTOS.length];
 }
 
 // ============================================
@@ -557,7 +601,7 @@ async function matchMediaFromLibrary(
   imagePrompt: string,
   platform: string,
   threshold?: number,
-): Promise<{ public_url: string; asset_id: string; similarity: number } | null> {
+): Promise<{ public_url: string; asset_id: string; similarity: number; is_shared: boolean; source_label: string } | null> {
   if (!supabase) return null;
 
   try {
@@ -566,20 +610,40 @@ async function matchMediaFromLibrary(
     const embedding = await generateMediaEmbedding(searchText, []);
     if (!embedding) return null;
 
-    // Call pgvector RPC
-    const { data, error } = await supabase.rpc('match_media_assets', {
+    // Call pgvector RPC v2 — searches project + shared library
+    const { data, error } = await supabase.rpc('match_media_assets_v2', {
       query_embedding: JSON.stringify(embedding),
       match_project_id: projectId,
       match_threshold: threshold ?? DEFAULT_MATCH_THRESHOLD,
-      match_count: 3,
+      match_count: 5,
       filter_file_type: 'image',
       exclude_recently_used: true,
+      include_shared: true,
     });
 
-    if (error || !data || data.length === 0) return null;
+    if (error) {
+      // Fallback to v1 if v2 not deployed yet
+      console.warn('[visual-agent] match_media_assets_v2 failed, falling back to v1:', error.message);
+      const { data: v1Data, error: v1Error } = await supabase.rpc('match_media_assets', {
+        query_embedding: JSON.stringify(embedding),
+        match_project_id: projectId,
+        match_threshold: threshold ?? DEFAULT_MATCH_THRESHOLD,
+        match_count: 3,
+        filter_file_type: 'image',
+        exclude_recently_used: true,
+      });
+      if (v1Error || !v1Data || v1Data.length === 0) return null;
+      const best = v1Data[0];
+      console.log(`[visual-agent] Media match (v1 fallback): ${best.file_name} (similarity: ${best.similarity.toFixed(3)})`);
+      await supabase.rpc('increment_media_usage', { asset_id: best.id });
+      return { public_url: best.public_url, asset_id: best.id, similarity: best.similarity, is_shared: false, source_label: 'project' };
+    }
+
+    if (!data || data.length === 0) return null;
 
     const best = data[0];
-    console.log(`[visual-agent] Media match: ${best.file_name} (similarity: ${best.similarity.toFixed(3)}, quality: ${best.ai_quality_score})`);
+    const sourceEmoji = best.source_label === 'shared' ? '🌐' : '📁';
+    console.log(`[visual-agent] ${sourceEmoji} Media match: ${best.file_name} (similarity: ${best.similarity.toFixed(3)}, quality: ${best.ai_quality_score}, source: ${best.source_label})`);
 
     // Increment usage counter
     await supabase.rpc('increment_media_usage', { asset_id: best.id });
@@ -588,6 +652,8 @@ async function matchMediaFromLibrary(
       public_url: best.public_url,
       asset_id: best.id,
       similarity: best.similarity,
+      is_shared: best.is_shared ?? false,
+      source_label: best.source_label ?? 'project',
     };
   } catch (err) {
     console.error('[visual-agent] Media match error:', err);
@@ -638,7 +704,8 @@ async function generatePhotoVisual(
   // Step 1: Try Media Library match (pgvector)
   const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, ctx.mediaMatchThreshold);
   if (match) {
-    console.log(`[visual-agent] Using library photo (similarity: ${match.similarity.toFixed(3)})`);
+    const sourceEmoji = match.source_label === 'shared' ? '🌐 shared' : '📁 project';
+    console.log(`[visual-agent] Using library photo [${sourceEmoji}] (similarity: ${match.similarity.toFixed(3)})`);
     const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
     return {
       visual_type: 'matched_photo',
@@ -649,6 +716,8 @@ async function generatePhotoVisual(
       media_asset_id: match.asset_id,
       match_similarity: match.similarity,
       template_url: templateUrl,
+      media_is_shared: match.is_shared,
+      media_source_label: match.source_label,
     };
   }
 
@@ -678,8 +747,8 @@ async function generatePhotoVisual(
   }
 
   // Step 3: Fallback — Imagen failed, use placeholder image for template
-  // Generate template URL with a placeholder photo (will show brand frame with text+logo)
-  const placeholderUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1080&h=1350&fit=crop';
+  // Pick a contextual placeholder from pool (based on post content hash for consistency)
+  const placeholderUrl = pickPlaceholderPhoto(ctx.text);
   const templateUrl = buildPhotoTemplateUrl(placeholderUrl, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
   
   return {

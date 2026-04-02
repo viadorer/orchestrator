@@ -362,8 +362,8 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
           `- [${n.source_name}] ${n.title}: ${n.summary}`
         ).join('\n');
       }
-    } catch {
-      // project_news table may not exist yet
+    } catch (newsErr) {
+      console.warn('[content-engine] News fetch failed (table may not exist):', newsErr instanceof Error ? newsErr.message : newsErr);
     }
   }
   reasoning.news_context = { available: newsCount, used: newsCount > 0 };
@@ -424,7 +424,8 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
     // Ensure text field exists and is a string (not nested JSON)
     if (typeof parsed.text !== 'string') throw new Error('text field is not a string');
     content = parsed as GeneratedContent;
-  } catch {
+  } catch (parseErr) {
+    console.warn('[content-engine] JSON parse failed, trying regex fallback:', parseErr instanceof Error ? parseErr.message : parseErr);
     // Try 2: Extract "text" field with regex if JSON is malformed
     const textMatch = cleanedResponse.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
     if (textMatch) {
@@ -433,7 +434,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
       let scores = { creativity: 5, tone_match: 5, hallucination_risk: 5, value_score: 5, overall: 5 };
       const scoresMatch = cleanedResponse.match(/"scores"\s*:\s*(\{[^}]+\})/);
       if (scoresMatch) {
-        try { scores = JSON.parse(scoresMatch[1]); } catch { /* use defaults */ }
+        try { scores = JSON.parse(scoresMatch[1]); } catch (e) { console.warn('[content-engine] Scores parse failed, using defaults:', e instanceof Error ? e.message : e); }
       }
       content = { text: extractedText, scores };
     } else {
@@ -499,8 +500,8 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
           reason: 'editor_score_lower',
         };
       }
-    } catch {
-      // Editor failed, continue with original
+    } catch (editorErr) {
+      console.error('[content-engine] Editor review failed:', editorErr instanceof Error ? editorErr.message : editorErr);
       reasoning.editor_review = { triggered: true, accepted: false, reason: 'editor_failed' };
     }
   } else {

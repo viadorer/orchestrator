@@ -81,26 +81,38 @@ export function ReviewView() {
 
   const loadItems = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/queue?status=${statusFilter}`);
-    const data = await res.json();
-    // Post-process items: fix JSONB parsing + template_url fallback
-    const items = (Array.isArray(data) ? data : []).map((item: QueueItem) => {
-      // Fallback: if template_url column is empty, read from generation_context
-      if (!item.template_url && item.generation_context?.template_url_value) {
-        item.template_url = item.generation_context.template_url_value as string;
+    try {
+      const res = await fetch(`/api/queue?status=${statusFilter}`);
+      if (!res.ok) {
+        console.error(`[ReviewView] Queue fetch failed: ${res.status} ${res.statusText}`);
+        setItems([]);
+        setLoading(false);
+        return;
       }
-      // Ensure media_urls is a proper array (JSONB may come as string)
-      if (item.media_urls && typeof item.media_urls === 'string') {
-        try { item.media_urls = JSON.parse(item.media_urls as unknown as string); } catch { item.media_urls = null; }
-      }
-      if (item.media_urls && !Array.isArray(item.media_urls)) {
-        item.media_urls = null;
-      }
-      return item;
-    });
-    setItems(items);
-    setPlatformOverrides({});
-    setLoading(false);
+      const data = await res.json();
+      // Post-process items: fix JSONB parsing + template_url fallback
+      const items = (Array.isArray(data) ? data : []).map((item: QueueItem) => {
+        // Fallback: if template_url column is empty, read from generation_context
+        if (!item.template_url && item.generation_context?.template_url_value) {
+          item.template_url = item.generation_context.template_url_value as string;
+        }
+        // Ensure media_urls is a proper array (JSONB may come as string)
+        if (item.media_urls && typeof item.media_urls === 'string') {
+          try { item.media_urls = JSON.parse(item.media_urls as unknown as string); } catch (e) { console.warn('[ReviewView] media_urls parse failed:', e); item.media_urls = null; }
+        }
+        if (item.media_urls && !Array.isArray(item.media_urls)) {
+          item.media_urls = null;
+        }
+        return item;
+      });
+      setItems(items);
+      setPlatformOverrides({});
+    } catch (err) {
+      console.error('[ReviewView] loadItems error:', err);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
   }, [statusFilter]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
@@ -132,13 +144,23 @@ export function ReviewView() {
   };
 
   const bulkApprove = async () => {
-    await fetch('/api/queue/bulk-approve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: Array.from(selected) }),
-    });
-    setSelected(new Set());
-    loadItems();
+    try {
+      const res = await fetch('/api/queue/bulk-approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selected) }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Bulk approve failed: ${(err as { error?: string }).error || res.statusText}`);
+        return;
+      }
+      setSelected(new Set());
+      loadItems();
+    } catch (err) {
+      console.error('[ReviewView] bulkApprove error:', err);
+      alert('Chyba při hromadném schválení');
+    }
   };
 
   const approveOne = (item: QueueItem) => {
@@ -160,29 +182,39 @@ export function ReviewView() {
   };
 
   const confirmAction = async (postId: string, selectedPlatforms: string[], mode: 'approve' | 'publish') => {
-    if (mode === 'approve') {
-      await fetch(`/api/queue/${postId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'approved', platforms: selectedPlatforms }),
-      });
-    } else {
-      // Update platforms first, then publish
-      await fetch(`/api/queue/${postId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platforms: selectedPlatforms }),
-      });
-      const pubRes = await fetch('/api/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [postId] }),
-      });
-      const pubData = await pubRes.json();
-      const failed = pubData.results?.filter((r: { status: string; error?: string }) => r.status === 'failed');
-      if (failed?.length > 0) {
-        alert(`Chyba při odesílání: ${failed.map((f: { error?: string }) => f.error).join(', ')}`);
+    try {
+      if (mode === 'approve') {
+        const res = await fetch(`/api/queue/${postId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'approved', platforms: selectedPlatforms }),
+        });
+        if (!res.ok) throw new Error(`Approve failed: ${res.statusText}`);
+      } else {
+        // Update platforms first, then publish
+        const patchRes = await fetch(`/api/queue/${postId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platforms: selectedPlatforms }),
+        });
+        if (!patchRes.ok) throw new Error(`Platform update failed: ${patchRes.statusText}`);
+
+        const pubRes = await fetch('/api/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [postId] }),
+        });
+        if (!pubRes.ok) throw new Error(`Publish failed: ${pubRes.statusText}`);
+
+        const pubData = await pubRes.json();
+        const failed = pubData.results?.filter((r: { status: string; error?: string }) => r.status === 'failed');
+        if (failed?.length > 0) {
+          alert(`Chyba při odesílání: ${failed.map((f: { error?: string }) => f.error).join(', ')}`);
+        }
       }
+    } catch (err) {
+      console.error('[ReviewView] confirmAction error:', err);
+      alert(`Chyba: ${err instanceof Error ? err.message : 'Neznámá chyba'}`);
     }
     setPlatformPicker(null);
     loadItems();

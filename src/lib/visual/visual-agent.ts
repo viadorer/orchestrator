@@ -88,6 +88,8 @@ export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAs
 
   // Step 2: Generate the visual based on decision
   switch (decision.visual_type) {
+    case 'carousel':
+      return generateCarouselVisual(decision, ctx);
     case 'card':
       return generateCardVisual(decision, ctx);
     case 'photo':
@@ -116,12 +118,13 @@ export async function generateVisualAssets(ctx: VisualContext): Promise<VisualAs
  * Hugo analyzes the post text and decides what visual to create
  */
 async function decideVisualType(ctx: VisualContext): Promise<{
-  visual_type: 'chart' | 'card' | 'photo' | 'none';
+  visual_type: 'chart' | 'card' | 'photo' | 'carousel' | 'none';
   chart_data?: ChartData;
   card_hook?: string;
   card_body?: string;
   card_subtitle?: string;
   image_prompt?: string;
+  carousel_slides?: { type: 'cover' | 'content' | 'cta'; hook: string; body?: string; number?: string }[];
   template_key?: string;
   template_reason?: string;
   aspect_ratio?: string;
@@ -205,7 +208,22 @@ VÝBĚR ŠABLONY PODLE TAGŮ:
 - Post je vzdělávací/profesionální → hledej tagy: educational, professional
 - Post je zpráva/novinka → hledej tagy: news, universal
 
-🥈 PRIORITA 2 — INFOGRAFIKA: ČÍSLO + TEXT (visual_type: "card")
+🥈 PRIORITA 2 — CAROUSEL (visual_type: "carousel")
+Pokud post obsahuje SEZNAM (tipy, kroky, otázky, body, FAQ, porovnání), vytvoř CAROUSEL.
+Carousel = 3-6 slidů, každý s jedním bodem. Ideální pro IG, LinkedIn, TikTok.
+POUŽIJ carousel když:
+- Post má numbered list (1. 2. 3. ...)
+- Post má bullet points
+- Post vysvětluje kroky/proces
+- Post srovnává více věcí
+- Post má 3+ tipů/rad
+
+Carousel slides:
+- Slide 1 (type: "cover"): hook = celkový nadpis, body = podnadpis
+- Slides 2-N (type: "content"): hook = nadpis bodu, body = vysvětlení, number = "01" atd.
+- Poslední slide (type: "cta"): hook = CTA text, body = výzva k akci
+
+🥉 PRIORITA 3 — INFOGRAFIKA: ČÍSLO + TEXT (visual_type: "card")
 POUZE když je v postu KONKRÉTNÍ ČÍSLO jako hlavní hook (statistika, procento, cena).
 ${cardList}
 Použij JEN když číslo je skutečně hlavní sdělení postu. Jinak preferuj fotku.
@@ -233,15 +251,22 @@ DŮLEŽITÉ:
 
 Vrať POUZE JSON:
 {
-  "visual_type": "photo|card|none",
+  "visual_type": "photo|card|carousel|none",
   "template_key": ${allKeys},
   "aspect_ratio": "portrait|square|landscape|story",
   "card_hook": "krátký hook text pro šablonu (1. řádek)" | null,
   "card_body": "druhý řádek textu pro šablonu" | null,
   "card_subtitle": "volitelný třetí řádek" | null,
   "image_prompt": "VŽDY vyplň — detailed English scene description for photographer" | null,
-  "template_reason": "Krátké zdůvodnění (1 věta česky)"
-}`;
+  "template_reason": "Krátké zdůvodnění (1 věta česky)",
+  "carousel_slides": [{"type": "cover|content|cta", "hook": "...", "body": "...", "number": "01"}] | null
+}
+
+DŮLEŽITÉ pro carousel:
+- carousel_slides je POVINNÉ když visual_type = "carousel"
+- Minimálně 3, maximálně 6 slidů
+- První slide MUSÍ být type "cover", poslední "cta"
+- Prostřední slidy jsou "content" s číslem`;
 
   const { text: rawResponse } = await generateText({
     model: google('gemini-2.0-flash'),
@@ -760,11 +785,105 @@ async function generatePhotoVisual(
   };
 }
 
+// ============================================
+// Carousel Visual Generation
+// ============================================
+
+/**
+ * Generate carousel visual: renders slides via /api/visual/carousel,
+ * stores each slide image, returns URLs in carousel_urls.
+ * Falls back to single photo if carousel generation fails.
+ */
+async function generateCarouselVisual(
+  decision: { carousel_slides?: { type: 'cover' | 'content' | 'cta'; hook: string; body?: string; number?: string }[]; image_prompt?: string; template_key?: string; aspect_ratio?: string; card_hook?: string; card_body?: string; card_subtitle?: string },
+  ctx: VisualContext,
+): Promise<VisualAssets> {
+  const slides = decision.carousel_slides;
+  if (!slides || slides.length < 2) {
+    console.warn('[visual-agent] Carousel requested but no/insufficient slides, falling back to photo');
+    return generatePhotoVisual(decision, ctx);
+  }
+
+  const vi = ctx.visualIdentity;
+  const carouselBody = {
+    slides: slides.slice(0, 6),
+    style: {
+      bg: (vi.primary_color || '#0f0f23').replace('#', ''),
+      accent: (vi.accent_color || '#e94560').replace('#', ''),
+      text: (vi.text_color || '#ffffff').replace('#', ''),
+      logoUrl: vi.logo_url || undefined,
+      platform: ctx.platform as 'instagram' | 'linkedin' | 'facebook' | 'tiktok',
+    },
+  };
+
+  try {
+    // Call carousel API endpoint
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+    const res = await fetch(`${baseUrl}/api/visual/carousel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.API_SECRET || 'dev'}` },
+      body: JSON.stringify(carouselBody),
+    });
+
+    if (!res.ok) {
+      console.error(`[visual-agent] Carousel API failed: ${res.status}`);
+      return generatePhotoVisual(decision, ctx);
+    }
+
+    const data = await res.json();
+    const slideResults = data.slides as { index: number; png_base64: string }[];
+
+    if (!slideResults || slideResults.length === 0) {
+      return generatePhotoVisual(decision, ctx);
+    }
+
+    // Store carousel slides to storage + get public URLs
+    const carouselUrls: string[] = [];
+    if (supabase && ctx.projectId) {
+      const { storage: storageAdapter } = await import('@/lib/storage');
+
+      for (const slide of slideResults) {
+        const buffer = Buffer.from(slide.png_base64, 'base64');
+        const fileName = `carousel_${Date.now()}_slide${slide.index}.png`;
+        const result = await storageAdapter.upload(buffer, fileName, {
+          projectId: ctx.projectId,
+          folder: 'generated',
+          contentType: 'image/png',
+        });
+        if (result.success && result.public_url) {
+          carouselUrls.push(result.public_url);
+        }
+      }
+    }
+
+    if (carouselUrls.length === 0) {
+      console.warn('[visual-agent] Carousel storage failed, falling back to photo');
+      return generatePhotoVisual(decision, ctx);
+    }
+
+    console.log(`[visual-agent] 🎠 Carousel generated: ${carouselUrls.length} slides`);
+
+    return {
+      visual_type: 'carousel',
+      chart_url: null,
+      card_url: null,
+      image_prompt: decision.image_prompt || null,
+      generated_image_url: carouselUrls[0],  // Cover slide as primary image
+      carousel_urls: carouselUrls,
+      template_url: null,
+    };
+  } catch (err) {
+    console.error('[visual-agent] Carousel generation error:', err);
+    return generatePhotoVisual(decision, ctx);
+  }
+}
+
 /**
  * Auto-generate a PhotographyPreset for a project that doesn't have one yet.
  * Uses Hugo AI to analyze the project's KB entries and create a tailored preset.
  * Saves the preset to the project's visual_identity in the database.
- * 
+ *
  * This runs ONCE per project — after generation, the preset is stored and reused.
  */
 async function autoGeneratePhotographyPreset(

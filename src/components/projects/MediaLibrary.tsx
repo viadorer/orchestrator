@@ -41,6 +41,7 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
   const [processing, setProcessing] = useState<string | null>(null);
   const [selected, setSelected] = useState<MediaAsset | null>(null);
   const [filter, setFilter] = useState<'all' | 'image' | 'video' | 'unprocessed'>('all');
+  const [tagFilter, setTagFilter] = useState<string>('');
   const [libraryTab, setLibraryTab] = useState<'project' | 'shared'>('project');
 
   const loadAssets = useCallback(async () => {
@@ -142,12 +143,21 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
     loadAssets();
   };
 
+  // Collect all unique tags for tag cloud
+  const allTags = Array.from(new Set(assets.flatMap(a => a.ai_tags || []))).sort();
+
+  // Apply tag filter to assets
+  const filteredAssets = tagFilter
+    ? assets.filter(a => a.ai_tags?.includes(tagFilter))
+    : assets;
+
   const stats = {
     total: assets.length,
     processed: assets.filter(a => a.is_processed).length,
     unprocessed: assets.filter(a => !a.is_processed).length,
     images: assets.filter(a => a.file_type === 'image').length,
     videos: assets.filter(a => a.file_type === 'video').length,
+    filtered: filteredAssets.length,
   };
 
   const typeIcon = (type: string) => {
@@ -282,12 +292,47 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
         </div>
       )}
 
+      {/* Tag filter */}
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tagFilter && (
+            <button
+              onClick={() => setTagFilter('')}
+              className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/20 text-red-300 hover:bg-red-500/30"
+            >
+              <X className="w-3 h-3 inline mr-0.5" />Zrušit filtr
+            </button>
+          )}
+          {allTags.slice(0, 20).map(tag => (
+            <button
+              key={tag}
+              onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors ${
+                tagFilter === tag
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+              }`}
+            >
+              {tag}
+            </button>
+          ))}
+          {allTags.length > 20 && (
+            <span className="text-[10px] text-slate-600 self-center">+{allTags.length - 20} tagů</span>
+          )}
+          {tagFilter && (
+            <span className="text-[10px] text-slate-500 self-center ml-2">
+              {stats.filtered} / {stats.total} médií
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Grid */}
       {loading ? (
         <div className="text-center py-12 text-slate-500 text-sm">Načítám...</div>
-      ) : assets.length > 0 && (
+      ) : filteredAssets.length > 0 && (
         <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
-          {assets.map(asset => (
+          {filteredAssets.map(asset => (
             <button
               key={asset.id}
               onClick={() => setSelected(asset)}

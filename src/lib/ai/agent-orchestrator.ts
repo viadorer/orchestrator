@@ -1839,6 +1839,14 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
           if (tKey) fullInsert.template_key = tKey;
         } catch { /* ignore */ }
       }
+      // Carousel: store slide URLs in media_urls
+      if ((visualData as Record<string, unknown>).carousel_urls) {
+        const carouselUrls = (visualData as Record<string, unknown>).carousel_urls as string[];
+        if (carouselUrls.length > 0) {
+          fullInsert.media_urls = carouselUrls;
+          fullInsert.template_key = 'carousel';
+        }
+      }
 
       const { error: queueError } = await supabase.from('content_queue').insert(fullInsert);
 

@@ -1515,7 +1515,8 @@ function Field({ label, value, onChange, placeholder, multiline }: {
 
 /* ---- Tab: Visual Identity ---- */
 const VISUAL_STYLES = ['minimal', 'bold', 'elegant', 'playful', 'corporate', 'dark', 'light'] as const;
-const FONTS = ['Inter', 'Poppins', 'Roboto', 'Montserrat', 'Open Sans', 'Lato', 'Raleway', 'Nunito', 'Source Sans Pro', 'DM Sans'] as const;
+// Only fonts that are installed in /fonts/ with full Czech diacritics support
+const FONTS = ['Inter', 'Poppins', 'Montserrat'] as const;
 
 const SAMPLE_PHOTO = 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=600&h=400&fit=crop';
 const TEMPLATE_PREVIEWS: Array<{ key: string; label: string; desc: string; hook: string; body: string; subtitle?: string; photo?: string }> = [

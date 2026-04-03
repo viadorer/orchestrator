@@ -35,6 +35,7 @@ interface QueueItem {
   engagement_score?: number | null;
   engagement_metrics?: Record<string, unknown> | null;
   media_urls?: string[] | null;
+  media_source_label?: string | null;
 }
 
 type SortBy = 'overall_asc' | 'overall_desc' | 'date_desc' | 'date_asc';
@@ -520,7 +521,13 @@ export function ReviewView() {
                       );
                     });
                   })()}
-                  {item.image_url && item.visual_type === 'matched_photo' && (
+                  {item.visual_type === 'carousel' && (
+                    <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-xs text-cyan-400" title="Carousel post">🎠 carousel</span>
+                  )}
+                  {item.image_url && item.visual_type === 'matched_photo' && item.media_source_label === 'shared' && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-xs text-amber-400" title="Fotka ze sdílené knihovny">🌐 shared</span>
+                  )}
+                  {item.image_url && item.visual_type === 'matched_photo' && item.media_source_label !== 'shared' && (
                     <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-xs text-emerald-400" title="Fotka z Media Library (pgvector match)">📷 library</span>
                   )}
                   {item.image_url && item.visual_type === 'generated_photo' && (

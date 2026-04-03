@@ -147,14 +147,16 @@ export function DashboardView() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [agentTasks, setAgentTasks] = useState<AgentTasksData | null>(null);
   const [cronStatus, setCronStatus] = useState<CronStatus | null>(null);
+  const [templatePerf, setTemplatePerf] = useState<{ template_key: string; total_posts: number; published_posts: number; avg_ai_score: number | null; avg_engagement: number | null }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadDashboard() {
       try {
-        const [dashRes, cronRes] = await Promise.all([
+        const [dashRes, cronRes, templRes] = await Promise.all([
           fetch('/api/dashboard'),
           fetch('/api/cron/status'),
+          fetch('/api/analytics/templates'),
         ]);
         const data = await dashRes.json();
         if (data.stats) setStats(data.stats);
@@ -166,6 +168,10 @@ export function DashboardView() {
           const cronData = await cronRes.json();
           setCronStatus(cronData);
         } catch { /* cron status optional */ }
+        try {
+          const templData = await templRes.json();
+          if (templData.templates) setTemplatePerf(templData.templates);
+        } catch { /* template analytics optional */ }
       } catch {
         setStats({
           totalProjects: 0, reviewCount: 0, approvedCount: 0,
@@ -672,6 +678,34 @@ export function DashboardView() {
             </div>
           </div>
         </div>
+
+        {/* Template A/B Performance */}
+        {templatePerf.length > 0 && (
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
+            <h3 className="text-sm font-semibold text-white mb-3">🧪 A/B Šablony</h3>
+            <div className="space-y-2">
+              {templatePerf.slice(0, 8).map(t => (
+                <div key={t.template_key} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono truncate max-w-[120px]">{t.template_key}</span>
+                    <span className="text-slate-500">{t.total_posts} postů</span>
+                    {t.published_posts > 0 && <span className="text-emerald-500">{t.published_posts} pub.</span>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {t.avg_ai_score != null && (
+                      <span className="text-violet-400">AI: {t.avg_ai_score}</span>
+                    )}
+                    {t.avg_engagement != null && (
+                      <span className={`font-medium ${t.avg_engagement >= 5 ? 'text-emerald-400' : t.avg_engagement >= 2 ? 'text-amber-400' : 'text-slate-500'}`}>
+                        📈 {t.avg_engagement}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -99,6 +99,11 @@ export async function POST(request: Request) {
         if (tKey) insertData.template_key = tKey;
       } catch { /* ignore parse errors */ }
     }
+    // Carousel: store slide URLs in media_urls
+    if (visual.carousel_urls && visual.carousel_urls.length > 0) {
+      insertData.media_urls = visual.carousel_urls;
+      insertData.template_key = 'carousel';
+    }
 
     let { data: saved, error } = await supabase
       .from('content_queue')

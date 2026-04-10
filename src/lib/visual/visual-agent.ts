@@ -636,7 +636,7 @@ async function matchMediaFromLibrary(
     if (!embedding) return null;
 
     // Call pgvector RPC v2 — searches project + shared library
-    const { data, error } = await supabase.rpc('match_media_assets_v2', {
+    const { data, error } = await supabase.rpc('match_media_assets', {
       query_embedding: JSON.stringify(embedding),
       match_project_id: projectId,
       match_threshold: threshold ?? DEFAULT_MATCH_THRESHOLD,

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { storage } from '@/lib/storage';
+import { processMediaAsset } from '@/lib/ai/vision-engine';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api/require-auth';
 import { checkRateLimit } from '@/lib/api/rate-limit';
@@ -44,6 +45,11 @@ export async function POST(request: Request) {
 
   // For shared uploads, use 'shared' as folder prefix
   const effectiveProjectId = projectId || 'shared';
+
+  // Optional metadata fields
+  const manualTags = (formData.get('tags') as string || '').split(',').map(t => t.trim()).filter(Boolean);
+  const description = formData.get('description') as string || null;
+  const autoAnalyze = formData.get('auto_analyze') !== 'false';
 
   // Collect all files from form data (getAll handles multiple files with same key)
   const files = formData.getAll('files').filter((v): v is File => v instanceof File);
@@ -102,24 +108,35 @@ export async function POST(request: Request) {
       const publicUrl = uploadResult.public_url || '';
 
       // Insert into media_assets
+      const insertData: Record<string, unknown> = {
+        project_id: projectId,
+        storage_path: storagePath,
+        public_url: publicUrl,
+        file_name: file.name,
+        file_type: fileType,
+        mime_type: file.type,
+        file_size: file.size,
+      };
+      if (manualTags.length > 0) insertData.manual_tags = manualTags;
+      if (description) insertData.ai_description = description;
+      if (isShared) insertData.is_shared = true;
+
       const { data: asset, error: dbError } = await supabase
         .from('media_assets')
-        .insert({
-          project_id: projectId || null,
-          storage_path: storagePath,
-          public_url: publicUrl,
-          file_name: file.name,
-          file_type: fileType,
-          mime_type: file.type,
-          file_size: file.size,
-          is_shared: isShared,
-        })
+        .insert(insertData)
         .select('id')
         .single();
 
       if (dbError) {
         results.push({ file_name: file.name, success: false, error: dbError.message });
         continue;
+      }
+
+      // Fire-and-forget AI analysis (Gemini Vision + embedding generation)
+      if (autoAnalyze && asset.id) {
+        processMediaAsset(asset.id).catch(err =>
+          console.error(`[upload] Async analysis failed for ${asset.id}:`, err)
+        );
       }
 
       results.push({ file_name: file.name, success: true, asset_id: asset.id, public_url: publicUrl });

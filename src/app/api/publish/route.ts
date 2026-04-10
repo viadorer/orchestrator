@@ -2,65 +2,15 @@ import { supabase } from '@/lib/supabase/client';
 import { getPublisher, buildPlatformsArray, type MediaItem } from '@/lib/publishers';
 import { validatePostMultiPlatform } from '@/lib/platforms';
 import { ensureImageAspectRatio } from '@/lib/visual/image-resize';
-import { storage } from '@/lib/storage';
+import { resolveTemplateToStaticUrl } from '@/lib/visual/resolve-template';
+import { validateImageUrl } from '@/lib/utils/validate-image-url';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api/require-auth';
 import { safeParseJson, validateBody, publishSchema } from '@/lib/api/validate';
 import { checkRateLimit } from '@/lib/api/rate-limit';
 
-/**
- * Pre-render a dynamic template URL into a static PNG and upload to storage.
- */
-async function resolveTemplateToStaticUrl(
-  templateUrl: string,
-  postId: string,
-  projectId: string,
-  platform: string,
-): Promise<string> {
-  try {
-    console.log(`[publish] Pre-rendering template for post ${postId}...`);
-    const startTime = Date.now();
-
-    const response = await fetch(templateUrl, {
-      signal: AbortSignal.timeout(14000),
-    });
-
-    if (!response.ok) {
-      console.error(`[publish] Template render failed (${response.status}): ${await response.text().catch(() => 'no body')}`);
-      return templateUrl;
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('image/')) {
-      console.error(`[publish] Template returned non-image content-type: ${contentType}`);
-      return templateUrl;
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const renderMs = Date.now() - startTime;
-    console.log(`[publish] Template rendered: ${(buffer.length / 1024).toFixed(1)} KB in ${renderMs}ms`);
-
-    const timestamp = Date.now();
-    const fileName = `template_${platform}_${timestamp}.png`;
-
-    const uploadResult = await storage.upload(buffer, fileName, {
-      projectId,
-      folder: 'published-templates',
-      contentType: 'image/png',
-    });
-
-    if (uploadResult.success && uploadResult.public_url) {
-      console.log(`[publish] Template uploaded to ${uploadResult.provider}: ${uploadResult.public_url}`);
-      return uploadResult.public_url;
-    }
-
-    console.error(`[publish] Template upload failed: ${uploadResult.error}`);
-    return templateUrl;
-  } catch (err) {
-    console.error(`[publish] resolveTemplateToStaticUrl error:`, err instanceof Error ? err.message : err);
-    return templateUrl;
-  }
-}
+// Platforms that require an image — skip these if no valid image available
+const IMAGE_REQUIRED_PLATFORMS = ['instagram', 'pinterest', 'tiktok'];
 
 export async function POST(request: Request) {
   const auth = await requireAuth();
@@ -179,8 +129,20 @@ export async function POST(request: Request) {
         console.log(`[publish] Using template_url from generation_context for post ${post.id}`);
       }
 
+      // Priority 0: Pre-rendered static image (set at approval time)
+      if (post.static_image_url) {
+        const isValid = await validateImageUrl(post.static_image_url);
+        if (isValid) {
+          console.log(`[publish] Using pre-rendered static_image_url for post ${post.id}`);
+          mediaItems.push({ type: 'image', url: post.static_image_url });
+        } else {
+          console.warn(`[publish] static_image_url invalid for post ${post.id}, falling through to template`);
+        }
+      }
+
+      // Priority 1: Brand template — only if Priority 0 didn't resolve
       let usedTemplate = false;
-      if (post.template_url || post.card_url) {
+      if (mediaItems.length === 0 && (post.template_url || post.card_url)) {
         const templateBase = post.template_url || post.card_url;
         const isTemplateEndpoint = templateBase.includes('/api/visual/template');
 
@@ -238,17 +200,31 @@ export async function POST(request: Request) {
           mediaItems.push({ type: 'image', url: staticUrl });
         }
         usedTemplate = true;
-      } else if (post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
+      } else if (mediaItems.length === 0 && post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
         for (const url of post.media_urls) {
           if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) {
             mediaItems.push({ type: 'image', url: resolveUrl(url) });
           }
         }
-      } else if (post.image_url) {
+      } else if (mediaItems.length === 0 && post.image_url) {
         mediaItems.push({ type: 'image', url: post.image_url });
       }
       if (post.chart_url) {
         mediaItems.push({ type: 'image', url: post.chart_url });
+      }
+
+      // Block publishing without images on platforms that require them
+      if (mediaItems.length === 0) {
+        const imagePlatforms = targetPlatforms.filter(p => IMAGE_REQUIRED_PLATFORMS.includes(p));
+        if (imagePlatforms.length > 0) {
+          console.warn(`[publish] Post ${post.id}: Skipping ${imagePlatforms.join(', ')} — no valid image available`);
+          targetPlatforms = targetPlatforms.filter(p => !IMAGE_REQUIRED_PLATFORMS.includes(p));
+          const filteredEntries = buildPlatformsArray(lateAccounts, targetPlatforms);
+          if (filteredEntries.length === 0) {
+            results.push({ id: post.id, status: 'failed', error: `No valid image for image-required platforms: ${imagePlatforms.join(', ')}` });
+            continue;
+          }
+        }
       }
 
       if (!usedTemplate) {

@@ -120,7 +120,12 @@ export async function uploadToR2(
       })
     );
 
-    const publicUrl = R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : null;
+    let publicUrl: string | null = R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : null;
+    if (!publicUrl) {
+      // Fallback: 7-day signed URL when R2_PUBLIC_URL is not configured
+      publicUrl = await getR2SignedUrl(key, 7 * 24 * 3600);
+      if (publicUrl) console.warn(`[r2] R2_PUBLIC_URL not set — using 7-day signed URL for ${key}`);
+    }
 
     console.log(`[r2] Uploaded: ${key} (${(buffer.length / 1024).toFixed(1)} KB)`);
 

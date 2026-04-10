@@ -1,6 +1,9 @@
 import { uploadMediaFile } from '@/lib/media/upload-media';
 import { NextResponse } from 'next/server';
 
+export const maxDuration = 120; // seconds — bulk uploads take time
+export const dynamic = 'force-dynamic';
+
 const MAX_FILES = 50;
 
 /**

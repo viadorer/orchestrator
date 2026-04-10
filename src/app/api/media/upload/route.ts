@@ -5,14 +5,19 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api/require-auth';
 import { checkRateLimit } from '@/lib/api/rate-limit';
 
-/** Max file size: 10 MB */
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+/** Max file size: 100 MB (videos can be large) */
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
+/** Next.js App Router body size limit override */
+export const maxDuration = 60; // seconds
+export const dynamic = 'force-dynamic';
 
 /** Allowed MIME types */
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
-  'video/mp4', 'video/quicktime', 'video/webm',
+  'video/mp4', 'video/quicktime', 'video/webm', 'video/avi', 'video/x-msvideo', 'video/x-matroska',
   'application/pdf',
+  'application/octet-stream', // some browsers send this for videos
 ]);
 
 /**

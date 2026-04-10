@@ -451,40 +451,57 @@ async function addLogo(composite: sharp.OverlayOptions[], ctx: TemplateContext, 
 }
 
 // ─── Template 1: Bold Card ───────────────────────────────────
-// Clean minimalist: UPPERCASE hook top-left, body below, logo circle bottom-right.
+// Modern typographic card: subtle gradient bg, accent accent line, elegant spacing.
 
 async function renderBoldCard(ctx: TemplateContext): Promise<Buffer> {
   const { hook, body, bg, accent, textColor, width, height } = ctx;
   const s = sizing(width, height);
 
-  // Hook: massive UPPERCASE, left-aligned
   const hookUpper = (hook || '').toUpperCase();
-  const bigHookFs = Math.round(s.base * 0.16);
-  const textMaxW = width - s.pad * 2;
+  const bigHookFs = Math.round(s.base * 0.14);
+  const textMaxW = width - s.pad * 3;
 
-  const hookT = svgText({ text: hookUpper, x: s.pad, y: s.pad, fs: bigHookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 4, lh: 1.1 });
+  // Vertical centering: calculate total text height first
+  const hookT = svgText({ text: hookUpper, x: s.pad * 1.5, y: 0, fs: bigHookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 4, lh: 1.08 });
+  const bodyFs = Math.round(s.base * 0.038);
+  const bodyT = svgText({ text: body, x: s.pad * 1.5, y: 0, fs: bodyFs, bold: false, fill: `#${textColor}`, maxPx: Math.round(textMaxW * 0.85), maxLines: 3, lh: 1.4 });
 
-  // Body: smaller bold text below hook
-  const bodyFs = Math.round(s.base * 0.042);
-  const bodyY = s.pad + hookT.totalH + s.pad * 0.8;
-  const bodyMaxW = s.mode === 'landscape' ? Math.round(width * 0.55) : Math.round(width * 0.8);
-  const bodyT = svgText({ text: body, x: s.pad, y: bodyY, fs: bodyFs, bold: true, fill: `#${textColor}`, maxPx: bodyMaxW, maxLines: s.bodyMax, lh: 1.35 });
+  const totalTextH = hookT.totalH + s.pad + bodyT.totalH;
+  const startY = Math.round((height - totalTextH) * 0.38); // slightly above center
+
+  // Re-render at correct Y
+  const hookFinal = svgText({ text: hookUpper, x: s.pad * 1.5, y: startY, fs: bigHookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 4, lh: 1.08 });
+  const bodyFinal = svgText({ text: body, x: s.pad * 1.5, y: startY + hookFinal.totalH + s.pad, fs: bodyFs, bold: false, fill: `#${textColor}`, maxPx: Math.round(textMaxW * 0.85), maxLines: 3, opacity: 0.7, lh: 1.4 });
+
+  const bgDark = darkenHex(bg, 0.15);
+  const bgLight = lightenHex(bg, 0.06);
+  const accentBarW = Math.max(3, Math.round(s.base * 0.005));
+  const logoSz = Math.round(s.base * 0.12);
+  const pillPad = Math.round(logoSz * 0.25);
+  const pillW = logoSz + pillPad * 2;
+  const pillH = logoSz + pillPad * 2;
+  const pillR = Math.round(pillH * 0.22);
+  const pillX = width - s.pad * 1.5 - pillW;
+  const pillY = height - s.pad * 1.5 - pillH;
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <rect width="${width}" height="${height}" fill="#${bg}"/>
-    ${hookT.svg}${bodyT.svg}
+    <defs>
+      <linearGradient id="bc-bg" x1="0" y1="0" x2="0.3" y2="1">
+        <stop offset="0%" stop-color="#${bgLight}"/>
+        <stop offset="100%" stop-color="#${bgDark}"/>
+      </linearGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#bc-bg)"/>
+    <!-- Accent vertical bar left -->
+    <rect x="${s.pad}" y="${startY}" width="${accentBarW}" height="${hookFinal.totalH}" rx="2" fill="#${accent}"/>
+    <!-- Logo pill -->
+    ${logoBgPill(pillX, pillY, pillW, pillH, pillR, lightenHex(bg, 0.08), 0.5)}
+    ${hookFinal.svg}${bodyFinal.svg}
   </svg>`;
 
   const composite: sharp.OverlayOptions[] = [{ input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 }];
-
-  // Logo: clean, no border, bottom-right
-  const logoSz = Math.round(s.mode === 'landscape' ? height * 0.18 : s.base * 0.14);
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
-  if (logo) {
-    const logoX = width - s.pad - logoSz;
-    const logoY = height - s.pad - logoSz;
-    composite.push({ input: logo, top: logoY, left: logoX });
-  }
+  if (logo) composite.push({ input: logo, top: pillY + pillPad, left: pillX + pillPad });
 
   return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } })
     .composite(composite).png().toBuffer();
@@ -700,29 +717,37 @@ async function renderGradient(ctx: TemplateContext): Promise<Buffer> {
 }
 
 // ─── Template 4: Split ───────────────────────────────────────
-// Portrait/square: photo top, text bottom. Landscape: photo left, text right.
+// Clean editorial split: photo + text panel with accent divider, smooth fade, generous spacing.
 
 async function renderSplit(ctx: TemplateContext): Promise<Buffer> {
   const { hook, body, subtitle, bg, accent, textColor, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
   const isLand = s.mode === 'landscape';
-  const fadeSize = Math.round(s.base * 0.04);
+  const fadeSize = Math.round(s.base * 0.08); // longer fade
+  const bgDark = darkenHex(bg, 0.08);
+  const accentBarW = Math.max(3, Math.round(s.base * 0.004));
+  const logoSz = Math.round(s.base * 0.09);
 
   if (isLand) {
-    const photoW = Math.round(width * 0.48);
-    const textX = photoW + s.pad;
-    const textMaxW = width - photoW - s.pad * 2;
+    const photoW = Math.round(width * 0.50);
+    const textX = photoW + Math.round(s.pad * 1.5);
+    const textMaxW = width - photoW - s.pad * 3;
     const photo = await fetchImg(photoUrl, photoW, height);
 
-    const hookT = svgText({ text: hook, x: textX, y: s.pad, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
-    const bodyT = svgText({ text: body, x: textX, y: s.pad + hookT.totalH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
-    const subT = svgText({ text: subtitle, x: textX, y: s.pad + hookT.totalH + bodyT.totalH + s.pad * 0.5, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
+    const textStartY = Math.round(height * 0.15);
+    const hookT = svgText({ text: hook, x: textX, y: textStartY, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax, lh: 1.15 });
+    const bodyT = svgText({ text: body, x: textX, y: textStartY + hookT.totalH + s.pad * 0.5, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax + 1, opacity: 0.78, lh: 1.4 });
+    const subT = svgText({ text: subtitle, x: textX, y: textStartY + hookT.totalH + bodyT.totalH + s.pad * 0.8, fs: s.subFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 2, opacity: 0.5 });
 
     const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="${photoW}" y="0" width="${width - photoW}" height="${height}" fill="#${bg}"/>
-      <defs><linearGradient id="fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#${bg}" stop-opacity="0"/><stop offset="100%" stop-color="#${bg}" stop-opacity="1"/></linearGradient></defs>
-      <rect x="${photoW - fadeSize}" y="0" width="${fadeSize}" height="${height}" fill="url(#fade)"/>
-      <rect x="${textX}" y="${s.pad}" width="${s.barH}" height="${s.divW}" fill="#${accent}"/>
+      <defs>
+        <linearGradient id="sp-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#${bg}"/><stop offset="100%" stop-color="#${bgDark}"/></linearGradient>
+        <linearGradient id="sp-fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#${bg}" stop-opacity="0"/><stop offset="100%" stop-color="#${bg}" stop-opacity="1"/></linearGradient>
+      </defs>
+      <rect x="${photoW}" y="0" width="${width - photoW}" height="${height}" fill="url(#sp-bg)"/>
+      <rect x="${photoW - fadeSize}" y="0" width="${fadeSize}" height="${height}" fill="url(#sp-fade)"/>
+      <!-- Accent vertical bar -->
+      <rect x="${photoW + s.pad * 0.7}" y="${textStartY}" width="${accentBarW}" height="${hookT.totalH + bodyT.totalH + s.pad}" rx="2" fill="#${accent}" opacity="0.7"/>
       ${hookT.svg}${bodyT.svg}${subT.svg}
     </svg>`;
 
@@ -730,23 +755,29 @@ async function renderSplit(ctx: TemplateContext): Promise<Buffer> {
       { input: photo, top: 0, left: 0 },
       { input: Buffer.from(svg), top: 0, left: 0 },
     ];
-    await addLogo(composite, ctx, s);
+    const logo = await fetchLogo(ctx.logoUrl, logoSz);
+    if (logo) composite.push({ input: logo, top: height - s.pad - logoSz, left: width - s.pad - logoSz });
     return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
   } else {
-    const photoH = Math.round(height * 0.5);
-    const textY = photoH + s.pad;
-    const textMaxW = width - s.pad * 2;
+    const photoH = Math.round(height * 0.52);
+    const panelY = photoH;
+    const textY = panelY + Math.round(s.pad * 1.3);
+    const textMaxW = width - s.pad * 3;
     const photo = await fetchImg(photoUrl, width, photoH);
 
-    const hookT = svgText({ text: hook, x: s.pad, y: textY, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
-    const bodyT = svgText({ text: body, x: s.pad, y: textY + hookT.totalH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
-    const subT = svgText({ text: subtitle, x: s.pad, y: textY + hookT.totalH + bodyT.totalH + s.pad * 0.5, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
+    const hookT = svgText({ text: hook, x: s.pad * 1.5, y: textY, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax, lh: 1.15 });
+    const bodyT = svgText({ text: body, x: s.pad * 1.5, y: textY + hookT.totalH + s.pad * 0.4, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax + 1, opacity: 0.78, lh: 1.4 });
+    const subT = svgText({ text: subtitle, x: s.pad * 1.5, y: textY + hookT.totalH + bodyT.totalH + s.pad * 0.6, fs: s.subFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 2, opacity: 0.5 });
 
     const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="${photoH}" width="${width}" height="${height - photoH}" fill="#${bg}"/>
-      <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#${bg}" stop-opacity="0"/><stop offset="100%" stop-color="#${bg}" stop-opacity="1"/></linearGradient></defs>
-      <rect x="0" y="${photoH - fadeSize}" width="${width}" height="${fadeSize}" fill="url(#fade)"/>
-      <rect x="${s.pad}" y="${photoH + s.pad * 0.3}" width="${s.barH}" height="${s.divW}" fill="#${accent}"/>
+      <defs>
+        <linearGradient id="sp-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#${bg}"/><stop offset="100%" stop-color="#${bgDark}"/></linearGradient>
+        <linearGradient id="sp-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#${bg}" stop-opacity="0"/><stop offset="100%" stop-color="#${bg}" stop-opacity="1"/></linearGradient>
+      </defs>
+      <rect x="0" y="${panelY}" width="${width}" height="${height - panelY}" fill="url(#sp-bg)"/>
+      <rect x="0" y="${panelY - fadeSize}" width="${width}" height="${fadeSize}" fill="url(#sp-fade)"/>
+      <!-- Accent horizontal bar -->
+      <rect x="${s.pad * 1.5}" y="${panelY + s.pad * 0.5}" width="${Math.round(s.base * 0.06)}" height="${accentBarW}" rx="2" fill="#${accent}" opacity="0.7"/>
       ${hookT.svg}${bodyT.svg}${subT.svg}
     </svg>`;
 
@@ -754,36 +785,51 @@ async function renderSplit(ctx: TemplateContext): Promise<Buffer> {
       { input: photo, top: 0, left: 0 },
       { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
     ];
-    await addLogo(composite, ctx, s);
+    const logo = await fetchLogo(ctx.logoUrl, logoSz);
+    if (logo) composite.push({ input: logo, top: height - s.pad - logoSz, left: width - s.pad - logoSz });
     return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
   }
 }
 
 // ─── Template 5: Text + Logo ─────────────────────────────────
-// Photo background, diagonal gradient overlay, text top-left, logo bottom-right.
+// Photo bg, wide gradient overlay from top-left for readable text, accent divider, logo in pill.
 
 async function renderTextLogo(ctx: TemplateContext): Promise<Buffer> {
   const { hook, body, subtitle, bg, accent, textColor, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
-  const textMaxW = s.mode === 'landscape' ? Math.round(width * 0.55) : Math.round(width * 0.7);
+  const textMaxW = s.mode === 'landscape' ? Math.round(width * 0.50) : Math.round(width * 0.65);
+  const innerPad = Math.round(s.pad * 1.5);
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  const hookT = svgText({ text: hook, x: s.pad, y: s.pad, fs: s.hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.hookMax });
-  const divY = s.pad + hookT.totalH + s.pad * 0.2;
-  const bodyT = svgText({ text: body, x: s.pad, y: divY + s.barH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.9 });
-  const subT = svgText({ text: subtitle, x: s.pad, y: divY + s.barH + s.pad * 0.3 + bodyT.totalH + s.pad * 0.2, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
+  const hookT = svgText({ text: hook, x: innerPad, y: innerPad, fs: Math.round(s.hookFs * 1.05), bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: s.hookMax, lh: 1.15 });
+  const divY = innerPad + hookT.totalH + Math.round(s.pad * 0.3);
+  const divW = Math.round(s.base * 0.05);
+  const divH = Math.max(3, Math.round(s.base * 0.004));
+  const bodyT = svgText({ text: body, x: innerPad, y: divY + divH + Math.round(s.pad * 0.4), fs: s.bodyFs, bold: false, fill: '#ffffff', maxPx: textMaxW, maxLines: s.bodyMax + 1, opacity: 0.82, lh: 1.4 });
+  const subT = svgText({ text: subtitle, x: innerPad, y: divY + divH + Math.round(s.pad * 0.4) + bodyT.totalH + Math.round(s.pad * 0.3), fs: s.subFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: 2, opacity: 0.5 });
+
+  // Gradient covers wider area for better readability
+  const gradientCoverage = Math.round(width * 0.65);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <defs><linearGradient id="ov" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#${bg}" stop-opacity="0.88"/>
-      <stop offset="40%" stop-color="#${bg}" stop-opacity="0.5"/>
-      <stop offset="70%" stop-color="#${bg}" stop-opacity="0"/>
-    </linearGradient></defs>
-    <rect width="${width}" height="${height}" fill="url(#ov)"/>
-    <rect x="0" y="0" width="${s.barH}" height="${Math.round(height * 0.08)}" fill="#${accent}"/>
-    <rect x="0" y="0" width="${Math.round(width * 0.08)}" height="${s.barH}" fill="#${accent}"/>
-    <rect x="${s.pad}" y="${divY}" width="${s.divW}" height="${s.barH}" rx="2" fill="#${accent}"/>
+    <defs>
+      <linearGradient id="tl-ov" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#000" stop-opacity="0.82"/>
+        <stop offset="35%" stop-color="#000" stop-opacity="0.55"/>
+        <stop offset="60%" stop-color="#000" stop-opacity="0.15"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+      </linearGradient>
+      <!-- Top edge vignette for extra readability -->
+      <linearGradient id="tl-top" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#000" stop-opacity="0.3"/>
+        <stop offset="30%" stop-color="#000" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#tl-ov)"/>
+    <rect width="${width}" height="${height}" fill="url(#tl-top)"/>
+    <!-- Accent divider -->
+    <rect x="${innerPad}" y="${divY}" width="${divW}" height="${divH}" rx="2" fill="#${accent}" opacity="0.8"/>
     ${hookT.svg}${bodyT.svg}${subT.svg}
   </svg>`;
 
@@ -792,28 +838,55 @@ async function renderTextLogo(ctx: TemplateContext): Promise<Buffer> {
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
   await addLogo(composite, ctx, s, true);
-  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
+  return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } }).composite(composite).png().toBuffer();
 }
 
 // ─── Template 6: Minimal ─────────────────────────────────────
-// Full photo, subtle bottom gradient, logo badge bottom-right.
+// Photo-forward: full photo, subtle vignette, frosted glass logo pill.
 
 async function renderMinimal(ctx: TemplateContext): Promise<Buffer> {
-  const { photoUrl, width, height } = ctx;
+  const { accent, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
+  const logoSz = Math.round(s.base * 0.10);
+  const pillPad = Math.round(logoSz * 0.3);
+  const pillW = logoSz + pillPad * 2;
+  const pillH = logoSz + pillPad * 2;
+  const pillR = Math.round(pillH * 0.25);
+  const pillX = width - s.pad - pillW;
+  const pillY = height - s.pad - pillH;
+  const accentLineH = Math.max(2, Math.round(s.base * 0.003));
 
   const photo = await fetchImg(photoUrl, width, height);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.5"/></linearGradient></defs>
-    <rect x="0" y="${height - Math.round(height * 0.18)}" width="${width}" height="${Math.round(height * 0.18)}" fill="url(#g)"/>
+    <defs>
+      <!-- Subtle bottom gradient for logo readability -->
+      <linearGradient id="mn-g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="70%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.4"/>
+      </linearGradient>
+      <!-- Corner vignette -->
+      <radialGradient id="mn-v" cx="50%" cy="50%" r="75%">
+        <stop offset="60%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.2"/>
+      </radialGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#mn-g)"/>
+    <rect width="${width}" height="${height}" fill="url(#mn-v)"/>
+    <!-- Frosted glass logo pill -->
+    <rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillR}" ry="${pillR}" fill="rgba(0,0,0,0.3)"/>
+    <rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillR}" ry="${pillR}" fill="rgba(255,255,255,0.06)"/>
+    <!-- Accent signature -->
+    <rect x="0" y="${height - accentLineH}" width="${width}" height="${accentLineH}" fill="#${accent}" opacity="0.6"/>
   </svg>`;
 
   const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
-  await addLogo(composite, ctx, s, true);
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
+  if (logo) composite.push({ input: logo, top: pillY + pillPad, left: pillX + pillPad });
   return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } }).composite(composite).png().toBuffer();
 }
 
@@ -891,8 +964,7 @@ async function renderQuoteCard(ctx: TemplateContext): Promise<Buffer> {
 }
 
 // ─── Template 8: Diagonal ────────────────────────────────────
-// Photo background, large bg-colored circle top-right, bold hook text top-left,
-// body text below hook, logo in circular accent-bordered frame bottom-right.
+// Refined: photo bg, subtle accent geometric shape (not massive), clean text with backdrop.
 
 async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
   const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
@@ -901,102 +973,42 @@ async function renderDiagonal(ctx: TemplateContext): Promise<Buffer> {
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Large circle — ACCENT color, far top-right (center partially outside canvas)
-  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.55 : 0.55));
-  const circleCx = Math.round(width * (isLand ? 0.82 : 0.78));
-  const circleCy = Math.round(height * (isLand ? 0.15 : 0.12));
+  // Smaller, more refined accent shape — positioned as decorative element, not dominating
+  const shapeR = Math.round(Math.min(width, height) * (isLand ? 0.25 : 0.22));
+  const shapeCx = Math.round(width * (isLand ? 0.88 : 0.85));
+  const shapeCy = Math.round(height * (isLand ? 0.12 : 0.08));
 
-  // Text layout — large hook + body, top-left
   const textPad = Math.round(s.pad * 1.5);
-  const hookFs = isLand ? Math.round(s.base * 0.1) : Math.round(s.base * 0.085);
-  const textMaxW = isLand ? Math.round(width * 0.5) : Math.round(width * 0.7);
+  const hookFs = isLand ? Math.round(s.base * 0.085) : Math.round(s.base * 0.075);
+  const textMaxW = isLand ? Math.round(width * 0.55) : Math.round(width * 0.75);
 
-  const hookT = svgText({ text: hook, x: textPad, y: textPad, fs: hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: isLand ? 3 : 5, lh: 1.1 });
-  const bodyY = textPad + hookT.totalH + Math.round(s.pad * 0.4);
-  const bodyFs = isLand ? Math.round(s.base * 0.04) : Math.round(s.base * 0.038);
-  const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: bodyFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: isLand ? 2 : 3, opacity: 0.85 });
+  const hookT = svgText({ text: hook, x: textPad, y: textPad, fs: hookFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: isLand ? 3 : 5, lh: 1.12 });
+  const bodyY = textPad + hookT.totalH + Math.round(s.pad * 0.5);
+  const bodyFs = isLand ? Math.round(s.base * 0.038) : Math.round(s.base * 0.035);
+  const bodyT = svgText({ text: body, x: textPad, y: bodyY, fs: bodyFs, bold: false, fill: '#ffffff', maxPx: textMaxW, maxLines: isLand ? 2 : 3, opacity: 0.78, lh: 1.4 });
 
-  // Text backdrop height — bg color gradient for readability
-  const backdropH = bodyY + bodyT.totalH + Math.round(s.pad * 1.2);
-
-  // Logo — clean, bottom-right, no frame
-  const logoSz = Math.round(s.base * 0.08);
-
-  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- BG gradient backdrop for text readability -->
-    <defs>
-      <linearGradient id="txtBg" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#${bg}" stop-opacity="0.75"/>
-        <stop offset="60%" stop-color="#${bg}" stop-opacity="0.3"/>
-        <stop offset="100%" stop-color="#${bg}" stop-opacity="0"/>
-      </linearGradient>
-    </defs>
-    <rect x="0" y="0" width="${width}" height="${backdropH}" fill="url(#txtBg)"/>
-    <!-- Large accent circle far top-right -->
-    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${accent}" opacity="0.8"/>
-    <!-- Text -->
-    ${hookT.svg}
-    ${bodyT.svg}
-  </svg>`;
-
-  const composite: sharp.OverlayOptions[] = [
-    { input: photo, top: 0, left: 0 },
-    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
-  ];
-
-  
-  // Place logo clean, bottom-right
-  const logo = await fetchLogo(ctx.logoUrl, logoSz);
-  if (logo) {
-    composite.push({
-      input: logo,
-      top: height - textPad - logoSz,
-      left: width - textPad - logoSz,
-    });
-  }
-
-  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
-}
-
-// ─── Template 9: Quote Overlay ──────────────────────────────
-// Photo background (person), dark gradient bottom, large quote mark, citation + author.
-// Inspired by First Class podcast style.
-
-async function renderQuoteOverlay(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
-  const s = sizing(width, height);
-  const isLand = s.mode === 'landscape';
-
-  const photo = await fetchImg(photoUrl, width, height);
-
-  // Quote mark size and position
-  const quoteFs = Math.round(s.base * (isLand ? 0.12 : 0.1));
-  const quoteMark = textToPath('\u201e', s.pad, Math.round(height * 0.48), quoteFs, `#${accent}`, 1, true);
-
-  // Hook = the quote text, positioned below quote mark
-  const hookFs = isLand ? Math.round(s.base * 0.065) : Math.round(s.base * 0.06);
-  const hookY = Math.round(height * 0.50);
-  const textMaxW = isLand ? Math.round(width * 0.7) : Math.round(width * 0.85);
-  const hookT = svgText({ text: hook, x: s.pad, y: hookY, fs: hookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: isLand ? 4 : 5, lh: 1.25 });
-
-  // Body = author name, below hook
-  const bodyY = hookY + hookT.totalH + Math.round(s.pad * 0.6);
-  const bodyT = svgText({ text: body, x: s.pad, y: bodyY, fs: s.bodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 2, opacity: 0.8 });
-
-  // Gradient: transparent top -> dark bottom (covers ~60% of image height)
-  const gradTop = Math.round(height * 0.35);
-  const { r, g, b } = hexToRgb(bg);
+  const backdropH = bodyY + bodyT.totalH + Math.round(s.pad * 1.5);
+  const logoSz = Math.round(s.base * 0.09);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <linearGradient id="qog" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="rgb(${r},${g},${b})" stop-opacity="0"/>
-        <stop offset="0.3" stop-color="rgb(${r},${g},${b})" stop-opacity="0.6"/>
-        <stop offset="1" stop-color="rgb(${r},${g},${b})" stop-opacity="0.95"/>
+      <!-- Text backdrop — smooth diagonal gradient -->
+      <linearGradient id="dg-bg" x1="0" y1="0" x2="0.6" y2="0.8">
+        <stop offset="0%" stop-color="#000" stop-opacity="0.75"/>
+        <stop offset="50%" stop-color="#000" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+      </linearGradient>
+      <!-- Bottom logo area -->
+      <linearGradient id="dg-bot" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.5"/>
       </linearGradient>
     </defs>
-    <rect y="${gradTop}" width="${width}" height="${height - gradTop}" fill="url(#qog)"/>
-    ${quoteMark}
+    <rect width="${width}" height="${backdropH}" fill="url(#dg-bg)"/>
+    <rect y="${height - Math.round(height * 0.15)}" width="${width}" height="${Math.round(height * 0.15)}" fill="url(#dg-bot)"/>
+    <!-- Accent circle — decorative, subtle -->
+    <circle cx="${shapeCx}" cy="${shapeCy}" r="${shapeR}" fill="#${accent}" opacity="0.35"/>
+    <circle cx="${shapeCx}" cy="${shapeCy}" r="${Math.round(shapeR * 0.7)}" fill="#${accent}" opacity="0.15"/>
     ${hookT.svg}${bodyT.svg}
   </svg>`;
 
@@ -1004,67 +1016,142 @@ async function renderQuoteOverlay(ctx: TemplateContext): Promise<Buffer> {
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
-
-  // Logo top-right
-  const logoSz = Math.round(s.base * 0.1);
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
-  if (logo) composite.push({ input: logo, top: s.pad, left: width - s.pad - logoSz });
+  if (logo) composite.push({ input: logo, top: height - textPad - logoSz, left: width - textPad - logoSz });
 
-  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
+  return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } }).composite(composite).png().toBuffer();
+}
+
+// ─── Template 9: Quote Overlay ──────────────────────────────
+// Cinematic: photo bg, rich gradient, elegant quote marks, author attribution.
+
+async function renderQuoteOverlay(ctx: TemplateContext): Promise<Buffer> {
+  const { hook, body, accent, photoUrl, width, height } = ctx;
+  const s = sizing(width, height);
+  const isLand = s.mode === 'landscape';
+  const innerPad = Math.round(s.pad * 1.3);
+
+  const photo = await fetchImg(photoUrl, width, height);
+
+  // Quote mark — elegant, large, accent colored
+  const quoteFs = Math.round(s.base * (isLand ? 0.14 : 0.12));
+  const quoteY = Math.round(height * 0.46);
+  const quoteMark = textToPath('\u201e', innerPad, quoteY, quoteFs, `#${accent}`, 0.7, true);
+
+  // Hook = the quote text
+  const hookFs = isLand ? Math.round(s.base * 0.065) : Math.round(s.base * 0.058);
+  const hookY = quoteY + Math.round(quoteFs * 0.15);
+  const textMaxW = isLand ? Math.round(width * 0.68) : Math.round(width * 0.82);
+  const hookT = svgText({ text: hook, x: innerPad, y: hookY, fs: hookFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: isLand ? 4 : 5, lh: 1.25 });
+
+  // Author name — subtle, with accent dash
+  const bodyY = hookY + hookT.totalH + Math.round(s.pad * 0.5);
+  const authorFs = Math.round(s.bodyFs * 0.9);
+  const dashW = Math.round(s.base * 0.03);
+  const dashH = Math.max(2, Math.round(s.base * 0.003));
+  const bodyT = svgText({ text: body, x: innerPad + dashW + Math.round(s.pad * 0.5), y: bodyY, fs: authorFs, bold: false, fill: '#ffffff', maxPx: textMaxW, maxLines: 2, opacity: 0.7, lh: 1.4 });
+
+  const logoSz = Math.round(s.base * 0.10);
+  const pillPad = Math.round(logoSz * 0.25);
+  const pillW = logoSz + pillPad * 2;
+  const pillH = logoSz + pillPad * 2;
+  const pillR = Math.round(pillH * 0.25);
+  const pillX = width - innerPad - pillW;
+  const pillY = innerPad;
+
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="qo-g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#000" stop-opacity="0.05"/>
+        <stop offset="35%" stop-color="#000" stop-opacity="0.25"/>
+        <stop offset="55%" stop-color="#000" stop-opacity="0.65"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.90"/>
+      </linearGradient>
+      <radialGradient id="qo-v" cx="50%" cy="50%" r="75%">
+        <stop offset="55%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.2"/>
+      </radialGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#qo-g)"/>
+    <rect width="${width}" height="${height}" fill="url(#qo-v)"/>
+    ${quoteMark}
+    ${hookT.svg}
+    <!-- Author dash -->
+    <rect x="${innerPad}" y="${bodyY + Math.round(authorFs * 0.55)}" width="${dashW}" height="${dashH}" rx="1" fill="#${accent}" opacity="0.8"/>
+    ${bodyT.svg}
+    <!-- Logo pill top-right -->
+    <rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillR}" ry="${pillR}" fill="rgba(0,0,0,0.3)"/>
+    <rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillR}" ry="${pillR}" fill="rgba(255,255,255,0.06)"/>
+  </svg>`;
+
+  const composite: sharp.OverlayOptions[] = [
+    { input: photo, top: 0, left: 0 },
+    { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
+  ];
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
+  if (logo) composite.push({ input: logo, top: pillY + pillPad, left: pillX + pillPad });
+
+  return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } }).composite(composite).png().toBuffer();
 }
 
 // ─── Template 10: CTA Card ──────────────────────────────────
-// Deel style: photo on top, accent colored panel at bottom with rounded top corners,
-// large hook text + CTA button (body text) + logo bottom-right.
+// Modern: photo top, compact accent panel at bottom with rounded corners, clean CTA button.
 
 async function renderCtaCard(ctx: TemplateContext): Promise<Buffer> {
   const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
   const isLand = s.mode === 'landscape';
 
-  // Panel dimensions
-  const panelH = Math.round(height * (isLand ? 0.38 : 0.40));
+  // Smaller, more refined panel
+  const panelH = Math.round(height * (isLand ? 0.32 : 0.33));
   const panelY = height - panelH;
-  const panelRad = Math.round(s.base * 0.03);
-  const panelPad = Math.round(s.pad * 1.3);
+  const panelRad = Math.round(s.base * 0.035);
+  const panelPad = Math.round(s.pad * 1.4);
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Accent icon circle above panel (left side)
-  const iconR = Math.round(s.base * 0.04);
-  const iconCx = panelPad + iconR;
-  const iconCy = panelY - iconR - Math.round(s.pad * 0.3);
-
-  // Hook text on panel — dark text on accent bg
-  const hookFs = isLand ? Math.round(s.base * 0.075) : Math.round(s.base * 0.065);
-  const textMaxW = isLand ? Math.round(width * 0.65) : Math.round(width * 0.85);
+  // Hook text — dark on accent for contrast
+  const hookFs = isLand ? Math.round(s.base * 0.068) : Math.round(s.base * 0.058);
+  const textMaxW = isLand ? Math.round(width * 0.60) : Math.round(width * 0.80);
   const hookTextY = panelY + panelPad;
-  const hookT = svgText({ text: hook, x: panelPad, y: hookTextY, fs: hookFs, bold: true, fill: `#${bg}`, maxPx: textMaxW, maxLines: isLand ? 3 : 4, lh: 1.2 });
+  // Determine text color for accent bg
+  const panelTextColor = ensureContrast(bg, accent, 3);
+  const hookT = svgText({ text: hook, x: panelPad, y: hookTextY, fs: hookFs, bold: true, fill: `#${panelTextColor}`, maxPx: textMaxW, maxLines: isLand ? 3 : 3, lh: 1.18 });
 
-  // CTA button (body text inside rounded rect)
-  const ctaFs = Math.round(s.base * 0.028);
+  // CTA button
+  const ctaFs = Math.round(s.base * 0.030);
   const ctaH = Math.round(ctaFs * 2.8);
-  const ctaY = hookTextY + hookT.totalH + Math.round(s.pad * 0.6);
-  const ctaPadX = Math.round(ctaFs * 1.5);
+  const ctaY = hookTextY + hookT.totalH + Math.round(s.pad * 0.5);
+  const ctaPadX = Math.round(ctaFs * 1.8);
   const font = getFont(true);
-  const ctaTextW = Math.round(font.getAdvanceWidth(body || 'Více info', ctaFs));
+  const ctaLabel = body || 'Více info';
+  const ctaTextW = Math.round(font.getAdvanceWidth(ctaLabel, ctaFs));
   const ctaW = ctaTextW + ctaPadX * 2;
   const ctaRad = Math.round(ctaH / 2);
-  const ctaTextPath = textToPath(body || 'Více info', panelPad + ctaPadX, ctaY + ctaH * 0.65, ctaFs, `#${accent}`, 1, true);
+  const ctaTextPath = textToPath(ctaLabel, panelPad + ctaPadX, ctaY + ctaH * 0.65, ctaFs, `#${accent}`, 1, true);
 
-  // Logo bottom-right on panel
-  const logoSz = Math.round(s.base * 0.1);
+  const logoSz = Math.round(s.base * 0.09);
+  const accentDark = darkenHex(accent, 0.1);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Accent panel with rounded top corners -->
-    <path d="M0,${panelY + panelRad} Q0,${panelY} ${panelRad},${panelY} L${width - panelRad},${panelY} Q${width},${panelY} ${width},${panelY + panelRad} L${width},${height} L0,${height} Z" fill="#${accent}"/>
-    <!-- Icon circle above panel -->
-    <circle cx="${iconCx}" cy="${iconCy}" r="${iconR}" fill="#${accent}"/>
-    ${textToPath('\u2193', iconCx - Math.round(iconR * 0.4), iconCy + Math.round(iconR * 0.4), Math.round(iconR * 1.2), `#${textColor}`, 1, true)}
-    <!-- Hook text -->
+    <defs>
+      <!-- Photo darken at panel junction -->
+      <linearGradient id="ct-fade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.3"/>
+      </linearGradient>
+      <linearGradient id="ct-panel" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#${accent}"/>
+        <stop offset="100%" stop-color="#${accentDark}"/>
+      </linearGradient>
+    </defs>
+    <!-- Darken photo near panel -->
+    <rect y="${panelY - Math.round(s.base * 0.1)}" width="${width}" height="${Math.round(s.base * 0.1)}" fill="url(#ct-fade)"/>
+    <!-- Accent panel with rounded top corners + gradient -->
+    <path d="M0,${panelY + panelRad} Q0,${panelY} ${panelRad},${panelY} L${width - panelRad},${panelY} Q${width},${panelY} ${width},${panelY + panelRad} L${width},${height} L0,${height} Z" fill="url(#ct-panel)"/>
     ${hookT.svg}
     <!-- CTA button -->
-    <rect x="${panelPad}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${ctaRad}" fill="#${bg}"/>
+    <rect x="${panelPad}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${ctaRad}" fill="#${panelTextColor}"/>
     ${ctaTextPath}
   </svg>`;
 
@@ -1072,41 +1159,41 @@ async function renderCtaCard(ctx: TemplateContext): Promise<Buffer> {
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
-
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
   if (logo) composite.push({ input: logo, top: height - panelPad - logoSz, left: width - panelPad - logoSz });
 
-  return sharp({ create: { width, height, channels: 4, background: { r: 255, g: 255, b: 255 } } }).composite(composite).png().toBuffer();
+  return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } }).composite(composite).png().toBuffer();
 }
 
 // ─── Template 11: Circle CTA ───────────────────────────────
-// odhad.online style: photo background, large ACCENT circle left with WHITE hook text,
-// white CTA button with accent text below circle, logo on accent badge top-right.
+// Modern: photo bg, refined accent circle with text, clean CTA, logo in pill.
 
 async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
-  const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
+  const { hook, body, accent, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
   const isLand = s.mode === 'landscape';
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  // Circle — ACCENT color, left side, centered vertically
-  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.4 : 0.42));
-  const circleCx = Math.round(width * (isLand ? 0.25 : 0.22));
-  const circleCy = Math.round(height * (isLand ? 0.45 : 0.42));
+  // Refined circle — smaller, more elegant
+  const circleR = Math.round(Math.min(width, height) * (isLand ? 0.32 : 0.30));
+  const circleCx = Math.round(width * (isLand ? 0.28 : 0.30));
+  const circleCy = Math.round(height * (isLand ? 0.45 : 0.40));
 
-  // Hook text inside circle — WHITE on accent
+  // Determine text color for accent circle
+  const circleTextColor = ensureContrast('ffffff', accent, 3);
+
   const textPad = Math.round(s.pad * 1.2);
-  const hookFs = isLand ? Math.round(s.base * 0.06) : Math.round(s.base * 0.055);
-  const textMaxW = Math.round(circleR * 1.2);
-  const textX = Math.max(textPad, Math.round(circleCx - circleR * 0.45));
-  const textY = Math.round(circleCy - circleR * 0.35);
-  const hookT = svgText({ text: hook, x: textX, y: textY, fs: hookFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: isLand ? 5 : 6, lh: 1.15 });
+  const hookFs = isLand ? Math.round(s.base * 0.052) : Math.round(s.base * 0.048);
+  const textMaxW = Math.round(circleR * 1.1);
+  const textX = Math.max(textPad, Math.round(circleCx - circleR * 0.40));
+  const textY = Math.round(circleCy - circleR * 0.30);
+  const hookT = svgText({ text: hook, x: textX, y: textY, fs: hookFs, bold: true, fill: `#${circleTextColor}`, maxPx: textMaxW, maxLines: isLand ? 5 : 5, lh: 1.18 });
 
-  // CTA button — WHITE rounded rect with ACCENT text, below circle
-  const ctaFs = Math.round(s.base * 0.035);
+  // CTA button
+  const ctaFs = Math.round(s.base * 0.032);
   const ctaH = Math.round(ctaFs * 2.6);
-  const ctaY = circleCy + circleR + Math.round(s.pad * 0.3);
+  const ctaY = circleCy + circleR + Math.round(s.pad * 0.4);
   const ctaPadX = Math.round(ctaFs * 2);
   const font = getFont(true);
   const ctaLabel = body || 'Více info';
@@ -1115,41 +1202,42 @@ async function renderCircleCta(ctx: TemplateContext): Promise<Buffer> {
   const ctaRad = Math.round(ctaH / 2);
   const ctaTextPath = textToPath(ctaLabel, textX + ctaPadX, ctaY + ctaH * 0.65, ctaFs, `#${accent}`, 1, true);
 
-  // Logo badge — accent rect with logo, top-right
-  const logoSz = Math.round(s.base * 0.05);
-  const badgePad = Math.round(s.pad * 0.5);
-  const badgeH = Math.round(logoSz + badgePad * 1.6);
-  const badgeW = Math.round(logoSz * 3.5);
-  const badgeX = width - badgeW - Math.round(s.pad * 0.6);
-  const badgeY = Math.round(s.pad * 0.6);
-  const badgeR = Math.round(badgeH * 0.25);
+  // Logo pill bottom-right
+  const logoSz = Math.round(s.base * 0.08);
+  const pillPad = Math.round(logoSz * 0.25);
+  const pillW = logoSz + pillPad * 2;
+  const pillH = logoSz + pillPad * 2;
+  const pillR = Math.round(pillH * 0.22);
+  const pillX = width - textPad - pillW;
+  const pillY = height - textPad - pillH;
 
+  // Edge darkening for photo readability
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Accent circle left -->
-    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${accent}"/>
-    <!-- Hook text (white on accent) -->
+    <defs>
+      <radialGradient id="cc-v" cx="50%" cy="50%" r="70%">
+        <stop offset="50%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.35"/>
+      </radialGradient>
+    </defs>
+    <rect width="${width}" height="${height}" fill="url(#cc-v)"/>
+    <!-- Accent circle — with subtle ring effect -->
+    <circle cx="${circleCx}" cy="${circleCy}" r="${circleR}" fill="#${accent}" opacity="0.92"/>
+    <circle cx="${circleCx}" cy="${circleCy}" r="${Math.round(circleR * 1.03)}" fill="none" stroke="#${accent}" stroke-width="1" opacity="0.3"/>
     ${hookT.svg}
-    <!-- CTA button (white with accent text) -->
-    <rect x="${textX}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${ctaRad}" fill="#ffffff"/>
+    <!-- CTA button -->
+    <rect x="${textX}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="${ctaRad}" fill="rgba(255,255,255,0.95)"/>
     ${ctaTextPath}
-    <!-- Logo badge top-right -->
-    <rect x="${badgeX}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="${badgeR}" fill="#${accent}"/>
+    <!-- Logo pill -->
+    <rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillR}" ry="${pillR}" fill="rgba(0,0,0,0.35)"/>
+    <rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillR}" ry="${pillR}" fill="rgba(255,255,255,0.06)"/>
   </svg>`;
 
   const composite: sharp.OverlayOptions[] = [
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
-
-  // Place logo inside accent badge
   const logo = await fetchLogo(ctx.logoUrl, logoSz);
-  if (logo) {
-    composite.push({
-      input: logo,
-      top: badgeY + Math.round((badgeH - logoSz) / 2),
-      left: badgeX + Math.round(badgePad * 0.8),
-    });
-  }
+  if (logo) composite.push({ input: logo, top: pillY + pillPad, left: pillX + pillPad });
 
-  return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } }).composite(composite).png().toBuffer();
+  return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } }).composite(composite).png().toBuffer();
 }

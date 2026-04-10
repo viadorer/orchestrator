@@ -746,11 +746,33 @@ async function generatePhotoVisual(
     };
   }
 
-  // Step 2: Generate with Imagen 4 (with per-project preset for quality control)
+  // Step 2: Try shared library with lower threshold (broader search across all projects)
+  if (!match) {
+    const sharedMatch = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, (ctx.mediaMatchThreshold ?? DEFAULT_MATCH_THRESHOLD) * 0.8);
+    if (sharedMatch && sharedMatch.is_shared) {
+      const sourceEmoji = '🌐 shared (step 2)';
+      console.log(`[visual-agent] Using shared library photo [${sourceEmoji}] (similarity: ${sharedMatch.similarity.toFixed(3)})`);
+      const templateUrl = buildPhotoTemplateUrl(sharedMatch.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
+      return {
+        visual_type: 'matched_photo',
+        chart_url: null,
+        card_url: null,
+        image_prompt: cleanPrompt,
+        generated_image_url: sharedMatch.public_url,
+        media_asset_id: sharedMatch.asset_id,
+        match_similarity: sharedMatch.similarity,
+        template_url: templateUrl,
+        media_is_shared: true,
+        media_source_label: 'shared',
+      };
+    }
+  }
+
+  // Step 3: Generate with Imagen 4 (last resort — AI photos are less authentic)
   // NOTE: Do NOT pass logoUrl here — template adds logo itself. Sharp logo overlay would cause double logo.
   // Use platform variant (e.g. facebook_portrait) so Imagen generates correct aspect ratio
   const imagenPlatform = resolvePlatformVariant(ctx.platform, decision.aspect_ratio);
-  console.log(`[visual-agent] No library match, generating with Imagen 4... (platform: ${imagenPlatform})`);
+  console.log(`[visual-agent] No library match (project or shared), generating with Imagen 4... (platform: ${imagenPlatform})`);
   const result = await generateAndStoreImage({
     projectId: ctx.projectId,
     imagePrompt: cleanPrompt,
@@ -771,11 +793,11 @@ async function generatePhotoVisual(
     };
   }
 
-  // Step 3: Fallback — Imagen failed, use placeholder image for template
+  // Step 4: Fallback — Imagen failed, use placeholder image for template
   // Pick a contextual placeholder from pool (based on post content hash for consistency)
   const placeholderUrl = pickPlaceholderPhoto(ctx.text);
   const templateUrl = buildPhotoTemplateUrl(placeholderUrl, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
-  
+
   return {
     visual_type: 'photo',
     chart_url: null,

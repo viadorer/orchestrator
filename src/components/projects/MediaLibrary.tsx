@@ -66,6 +66,7 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
   useEffect(() => { loadAssets(); }, [loadAssets]);
 
   // ---- Drag & Drop + File Input Upload ----
+  // Uses presigned URLs for direct client→R2 upload (bypasses server, supports large videos)
   const uploadFiles = async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
@@ -73,22 +74,75 @@ export function MediaLibrary({ projectId, projectName }: MediaLibraryProps) {
     setUploading(true);
     setUploadProgress({ done: 0, total: fileArray.length });
 
-    // Upload one file at a time for maximum reliability
-    for (let i = 0; i < fileArray.length; i++) {
-      const formData = new FormData();
-      if (libraryTab === 'shared') {
-        formData.append('is_shared', 'true');
-      } else {
-        formData.append('project_id', projectId);
+    // Step 1: Get presigned URLs for all files
+    const fileMeta = fileArray.map(f => ({ name: f.name, type: f.type || 'application/octet-stream', size: f.size }));
+    let presignData: { files: Array<{ name: string; upload_url: string; asset_id: string }> };
+
+    try {
+      const presignRes = await fetch('/api/media/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: fileMeta,
+          project_id: libraryTab === 'shared' ? undefined : projectId,
+          shared: libraryTab === 'shared' ? true : undefined,
+        }),
+      });
+      presignData = await presignRes.json();
+      if (!presignData.files) throw new Error('Presign failed');
+    } catch (err) {
+      console.error('Presign failed, falling back to server upload:', err);
+      // Fallback: upload through server (for small files or if R2 presign not configured)
+      for (let i = 0; i < fileArray.length; i++) {
+        const formData = new FormData();
+        if (libraryTab === 'shared') {
+          formData.append('is_shared', 'true');
+        } else {
+          formData.append('project_id', projectId);
+        }
+        formData.append('files', fileArray[i]);
+        try {
+          await fetch('/api/media/upload', { method: 'POST', body: formData });
+        } catch (e) {
+          console.error(`Upload failed for ${fileArray[i].name}:`, e);
+        }
+        setUploadProgress({ done: i + 1, total: fileArray.length });
       }
-      formData.append('files', fileArray[i]);
+      setUploading(false);
+      setUploadProgress({ done: 0, total: 0 });
+      loadAssets();
+      return;
+    }
+
+    // Step 2: Upload each file directly to R2 using presigned PUT URL
+    const assetIds: string[] = [];
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      const presign = presignData.files[i];
+      if (!presign?.upload_url) continue;
 
       try {
-        await fetch('/api/media/upload', { method: 'POST', body: formData });
+        await fetch(presign.upload_url, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        });
+        assetIds.push(presign.asset_id);
       } catch (err) {
-        console.error(`Upload failed for ${fileArray[i].name}:`, err);
+        console.error(`Direct upload failed for ${file.name}:`, err);
       }
       setUploadProgress({ done: i + 1, total: fileArray.length });
+    }
+
+    // Step 3: Confirm uploads → triggers AI analysis
+    if (assetIds.length > 0) {
+      try {
+        await fetch('/api/media/presign', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ asset_ids: assetIds }),
+        });
+      } catch { /* non-critical — cron will pick up unprocessed assets */ }
     }
 
     setUploading(false);

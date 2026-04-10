@@ -187,6 +187,33 @@ export async function getR2SignedUrl(key: string, expiresIn = 3600): Promise<str
   }
 }
 
+// ─── Presigned Upload URL ────────────────────────────────────
+
+/**
+ * Generate a presigned PUT URL for direct client→R2 upload (bypasses server).
+ * Client uploads with: PUT <url> with body = file, Content-Type header.
+ */
+export async function getR2PresignedUploadUrl(
+  key: string,
+  contentType: string,
+  expiresIn = 3600,
+): Promise<string | null> {
+  const client = getClient();
+  if (!client) return null;
+
+  try {
+    const command = new PutObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+      ContentType: contentType,
+    });
+    return await getSignedUrl(client, command, { expiresIn });
+  } catch (err) {
+    console.error(`[r2] Presigned upload URL failed:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 // ─── List ────────────────────────────────────────────────────
 
 export interface R2ListItem {

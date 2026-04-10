@@ -386,6 +386,29 @@ function logoBgCircle(x: number, y: number, r: number): string {
   return `<circle cx="${x}" cy="${y}" r="${r}" fill="rgba(0,0,0,0.45)"/>`;
 }
 
+/** SVG for logo background pill — modern frosted glass effect */
+function logoBgPill(x: number, y: number, w: number, h: number, radius: number, bgHex: string = '000000', opacity: number = 0.55): string {
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${radius}" ry="${radius}" fill="#${bgHex}" opacity="${opacity}"/>`;
+}
+
+/** Darken a hex color by a percentage (0-1). E.g. darken('ffffff', 0.1) → slightly darker */
+function darkenHex(hex: string, amount: number): string {
+  const rgb = hexToRgb(hex);
+  const r = Math.max(0, Math.round(rgb.r * (1 - amount)));
+  const g = Math.max(0, Math.round(rgb.g * (1 - amount)));
+  const b = Math.max(0, Math.round(rgb.b * (1 - amount)));
+  return [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
+/** Lighten a hex color by a percentage (0-1). */
+function lightenHex(hex: string, amount: number): string {
+  const rgb = hexToRgb(hex);
+  const r = Math.min(255, Math.round(rgb.r + (255 - rgb.r) * amount));
+  const g = Math.min(255, Math.round(rgb.g + (255 - rgb.g) * amount));
+  const b = Math.min(255, Math.round(rgb.b + (255 - rgb.b) * amount));
+  return [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
 function rrMask(w: number, h: number, r: number): Buffer {
   return Buffer.from(`<svg width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${r}" ry="${r}" fill="white"/></svg>`, 'utf-8');
 }
@@ -468,30 +491,96 @@ async function renderBoldCard(ctx: TemplateContext): Promise<Buffer> {
 }
 
 // ─── Template 2: Photo Strip ─────────────────────────────────
-// Photo on top (~75%), brand strip at bottom with hook + logo.
+// Editorial magazine style: photo dominates top, elegant brand strip at bottom.
+// Subtle gradient fade, accent line, dot accent before hook, logo in pill.
 
 async function renderPhotoStrip(ctx: TemplateContext): Promise<Buffer> {
   const { hook, body, bg, accent, textColor, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
-  const stripRatio = s.mode === 'landscape' ? 0.30 : s.mode === 'story' ? 0.22 : 0.25;
+
+  // Strip proportions — slightly smaller strip to let photo breathe
+  const stripRatio = s.mode === 'landscape' ? 0.28 : s.mode === 'story' ? 0.20 : 0.22;
   const stripH = Math.round(height * stripRatio);
   const photoH = height - stripH;
-  const fadeH = Math.round(s.base * 0.06);
-  const textMaxW = width - s.pad * 2 - s.logoSz - s.pad;
-  // Font sizes relative to strip height so text always fits
-  const stripHookFs = Math.round(stripH * 0.22);
-  const stripBodyFs = Math.round(stripH * 0.13);
+
+  // Long, smooth fade from photo into strip (12% of base)
+  const fadeH = Math.round(s.base * 0.12);
+
+  // Accent line thickness — subtle but visible
+  const accentBarH = Math.max(2, Math.round(s.base * 0.003));
+
+  // Logo size — slightly larger for strip context
+  const logoSz = Math.round(s.base * 0.10);
+
+  // Text area: leave room for logo pill on right
+  const logoPillW = logoSz + s.pad * 1.5;
+  const textMaxW = width - s.pad * 2 - logoPillW;
+
+  // Font sizes relative to strip height — hook prominent, body readable
+  const stripHookFs = Math.round(stripH * 0.20);
+  const stripBodyFs = Math.round(stripH * 0.12);
+
+  // Accent dot size (small circle before hook text)
+  const dotR = Math.round(stripHookFs * 0.14);
+  const dotGap = Math.round(dotR * 3.5);
+
+  // Inner padding within strip — generous breathing room
+  const innerPad = Math.round(s.pad * 1.4);
 
   const photo = await fetchImg(photoUrl, width, photoH);
 
-  const hookT = svgText({ text: hook, x: s.pad, y: photoH + s.pad, fs: stripHookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 2 });
-  const bodyT = svgText({ text: body, x: s.pad, y: photoH + s.pad + hookT.totalH + 4, fs: stripBodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 2, opacity: 0.7 });
+  // Hook text (with offset for accent dot)
+  const hookX = s.pad + dotGap;
+  const hookY = photoH + innerPad;
+  const hookT = svgText({ text: hook, x: hookX, y: hookY, fs: stripHookFs, bold: true, fill: `#${textColor}`, maxPx: textMaxW - dotGap, maxLines: 2, lh: 1.2 });
+
+  // Body text
+  const bodyGap = Math.round(stripHookFs * 0.2);
+  const bodyY = hookY + hookT.totalH + bodyGap;
+  const bodyT = svgText({ text: body, x: s.pad, y: bodyY, fs: stripBodyFs, bold: false, fill: `#${textColor}`, maxPx: textMaxW, maxLines: 2, opacity: 0.75, lh: 1.35 });
+
+  // Strip bg colors — subtle gradient from bg to slightly darker
+  const bgDarker = darkenHex(bg, 0.12);
+
+  // Accent dot position (vertically centered with first line of hook)
+  const dotCx = s.pad + dotR;
+  const dotCy = hookY + Math.round(stripHookFs * 0.65);
+
+  // Logo pill dimensions
+  const pillPad = Math.round(logoSz * 0.25);
+  const pillW = logoSz + pillPad * 2;
+  const pillH = logoSz + pillPad * 2;
+  const pillR = Math.round(pillH * 0.22);
+  const pillX = width - s.pad - pillW;
+  const pillY = photoH + Math.round((stripH - pillH) / 2);
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <rect x="0" y="${photoH}" width="${width}" height="${stripH}" fill="#${bg}"/>
-    <rect x="0" y="${photoH}" width="${width}" height="${s.barH}" fill="#${accent}"/>
-    <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#${bg}" stop-opacity="0"/><stop offset="100%" stop-color="#${bg}" stop-opacity="1"/></linearGradient></defs>
-    <rect x="0" y="${photoH - fadeH}" width="${width}" height="${fadeH}" fill="url(#fade)"/>
+    <defs>
+      <!-- Smooth fade from photo to strip -->
+      <linearGradient id="ps-fade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#${bg}" stop-opacity="0"/>
+        <stop offset="40%" stop-color="#${bg}" stop-opacity="0.15"/>
+        <stop offset="100%" stop-color="#${bg}" stop-opacity="1"/>
+      </linearGradient>
+      <!-- Strip background: subtle depth gradient -->
+      <linearGradient id="ps-strip" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#${bg}"/>
+        <stop offset="100%" stop-color="#${bgDarker}"/>
+      </linearGradient>
+      <!-- Accent line glow -->
+      <filter id="ps-glow"><feGaussianBlur stdDeviation="1.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <!-- Strip background with gradient -->
+    <rect x="0" y="${photoH}" width="${width}" height="${stripH}" fill="url(#ps-strip)"/>
+    <!-- Long smooth fade transition -->
+    <rect x="0" y="${photoH - fadeH}" width="${width}" height="${fadeH}" fill="url(#ps-fade)"/>
+    <!-- Accent line with subtle glow -->
+    <rect x="0" y="${photoH}" width="${width}" height="${accentBarH}" fill="#${accent}" opacity="0.85" filter="url(#ps-glow)"/>
+    <!-- Accent dot before hook -->
+    <circle cx="${dotCx}" cy="${dotCy}" r="${dotR}" fill="#${accent}"/>
+    <!-- Logo pill background -->
+    ${logoBgPill(pillX, pillY, pillW, pillH, pillR, bg, 0.6)}
+    <!-- Text -->
     ${hookT.svg}${bodyT.svg}
   </svg>`;
 
@@ -499,40 +588,99 @@ async function renderPhotoStrip(ctx: TemplateContext): Promise<Buffer> {
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
-  // Logo vertically centered in strip, right side
-  const logo = await fetchLogo(ctx.logoUrl, s.logoSz);
-  if (logo) composite.push({ input: logo, top: photoH + Math.round((stripH - s.logoSz) / 2), left: width - s.pad - s.logoSz });
+
+  // Logo centered in pill
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
+  if (logo) {
+    composite.push({ input: logo, top: pillY + pillPad, left: pillX + pillPad });
+  }
 
   return sharp({ create: { width, height, channels: 4, background: hexToRgb(bg) } })
     .composite(composite).png().toBuffer();
 }
 
 // ─── Template 3: Gradient ────────────────────────────────────
-// Full-bleed photo, dark gradient from bottom, text at bottom, logo bottom-right.
+// Apple/cinematic style: photo dominates, multi-layer gradient overlay,
+// large elegant typography, frosted glass logo pill, accent signature line.
 
 async function renderGradient(ctx: TemplateContext): Promise<Buffer> {
   const { hook, body, subtitle, accent, photoUrl, width, height } = ctx;
   const s = sizing(width, height);
-  const textMaxW = width - s.pad * 2 - s.logoSz - s.pad;
 
-  // Text starts higher in landscape (less vertical space)
-  const textStartY = s.mode === 'landscape' ? height * 0.38 : height * 0.55;
-  const gradStart = s.mode === 'landscape' ? '15%' : '25%';
+  // Larger logo for gradient template — more presence
+  const logoSz = Math.round(s.base * 0.11);
+
+  // Logo pill dimensions
+  const pillPad = Math.round(logoSz * 0.3);
+  const pillW = logoSz + pillPad * 2;
+  const pillH = logoSz + pillPad * 2;
+  const pillR = Math.round(pillH * 0.25);
+
+  // Text max width — leave room for logo pill
+  const textMaxW = width - s.pad * 2 - pillW - s.pad;
+
+  // Hook font — larger than default for cinematic impact
+  const gradHookFs = Math.round(s.base * (s.mode === 'landscape' ? 0.10 : 0.085));
+  const gradBodyFs = Math.round(s.base * (s.mode === 'landscape' ? 0.042 : 0.038));
+  const gradSubFs = Math.round(s.base * (s.mode === 'landscape' ? 0.034 : 0.030));
+
+  // Text positioning — photo gets more space (62%), text at bottom
+  const textStartY = s.mode === 'landscape' ? height * 0.42 : height * 0.60;
+
+  // Accent line at very bottom
+  const accentLineH = Math.max(2, Math.round(s.base * 0.003));
 
   const photo = await fetchImg(photoUrl, width, height);
 
-  const hookT = svgText({ text: hook, x: s.pad, y: textStartY, fs: s.hookFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: s.hookMax });
-  const bodyT = svgText({ text: body, x: s.pad, y: textStartY + hookT.totalH + s.pad * 0.3, fs: s.bodyFs, bold: false, fill: '#ffffff', maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.85 });
-  const subT = svgText({ text: subtitle, x: s.pad, y: textStartY + hookT.totalH + bodyT.totalH + s.pad * 0.5, fs: s.subFs, bold: false, fill: `#${accent}`, maxPx: textMaxW, maxLines: 2 });
+  // Text rendering with generous spacing
+  const hookT = svgText({ text: hook, x: s.pad, y: textStartY, fs: gradHookFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: s.hookMax, lh: 1.15 });
+  const bodyGap = Math.round(gradHookFs * 0.35);
+  const bodyT = svgText({ text: body, x: s.pad, y: textStartY + hookT.totalH + bodyGap, fs: gradBodyFs, bold: false, fill: '#ffffff', maxPx: textMaxW, maxLines: s.bodyMax, opacity: 0.82, lh: 1.4 });
+  // Subtitle in white with lower opacity (elegant, not accent-colored)
+  const subGap = Math.round(gradBodyFs * 0.4);
+  const subT = svgText({ text: subtitle, x: s.pad, y: textStartY + hookT.totalH + bodyGap + bodyT.totalH + subGap, fs: gradSubFs, bold: true, fill: '#ffffff', maxPx: textMaxW, maxLines: 2, opacity: 0.55 });
+
+  // Logo pill position — right side, vertically aligned with hook
+  const pillX = width - s.pad - pillW;
+  const pillY = Math.round(textStartY + gradHookFs * 0.2);
+
+  // Gradient stops — softer, more cinematic
+  const gradTopOpacity = s.mode === 'landscape' ? '0.12' : '0.08';
+  const gradMidStart = s.mode === 'landscape' ? '20%' : '30%';
 
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <defs><linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="${gradStart}" stop-color="#000" stop-opacity="0.3"/>
-      <stop offset="65%" stop-color="#000" stop-opacity="0.8"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0.92"/>
-    </linearGradient></defs>
-    <rect width="${width}" height="${height}" fill="url(#grad)"/>
+    <defs>
+      <!-- Main bottom gradient — cinematic, softer -->
+      <linearGradient id="gr-main" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="${gradMidStart}" stop-color="#000" stop-opacity="0.12"/>
+        <stop offset="55%" stop-color="#000" stop-opacity="0.55"/>
+        <stop offset="78%" stop-color="#000" stop-opacity="0.78"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.88"/>
+      </linearGradient>
+      <!-- Top vignette — subtle cinematic framing -->
+      <radialGradient id="gr-vig" cx="50%" cy="0%" r="90%" fx="50%" fy="0%">
+        <stop offset="0%" stop-color="#000" stop-opacity="${gradTopOpacity}"/>
+        <stop offset="70%" stop-color="#000" stop-opacity="0"/>
+      </radialGradient>
+      <!-- Edge vignette — darkens corners for depth -->
+      <radialGradient id="gr-edge" cx="50%" cy="50%" r="75%">
+        <stop offset="60%" stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.25"/>
+      </radialGradient>
+      <!-- Frosted glass effect for logo pill -->
+      <filter id="gr-frost"><feGaussianBlur stdDeviation="2"/></filter>
+    </defs>
+    <!-- Multi-layer gradient overlay -->
+    <rect width="${width}" height="${height}" fill="url(#gr-main)"/>
+    <rect width="${width}" height="${height}" fill="url(#gr-vig)"/>
+    <rect width="${width}" height="${height}" fill="url(#gr-edge)"/>
+    <!-- Logo pill: frosted glass -->
+    <rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillR}" ry="${pillR}" fill="rgba(0,0,0,0.35)" filter="url(#gr-frost)"/>
+    <rect x="${pillX}" y="${pillY}" width="${pillW}" height="${pillH}" rx="${pillR}" ry="${pillR}" fill="rgba(255,255,255,0.08)"/>
+    <!-- Accent signature line at bottom -->
+    <rect x="0" y="${height - accentLineH}" width="${width}" height="${accentLineH}" fill="#${accent}" opacity="0.7"/>
+    <!-- Text -->
     ${hookT.svg}${bodyT.svg}${subT.svg}
   </svg>`;
 
@@ -540,7 +688,12 @@ async function renderGradient(ctx: TemplateContext): Promise<Buffer> {
     { input: photo, top: 0, left: 0 },
     { input: Buffer.from(svg, 'utf-8'), top: 0, left: 0 },
   ];
-  await addLogo(composite, ctx, s, true);
+
+  // Logo inside pill
+  const logo = await fetchLogo(ctx.logoUrl, logoSz);
+  if (logo) {
+    composite.push({ input: logo, top: pillY + pillPad, left: pillX + pillPad });
+  }
 
   return sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0 } } })
     .composite(composite).png().toBuffer();

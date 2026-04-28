@@ -2,10 +2,11 @@ import sharp from 'sharp';
 import { NextRequest, NextResponse } from 'next/server';
 import opentype from 'opentype.js';
 import path from 'path';
-import { requireAuth } from '@/lib/api/require-auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 15;
+// Public endpoint — externally accessed by getLate.dev and social networks to fetch images.
+// Requiring auth here would break image delivery to Facebook/LinkedIn/Instagram.
 
 /**
  * Sharp-based Brand Template Engine (v2)
@@ -19,8 +20,6 @@ export const maxDuration = 15;
  * GET /api/visual/template-v2?t=quote_card&hook=...&body=...&bg=1a1a2e&accent=e94560&...
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth.ok) return auth.response;
   const { searchParams } = request.nextUrl;
 
   const VALID_TEMPLATE_KEYS = ['bold_card', 'photo_strip', 'split', 'gradient', 'text_logo', 'minimal', 'quote_card', 'diagonal', 'quote_overlay', 'cta_card', 'circle_cta'];

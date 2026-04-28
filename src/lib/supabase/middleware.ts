@@ -14,6 +14,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/chat/',       // Hugo chatbot widget (origin-based auth)
   '/api/cron/',       // chráněno CRON_SECRET
   '/api/webhooks/',   // chráněno HMAC signature
+  '/api/visual/',     // template-v2/card/template — getLate.dev a sociální sítě stahují obrázky externě
 ];
 
 function isPublicApiRoute(pathname: string): boolean {

@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/api/require-auth';
 
 /**
  * Legacy /api/visual/card → redirect to /api/visual/template
- * 
+ *
+ * Public endpoint — externally accessed by getLate.dev to fetch images.
  * Old card_url entries in content_queue point here.
  * Maps old params (hook, body, bg, accent, text) to new template endpoint.
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
-  if (!auth.ok) return auth.response;
   const { searchParams } = request.nextUrl;
   
   // Forward all params, add t=bold_card if not present

@@ -196,10 +196,21 @@ export async function POST(request: Request) {
             post.project_id,
             targetPlatforms[0] || 'facebook',
           );
-          console.log(`[publish] Using static template URL for post ${post.id}: ${staticUrl.substring(0, 200)}`);
-          mediaItems.push({ type: 'image', url: staticUrl });
+
+          // Validate template pre-render succeeded — must return a different URL than input
+          // and NOT contain /api/visual/template (which would mean we got the dynamic URL back)
+          const renderSucceeded = staticUrl !== resolvedTemplate && !staticUrl.includes('/api/visual/template');
+          if (renderSucceeded) {
+            console.log(`[publish] Using static template URL for post ${post.id}: ${staticUrl.substring(0, 200)}`);
+            mediaItems.push({ type: 'image', url: staticUrl });
+          } else if (post.image_url) {
+            console.warn(`[publish] Template render failed for post ${post.id} — using raw image_url fallback`);
+            mediaItems.push({ type: 'image', url: post.image_url });
+          } else {
+            console.error(`[publish] Template render failed for post ${post.id} and no image_url fallback`);
+          }
         }
-        usedTemplate = true;
+        usedTemplate = mediaItems.length > 0;
       } else if (mediaItems.length === 0 && post.media_urls && Array.isArray(post.media_urls) && post.media_urls.length > 0) {
         for (const url of post.media_urls) {
           if (typeof url === 'string' && (url.startsWith('http') || url.startsWith('/'))) {

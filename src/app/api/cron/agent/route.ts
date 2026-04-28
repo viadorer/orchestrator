@@ -2,6 +2,7 @@ import { runPendingTasks, publishApprovedPosts, scheduleFridayTopicSuggestions, 
 import { processUntaggedMedia } from '@/lib/ai/vision-engine';
 import { fetchAllRssFeeds } from '@/lib/rss/fetcher';
 import { supabase } from '@/lib/supabase/client';
+import { acquireCronLock } from '@/lib/api/cron-lock';
 import { NextResponse } from 'next/server';
 
 /**
@@ -29,7 +30,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Race condition protection: prevent overlapping cron instances from
+  // running the same tasks twice (e.g. duplicate post generation, exceeded daily quota).
+  const lock = await acquireCronLock('agent_orchestrator');
+  if (!lock.acquired) {
+    console.log(`[cron-agent] Skipping run — another instance is active (${lock.reason})`);
+    return NextResponse.json({
+      skipped: true,
+      reason: lock.reason,
+      message: 'Another cron instance is already running',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   const startTime = Date.now();
+
+  try {
 
   // 1+2. Auto-schedule + run tasks
   const taskResult = await runPendingTasks();
@@ -172,4 +188,8 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json(result);
+  } finally {
+    // Always release the lock — even if the cron run threw an error
+    await lock.release();
+  }
 }

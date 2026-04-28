@@ -81,13 +81,23 @@ export function PublishView() {
           ids: Array.from(selectedIds),
           scheduledFor: scheduleDate ? new Date(scheduleDate).toISOString() : undefined,
         }),
+        // Long-running operation — allow up to 5 minutes
+        signal: AbortSignal.timeout(5 * 60 * 1000),
       });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Server error');
+        throw new Error(`HTTP ${res.status}: ${errText.substring(0, 200)}`);
+      }
       const data = await res.json();
       setPublishResult(data.results || []);
       setSelectedIds(new Set());
       loadData();
-    } catch {
-      setPublishResult([{ id: 'error', status: 'failed', error: 'Chyba při publikaci' }]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Chyba při publikaci';
+      const friendly = msg.includes('Load failed') || msg.includes('aborted')
+        ? 'Publikace trvá dlouho — server běží, výsledek uvidíš v queue za chvíli. Refreshni stránku.'
+        : msg;
+      setPublishResult([{ id: 'error', status: 'failed', error: friendly }]);
     }
     setPublishing(false);
   };
@@ -136,7 +146,12 @@ export function PublishView() {
           ids: [id],
           scheduledFor: scheduledFor || undefined,
         }),
+        signal: AbortSignal.timeout(2 * 60 * 1000), // 2 min for single post
       });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Server error');
+        throw new Error(`HTTP ${res.status}: ${errText.substring(0, 200)}`);
+      }
       const data = await res.json();
       const failed = data.results?.filter((r: { status: string }) => r.status === 'failed');
       if (failed?.length > 0) {

@@ -12,6 +12,11 @@ import { checkRateLimit } from '@/lib/api/rate-limit';
 // Platforms that require an image — skip these if no valid image available
 const IMAGE_REQUIRED_PLATFORMS = ['instagram', 'pinterest', 'tiktok'];
 
+// Long-running route: each post needs up to 14s template render + getLate API call.
+// Bulk publishing 5 posts can easily take 60+ seconds.
+export const maxDuration = 300; // 5 minutes (Vercel Pro max for Standard functions)
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   const auth = await requireAuth();
   if (!auth.ok) return auth.response;

@@ -65,16 +65,38 @@ cp .env.example .env.local   # fill in values below
 npm run dev
 ```
 
+Quality gate (run before pushing — CI runs the same):
+
+```bash
+npm run typecheck
+npm run lint
+npm run ci          # typecheck + lint together
+```
+
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Gemini AI API key |
-| `GETLATE_API_KEY` | getLate.dev API key |
-| `GETLATE_API_URL` | getLate.dev API URL |
+See [`.env.example`](./.env.example) for the full list. Required vars are
+validated at runtime by `src/lib/env.ts` (`assertEnv()`).
+
+| Variable | Required | Description |
+|---|:-:|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service role key (server-side only!) |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | ✅ | Gemini AI API key |
+| `CRON_SECRET` | ✅ | Bearer token validating Vercel cron requests |
+| `GETLATE_API_KEY` | optional | Social media publishing |
+| `GETLATE_API_URL` | optional | Default `https://api.getlate.dev/v1` |
+| `R2_*` | optional | Cloudflare R2 storage (Supabase fallback if missing) |
+| `GITHUB_PAT` / `GITHUB_OWNER` | optional | Blog & AIO injection |
+
+## Documentation
+
+* [`docs/DEPLOY.md`](./docs/DEPLOY.md) — Vercel deployment, env setup, cron config.
+* [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) — common failure modes.
+* [`docs/adr/`](./docs/adr/) — architecture decision records.
+* Platform cookbooks under [`docs/`](./docs/) (Facebook, Instagram, getLate).
+* [`CONTRIBUTING.md`](./CONTRIBUTING.md) — branching, migrations, helpers.
 
 ## Admin Panel
 

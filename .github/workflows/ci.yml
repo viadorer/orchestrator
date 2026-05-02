@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Typecheck & Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    env:
+      # Stub values so `next build` can statically analyse without real secrets.
+      # Real values come from Vercel env at deploy time.
+      NEXT_PUBLIC_SUPABASE_URL: https://stub.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: stub-anon-key-for-ci-build-only
+      SUPABASE_SERVICE_ROLE_KEY: stub-service-role-key-for-ci-build-only
+      GOOGLE_GENERATIVE_AI_API_KEY: stub-gemini-key-for-ci-build-only
+      CRON_SECRET: stub-cron-secret-for-ci-build-only
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build

@@ -11,6 +11,7 @@ import { MediaLibrary } from './MediaLibrary';
 import { NewsPanel } from './NewsPanel';
 import { TabAioSite, TabAioEntity, TabAioPrompts, TabAioScores } from './AioSettings';
 import { TabBlog } from './TabBlog';
+import { SafeImage } from '@/components/ui/SafeImage';
 import {
   DEFAULT_PLATFORM_CONTENT_MIX,
   CONTENT_TYPE_LABELS,
@@ -178,16 +179,21 @@ export function ProjectsView() {
           >
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
-                {project.visual_identity?.logo_url ? (
-                  <img src={project.visual_identity.logo_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                ) : (
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
-                    style={{ backgroundColor: project.visual_identity?.primary_color || '#6d28d9' }}
-                  >
-                    {project.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <SafeImage
+                  src={project.visual_identity?.logo_url}
+                  alt=""
+                  width={40}
+                  height={40}
+                  className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                  fallback={
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                      style={{ backgroundColor: project.visual_identity?.primary_color || '#6d28d9' }}
+                    >
+                      {project.name.charAt(0).toUpperCase()}
+                    </div>
+                  }
+                />
                 <div>
                   <h3 className="font-semibold text-white group-hover:text-violet-300 transition-colors">{project.name}</h3>
                   <p className="text-xs text-slate-500 mt-0.5">{project.slug}</p>
@@ -492,7 +498,8 @@ const FREQUENCIES = [
 ] as const;
 
 const MEDIA_STRATEGIES = [
-  { value: 'auto', label: 'Auto – Hugo vybírá fotky z knihovny' },
+  { value: 'prefer_library', label: 'Reálné fotky přednostně – AI generuje jen pokud knihovna nic nenajde' },
+  { value: 'auto', label: 'Auto – Hugo vybírá fotky z knihovny, jinak Imagen' },
   { value: 'manual', label: 'Manuální – jen admin přiřazuje' },
   { value: 'none', label: 'Žádné – jen text' },
 ] as const;
@@ -614,10 +621,14 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
                 </button>
               ))}
             </div>
-            {mediaStrategy === 'auto' && (
+            {(mediaStrategy === 'auto' || mediaStrategy === 'prefer_library') && (
               <div className="mt-3 p-3 rounded-lg bg-slate-800 border border-slate-700 space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-slate-400">Podobnost pro match reálných fotek</label>
+                  <label className="text-xs text-slate-400">
+                    {mediaStrategy === 'prefer_library'
+                      ? 'Základní práh — Hugo zkusí postupně i nižší (0.7×, 0.5×, 0.35×)'
+                      : 'Podobnost pro match reálných fotek'}
+                  </label>
                   <span className="text-xs font-mono text-violet-300">{mediaMatchThreshold.toFixed(2)}</span>
                 </div>
                 <input
@@ -1426,7 +1437,7 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
               {/* Preview */}
               <div className="p-4 rounded-xl border border-slate-700" style={{ backgroundColor: primaryColor }}>
                 <div className="flex items-center gap-2 mb-2">
-                  {logoUrl && <img src={logoUrl} alt="" className="w-6 h-6 rounded object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+                  {logoUrl && <SafeImage src={logoUrl} alt="" width={24} height={24} className="w-6 h-6 rounded object-contain" />}
                   <span className="text-sm font-bold text-white">{name || 'Projekt'}</span>
                 </div>
                 <div className="h-0.5 rounded-full mb-2" style={{ backgroundColor: accentColor, width: '30%' }} />
@@ -1762,7 +1773,7 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
       <div className="p-6 rounded-xl border border-slate-700" style={{ backgroundColor: primary }}>
         <div className="flex items-center gap-3 mb-3">
           {logoUrl && (
-            <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <SafeImage src={logoUrl} alt="Logo" width={32} height={32} className="w-8 h-8 rounded object-contain" />
           )}
           <span className="text-lg font-bold" style={{ color: textColor, fontFamily: font }}>{project.name}</span>
         </div>
@@ -1815,7 +1826,7 @@ function TabVisualIdentity({ project, onSave }: { project: Project; onSave: (f: 
         />
         {logoUrl ? (
           <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-800 border border-slate-700">
-            <img src={logoUrl} alt="Logo" className="w-16 h-16 rounded-lg object-contain bg-white/5 p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <SafeImage src={logoUrl} alt="Logo" width={64} height={64} className="w-16 h-16 rounded-lg object-contain bg-white/5 p-1" />
             <div className="flex-1 min-w-0">
               <p className="text-sm text-white font-medium truncate">Logo nahráno</p>
               <p className="text-xs text-slate-500 truncate">{logoUrl.split('/').pop()}</p>

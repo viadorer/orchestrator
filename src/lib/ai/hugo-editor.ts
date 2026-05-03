@@ -13,6 +13,7 @@ import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
 import { getProjectPrompts } from './prompt-builder';
 import { PLATFORM_LIMITS } from '@/lib/platforms';
+import { trackUsage } from './cost-tracker';
 
 // Shared context interface for Hugo-Editor
 export interface EditorContext {
@@ -164,6 +165,15 @@ Vrať POUZE JSON:
       model_used: 'gemini-2.0-flash',
     });
   }
+
+  await trackUsage({
+    source: 'hugo-editor',
+    model: 'gemini-2.0-flash',
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    projectId: projectId ?? null,
+    meta: { platform },
+  });
 
   try {
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);

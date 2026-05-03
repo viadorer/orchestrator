@@ -15,6 +15,7 @@ import { generateText } from 'ai';
 import { generateChartUrl, CHART_TEMPLATES, type ChartData, type VisualIdentity, type PhotographyPreset, DEFAULT_PHOTOGRAPHY_PRESET } from './quickchart';
 import { generateAndStoreImage, buildCleanImagePrompt } from './imagen';
 import { generateMediaEmbedding } from '@/lib/ai/vision-engine';
+import { trackUsage } from '@/lib/ai/cost-tracker';
 import { supabase } from '@/lib/supabase/client';
 import { getDefaultImageSpec, PLATFORM_LIMITS } from '@/lib/platforms';
 
@@ -46,6 +47,13 @@ interface VisualContext {
   forcePhoto?: boolean;
   photographyPreset?: Partial<PhotographyPreset> | null;
   mediaMatchThreshold?: number;
+  /**
+   * Project-level media strategy. Recognised values:
+   * - 'auto'           — current default (project library → shared → Imagen)
+   * - 'prefer_library' — exhaust library tiers before considering Imagen
+   * - 'none'           — caller short-circuits, generatePhotoVisual not called
+   */
+  mediaStrategy?: string;
 }
 
 /**
@@ -268,10 +276,19 @@ DŮLEŽITÉ pro carousel:
 - První slide MUSÍ být type "cover", poslední "cta"
 - Prostřední slidy jsou "content" s číslem`;
 
-  const { text: rawResponse } = await generateText({
+  const { text: rawResponse, usage } = await generateText({
     model: google('gemini-2.0-flash'),
     prompt,
     temperature: 0.2,
+  });
+
+  await trackUsage({
+    source: 'visual-agent:decide-type',
+    model: 'gemini-2.0-flash',
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    projectId: ctx.projectId ?? null,
+    meta: { platform: ctx.platform },
   });
 
   try {
@@ -688,9 +705,15 @@ async function matchMediaFromLibrary(
 
 /**
  * Generate photo visual:
- * 1. Try matching from Media Library (pgvector)
- * 2. If no match → generate with Imagen 4
- * 3. Fallback → return image_prompt text only
+ * 1. Try matching from Media Library (pgvector) — project first, then shared
+ * 2. If `prefer_library` strategy: progressive threshold relaxation against
+ *    the shared library before considering Imagen.
+ * 3. If no match → generate with Imagen 4
+ * 4. Fallback → return image_prompt text only
+ *
+ * `prefer_library` strategy: real photos are always preferred over AI-generated.
+ * The matcher walks down the threshold ladder (1.0×, 0.7×, 0.5×, 0.35×) on the
+ * shared library and only falls back to Imagen if the lowest tier yields nothing.
  */
 async function generatePhotoVisual(
   decision: { image_prompt?: string; template_key?: string; aspect_ratio?: string; card_hook?: string; card_body?: string; card_subtitle?: string },
@@ -726,46 +749,53 @@ async function generatePhotoVisual(
   const bodyText = decision.card_body || undefined;
   const subtitleText = decision.card_subtitle || undefined;
 
-  // Step 1: Try Media Library match (pgvector)
-  const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, ctx.mediaMatchThreshold);
-  if (match) {
-    const sourceEmoji = match.source_label === 'shared' ? '🌐 shared' : '📁 project';
-    console.log(`[visual-agent] Using library photo [${sourceEmoji}] (similarity: ${match.similarity.toFixed(3)})`);
-    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
+  const baseThreshold = ctx.mediaMatchThreshold ?? DEFAULT_MATCH_THRESHOLD;
+  const preferLibrary = ctx.mediaStrategy === 'prefer_library';
+
+  const buildMatchedReturn = (
+    m: { public_url: string; asset_id: string; similarity: number; is_shared: boolean; source_label: string },
+  ): VisualAssets => {
+    const templateUrl = buildPhotoTemplateUrl(m.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
     return {
       visual_type: 'matched_photo',
       chart_url: null,
       card_url: null,
       image_prompt: cleanPrompt,
-      generated_image_url: match.public_url,
-      media_asset_id: match.asset_id,
-      match_similarity: match.similarity,
+      generated_image_url: m.public_url,
+      media_asset_id: m.asset_id,
+      match_similarity: m.similarity,
       template_url: templateUrl,
-      media_is_shared: match.is_shared,
-      media_source_label: match.source_label,
+      media_is_shared: m.is_shared,
+      media_source_label: m.source_label,
     };
+  };
+
+  // Step 1: Try Media Library match (pgvector) — project first
+  const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, baseThreshold);
+  if (match) {
+    const sourceEmoji = match.source_label === 'shared' ? '🌐 shared' : '📁 project';
+    console.log(`[visual-agent] Using library photo [${sourceEmoji}] (similarity: ${match.similarity.toFixed(3)})`);
+    return buildMatchedReturn(match);
   }
 
-  // Step 2: Try shared library with lower threshold (broader search across all projects)
-  if (!match) {
-    const sharedMatch = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, (ctx.mediaMatchThreshold ?? DEFAULT_MATCH_THRESHOLD) * 0.8);
-    if (sharedMatch && sharedMatch.is_shared) {
-      const sourceEmoji = '🌐 shared (step 2)';
-      console.log(`[visual-agent] Using shared library photo [${sourceEmoji}] (similarity: ${sharedMatch.similarity.toFixed(3)})`);
-      const templateUrl = buildPhotoTemplateUrl(sharedMatch.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
-      return {
-        visual_type: 'matched_photo',
-        chart_url: null,
-        card_url: null,
-        image_prompt: cleanPrompt,
-        generated_image_url: sharedMatch.public_url,
-        media_asset_id: sharedMatch.asset_id,
-        match_similarity: sharedMatch.similarity,
-        template_url: templateUrl,
-        media_is_shared: true,
-        media_source_label: 'shared',
-      };
+  // Step 2: Shared library at lowered threshold
+  const sharedMatch = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, baseThreshold * 0.8);
+  if (sharedMatch && sharedMatch.is_shared) {
+    console.log(`[visual-agent] Using shared library photo [🌐 shared step 2] (similarity: ${sharedMatch.similarity.toFixed(3)})`);
+    return buildMatchedReturn(sharedMatch);
+  }
+
+  // Step 2b: prefer_library — walk further down the threshold ladder before
+  // generating an AI photo. Real photos are preferred even at lower confidence.
+  if (preferLibrary) {
+    for (const factor of [0.6, 0.45, 0.3]) {
+      const lowerMatch = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, baseThreshold * factor);
+      if (lowerMatch) {
+        console.log(`[visual-agent] prefer_library: matched at ${(baseThreshold * factor).toFixed(3)} (similarity: ${lowerMatch.similarity.toFixed(3)})`);
+        return buildMatchedReturn(lowerMatch);
+      }
     }
+    console.log('[visual-agent] prefer_library: exhausted library tiers, falling through to Imagen');
   }
 
   // Step 3: Generate with Imagen 4 (last resort — AI photos are less authentic)
@@ -924,7 +954,7 @@ async function autoGeneratePhotographyPreset(
   console.log(`[visual-agent] Auto-generating photography preset for project "${ctx.projectName}"...`);
 
   try {
-    const { text } = await generateText({
+    const { text, usage: presetUsage } = await generateText({
       model: google('gemini-2.0-flash'),
       prompt: `Jsi expert na vizuální identitu značek. Na základě informací o projektu vytvoř photography preset pro AI generování fotek na sociální sítě.
 
@@ -949,6 +979,15 @@ Vrať POUZE validní JSON (žádný markdown, žádné komentáře):
   "camera_style": "technický styl fotoaparátu"
 }`,
       temperature: 0.3,
+    });
+
+    await trackUsage({
+      source: 'visual-agent:auto-preset',
+      model: 'gemini-2.0-flash',
+      inputTokens: presetUsage?.inputTokens ?? 0,
+      outputTokens: presetUsage?.outputTokens ?? 0,
+      projectId: ctx.projectId ?? null,
+      meta: { project_name: ctx.projectName },
     });
 
     const match = text.match(/\{[\s\S]*\}/);

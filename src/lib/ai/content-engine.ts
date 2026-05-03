@@ -12,6 +12,7 @@ import { buildContentPrompt, type PromptContext } from './prompt-builder';
 import { resolvePlatformMix, CONTENT_TYPE_LABELS, type ContentType } from '@/lib/platforms';
 import { generateVisualAssets, type VisualAssets } from '@/lib/visual/visual-agent';
 import { hugoEditorReview, type EditorContext } from './hugo-editor';
+import { trackUsage } from './cost-tracker';
 
 export interface GeneratedContent {
   text: string;
@@ -404,10 +405,19 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
   });
 
   // Generate with Gemini
-  const { text: rawResponse } = await generateText({
+  const { text: rawResponse, usage } = await generateText({
     model: google('gemini-2.0-flash'),
     prompt,
     temperature: 0.8,
+  });
+
+  await trackUsage({
+    source: 'content-engine',
+    model: 'gemini-2.0-flash',
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    projectId: (project.id as string) ?? null,
+    meta: { platform: req.platform, content_type: req.contentType },
   });
 
   // Parse JSON response (strip markdown code blocks if present)
@@ -527,6 +537,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         forcePhoto: req.forcePhoto,
         photographyPreset: (visualIdentity.photography_preset as Record<string, unknown>) || null,
         mediaMatchThreshold: (mediaOrchConfig.media_match_threshold as number) || undefined,
+        mediaStrategy,
       });
       content.visual = visual;
       reasoning.visual_decision = {

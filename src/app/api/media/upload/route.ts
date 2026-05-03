@@ -17,8 +17,24 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
   'video/mp4', 'video/quicktime', 'video/webm', 'video/avi', 'video/x-msvideo', 'video/x-matroska',
   'application/pdf',
-  'application/octet-stream', // some browsers send this for videos
 ]);
+
+/** Allowed file extensions when MIME is generic (application/octet-stream from some browsers for videos) */
+const ALLOWED_FALLBACK_EXTENSIONS = new Set([
+  'mp4', 'mov', 'webm', 'avi', 'mkv', 'm4v',
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'svg',
+  'pdf',
+]);
+
+function isAllowedFile(file: File): boolean {
+  if (ALLOWED_MIME_TYPES.has(file.type)) return true;
+  // Fallback: some browsers send application/octet-stream for known video formats.
+  if (file.type === 'application/octet-stream' || file.type === '') {
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    return ALLOWED_FALLBACK_EXTENSIONS.has(ext);
+  }
+  return false;
+}
 
 /**
  * Media Upload API
@@ -71,7 +87,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (!ALLOWED_MIME_TYPES.has(file.type)) {
+    if (!isAllowedFile(file)) {
       return NextResponse.json(
         { error: `File "${file.name}" has unsupported type: ${file.type}` },
         { status: 400 },

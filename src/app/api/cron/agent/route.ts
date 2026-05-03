@@ -1,37 +1,32 @@
-import { runPendingTasks, publishApprovedPosts, scheduleFridayTopicSuggestions, fetchEngagementMetrics, optimizeFromEngagement, embedPostsForDedup } from '@/lib/ai/agent-orchestrator';
-import { processUntaggedMedia } from '@/lib/ai/vision-engine';
+import { runPendingTasks, publishApprovedPosts, scheduleFridayTopicSuggestions, fetchEngagementMetrics } from '@/lib/ai/agent-orchestrator';
 import { fetchAllRssFeeds } from '@/lib/rss/fetcher';
 import { supabase } from '@/lib/supabase/client';
 import { acquireCronLock } from '@/lib/api/cron-lock';
+import { verifyCronSecret } from '@/lib/api/verify-cron';
 import { NextResponse } from 'next/server';
 
 /**
- * Cron endpoint – Vercel spouští každou hodinu
- * 
- * Hugo "dýchá" – kompletní autonomní pipeline:
- * 1. Auto-schedule: Per-project orchestrator (respektuje config)
- * 2. Run pending: Spustí pending tasks (human priority first)
- * 3. Auto-publish: Odešle approved posty přes getLate.dev (pokud auto_publish=true)
- * 4. RSS fetch: Stáhne novinky z RSS feedů (respektuje fetch_interval_hours)
- * 5. Media processing: AI-tag nové fotky (Gemini Vision)
- * 6. Friday topics: V pátek navrhne témata na příští týden
- * 7. Engagement metrics: Stáhne metriky z getLate.dev (likes, comments, shares)
- * 8. Performance optimization: Analyzuje engagement data a učí se (neděle)
- * 9. Embed posts: Generuje embeddingy pro cross-project dedup (pgvector)
- * 10. AIO Schema Inject: Pondělí ráno – inject JSON-LD + llms.txt do GitHub repozitářů
- * 
- * Secured by CRON_SECRET header (Vercel automatically sends this)
+ * Hot-path cron — Vercel hourly (vercel.json).
+ *
+ * Critical, time-sensitive work only:
+ *   1. Auto-schedule + run pending tasks
+ *   2. Auto-publish approved posts
+ *   3. RSS fetch (respects per-source fetch_interval_hours)
+ *   4. Engagement metrics from getLate.dev
+ *   5. Friday topic suggestions (window: Fri 8-10 CET)
+ *
+ * Slow / weekly work moved out:
+ *   /api/cron/maintenance — media tagging + dedup embeddings (every 6h)
+ *   /api/cron/weekly      — AIO inject (Mon), AIO audit + Sunday optimization
  */
-export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
+export const maxDuration = 60; // Vercel Pro plan
+export const dynamic = 'force-dynamic';
 
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+export async function GET(request: Request) {
+  if (!verifyCronSecret(request.headers.get('authorization'))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Race condition protection: prevent overlapping cron instances from
-  // running the same tasks twice (e.g. duplicate post generation, exceeded daily quota).
   const lock = await acquireCronLock('agent_orchestrator');
   if (!lock.acquired) {
     console.log(`[cron-agent] Skipping run — another instance is active (${lock.reason})`);
@@ -46,150 +41,70 @@ export async function GET(request: Request) {
   const startTime = Date.now();
 
   try {
+    // 1+2. Auto-schedule + run tasks
+    const taskResult = await runPendingTasks();
 
-  // 1+2. Auto-schedule + run tasks
-  const taskResult = await runPendingTasks();
+    // 3. Auto-publish approved posts
+    const publishResult = await publishApprovedPosts();
 
-  // 3. Auto-publish approved posts (only for projects with auto_publish=true)
-  const publishResult = await publishApprovedPosts();
-
-  // 4. RSS fetch (respects per-source fetch_interval_hours)
-  let rssResult = { sources_checked: 0, total_added: 0, total_errors: 0 };
-  try {
-    rssResult = await fetchAllRssFeeds();
-  } catch {
-    // RSS fetch failed, continue
-  }
-
-  // 5. Process untagged media (max 10 per cron cycle to stay within limits)
-  const mediaResult = await processUntaggedMedia(10);
-
-  // 6. Friday topic suggestions (only on Fridays, 8-10 AM CET)
-  let fridayTopics = 0;
-  const now = new Date();
-  const pragueHour = parseInt(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: 'Europe/Prague' }).format(now), 10);
-  const pragueDay = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'Europe/Prague' }).format(now);
-  if (pragueDay === 'Fri' && pragueHour >= 8 && pragueHour <= 10) {
-    fridayTopics = await scheduleFridayTopicSuggestions();
-  }
-
-  // 7. Engagement metrics: fetch from getLate.dev for posts older than 24h
-  let engagementResult = { posts_checked: 0, metrics_updated: 0 };
-  try {
-    engagementResult = await fetchEngagementMetrics();
-  } catch {
-    // Engagement fetch failed, continue
-  }
-
-  // 9. Embed posts for cross-project dedup (max 20 per cycle)
-  let embedResult = { embedded: 0, failed: 0 };
-  try {
-    embedResult = await embedPostsForDedup(20);
-  } catch {
-    // Embedding failed, continue
-  }
-
-  // 10. AIO Schema Injection: Monday morning – inject JSON-LD + llms.txt into GitHub repos
-  let aioResult = { totalSites: 0, succeeded: 0, failed: 0 };
-  if (pragueDay === 'Mon' && pragueHour >= 8 && pragueHour <= 10) {
+    // 4. RSS fetch
+    let rssResult = { sources_checked: 0, total_added: 0, total_errors: 0 };
     try {
-      const { runAioInjectionBatch, isAioConfigured } = await import('@/lib/aio/aio-engine');
-      if (isAioConfigured()) {
-        aioResult = await runAioInjectionBatch();
+      rssResult = await fetchAllRssFeeds();
+    } catch {
+      // RSS fetch failed, continue
+    }
+
+    // 5. Friday topic suggestions (Fri 8-10 CET)
+    const now = new Date();
+    const pragueHour = parseInt(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: 'Europe/Prague' }).format(now), 10);
+    const pragueDay = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'Europe/Prague' }).format(now);
+
+    let fridayTopics = 0;
+    if (pragueDay === 'Fri' && pragueHour >= 8 && pragueHour <= 10) {
+      fridayTopics = await scheduleFridayTopicSuggestions();
+    }
+
+    // 6. Engagement metrics from getLate
+    let engagementResult = { posts_checked: 0, metrics_updated: 0 };
+    try {
+      engagementResult = await fetchEngagementMetrics();
+    } catch {
+      // Engagement fetch failed, continue
+    }
+
+    const duration = Date.now() - startTime;
+    const result = {
+      ...taskResult,
+      published: publishResult.published,
+      publish_failed: publishResult.failed,
+      publish_skipped: publishResult.skipped,
+      rss_sources_checked: rssResult.sources_checked,
+      rss_added: rssResult.total_added,
+      rss_errors: rssResult.total_errors,
+      friday_topics_scheduled: fridayTopics,
+      engagement_checked: engagementResult.posts_checked,
+      engagement_updated: engagementResult.metrics_updated,
+      duration_ms: duration,
+      timestamp: new Date().toISOString(),
+      message: `Hugo: ${taskResult.executed} tasks, ${publishResult.published} published, ${rssResult.total_added} news, ${engagementResult.metrics_updated} engagement.`,
+    };
+
+    if (supabase) {
+      try {
+        await supabase.from('agent_log').insert({
+          action: 'cron_agent',
+          details: result,
+          tokens_used: 0,
+          model_used: 'system',
+        });
+      } catch {
+        // Don't fail cron on log error
       }
-    } catch {
-      // AIO injection failed, continue
     }
-  }
 
-  // 11. AIO Visibility Audit: Sunday morning – test brand visibility in AI search
-  let aioAuditResult = { tested: 0, succeeded: 0 };
-  if (pragueDay === 'Sun' && pragueHour >= 8 && pragueHour <= 10) {
-    try {
-      const { runVisibilityAudit } = await import('@/lib/aio/visibility-auditor');
-      // Load projects that have AIO prompts configured
-      if (supabase) {
-        const { data: aioProjects } = await supabase
-          .from('aio_prompts')
-          .select('project_id')
-          .eq('is_active', true);
-        if (aioProjects) {
-          const uniqueProjectIds = [...new Set(aioProjects.map((p) => p.project_id as string))];
-          for (const pid of uniqueProjectIds) {
-            try {
-              const auditRes = await runVisibilityAudit(pid);
-              if (auditRes) aioAuditResult.succeeded++;
-              aioAuditResult.tested++;
-            } catch {
-              aioAuditResult.tested++;
-            }
-          }
-        }
-      }
-    } catch {
-      // AIO audit failed, continue
-    }
-  }
-
-  // 8. Performance optimization: Sunday morning – analyze engagement and learn
-  if (pragueDay === 'Sun' && pragueHour >= 8 && pragueHour <= 10) {
-    try {
-      const { data: activeProjects } = supabase
-        ? await supabase.from('projects').select('id').eq('is_active', true)
-        : { data: null };
-      if (activeProjects) {
-        for (const p of activeProjects) {
-          await optimizeFromEngagement(p.id);
-        }
-      }
-    } catch {
-      // Performance optimization failed, continue
-    }
-  }
-
-  const duration = Date.now() - startTime;
-
-  const result = {
-    ...taskResult,
-    published: publishResult.published,
-    publish_failed: publishResult.failed,
-    publish_skipped: publishResult.skipped,
-    rss_sources_checked: rssResult.sources_checked,
-    rss_added: rssResult.total_added,
-    rss_errors: rssResult.total_errors,
-    media_processed: mediaResult.processed,
-    media_failed: mediaResult.failed,
-    friday_topics_scheduled: fridayTopics,
-    engagement_checked: engagementResult.posts_checked,
-    engagement_updated: engagementResult.metrics_updated,
-    posts_embedded: embedResult.embedded,
-    embed_failed: embedResult.failed,
-    aio_sites_injected: aioResult.succeeded,
-    aio_sites_failed: aioResult.failed,
-    aio_audits_tested: aioAuditResult.tested,
-    aio_audits_succeeded: aioAuditResult.succeeded,
-    duration_ms: duration,
-    timestamp: new Date().toISOString(),
-    message: `Hugo: ${taskResult.executed} tasks, ${publishResult.published} published, ${rssResult.total_added} news, ${mediaResult.processed} media, ${engagementResult.metrics_updated} engagement, ${embedResult.embedded} embedded, ${aioResult.succeeded} AIO injected, ${aioAuditResult.succeeded} AIO audited.`,
-  };
-
-  // Log cron run to agent_log for admin visibility
-  if (supabase) {
-    try {
-      await supabase.from('agent_log').insert({
-        action: 'cron_agent',
-        details: result,
-        tokens_used: 0,
-        model_used: 'system',
-      });
-    } catch {
-      // Don't fail cron on log error
-    }
-  }
-
-  return NextResponse.json(result);
+    return NextResponse.json(result);
   } finally {
-    // Always release the lock — even if the cron run threw an error
     await lock.release();
   }
 }

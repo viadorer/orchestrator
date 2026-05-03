@@ -101,28 +101,58 @@ export function AgentView() {
 
   // Load projects
   useEffect(() => {
-    fetch('/api/projects').then(r => r.json()).then(data => {
-      const p = Array.isArray(data) ? data : [];
-      setProjects(p);
-      if (p.length > 0) setSelectedProject(p[0].id);
-      setLoading(false);
-    });
+    const controller = new AbortController();
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/projects', { signal: controller.signal });
+        const data = await res.json();
+        if (cancelled) return;
+        const p = Array.isArray(data) ? data : [];
+        setProjects(p);
+        if (p.length > 0) setSelectedProject(p[0].id);
+      } catch (err) {
+        if ((err as { name?: string })?.name !== 'AbortError') {
+          console.error('[agent] failed to load projects:', err);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   // Load tasks, logs, health when project changes
-  const loadProjectData = useCallback(async () => {
+  const loadProjectData = useCallback(async (signal?: AbortSignal) => {
     if (!selectedProject) return;
-    const [tasksRes, logsRes, healthRes] = await Promise.all([
-      fetch(`/api/agent/tasks?projectId=${selectedProject}`).then(r => r.json()),
-      fetch(`/api/agent/log?projectId=${selectedProject}`).then(r => r.json()),
-      fetch(`/api/agent/health/${selectedProject}`).then(r => r.json()).catch(() => null),
-    ]);
-    setTasks(Array.isArray(tasksRes) ? tasksRes : []);
-    setLogs(Array.isArray(logsRes) ? logsRes : []);
-    setHealth(healthRes);
+    try {
+      const [tRes, lRes, hRes] = await Promise.all([
+        fetch(`/api/agent/tasks?projectId=${selectedProject}`, { signal }),
+        fetch(`/api/agent/log?projectId=${selectedProject}`, { signal }),
+        fetch(`/api/agent/health/${selectedProject}`, { signal }).catch(() => null),
+      ]);
+      const tasksRes = await tRes.json();
+      const logsRes = await lRes.json();
+      const healthRes = hRes ? await hRes.json().catch(() => null) : null;
+      if (signal?.aborted) return;
+      setTasks(Array.isArray(tasksRes) ? tasksRes : []);
+      setLogs(Array.isArray(logsRes) ? logsRes : []);
+      setHealth(healthRes);
+    } catch (err) {
+      if ((err as { name?: string })?.name !== 'AbortError') {
+        console.error('[agent] failed to load project data:', err);
+      }
+    }
   }, [selectedProject]);
 
-  useEffect(() => { loadProjectData(); }, [loadProjectData]);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadProjectData(controller.signal);
+    return () => controller.abort();
+  }, [loadProjectData]);
 
   // Content-generation task types that need platform selection
   const CONTENT_TASK_TYPES = ['generate_content', 'generate_ab_variants', 'react_to_news'];
@@ -524,7 +554,7 @@ export function AgentView() {
                   </button>
                 )}
                 <button
-                  onClick={loadProjectData}
+                  onClick={() => loadProjectData()}
                   className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
                 >
                   <RotateCcw className="w-4 h-4" />

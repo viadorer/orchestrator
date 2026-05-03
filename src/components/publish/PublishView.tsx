@@ -39,21 +39,34 @@ export function PublishView() {
   const [previewItem, setPreviewItem] = useState<QueueItem | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     const projectParam = selectedProject ? `&projectId=${selectedProject}` : '';
-    const [approvedRes, scheduledRes, sentRes] = await Promise.all([
-      fetch(`/api/queue?status=approved${projectParam}`).then(r => r.json()),
-      fetch(`/api/queue?status=scheduled${projectParam}`).then(r => r.json()),
-      fetch(`/api/queue?status=sent${projectParam}`).then(r => r.json()),
-    ]);
-    setApproved(Array.isArray(approvedRes) ? approvedRes : []);
-    setScheduled(Array.isArray(scheduledRes) ? scheduledRes : []);
-    setSent(Array.isArray(sentRes) ? sentRes : []);
-    setLoading(false);
+    try {
+      const [aRes, scRes, sRes] = await Promise.all([
+        fetch(`/api/queue?status=approved${projectParam}`, { signal }),
+        fetch(`/api/queue?status=scheduled${projectParam}`, { signal }),
+        fetch(`/api/queue?status=sent${projectParam}`, { signal }),
+      ]);
+      const [approvedRes, scheduledRes, sentRes] = await Promise.all([aRes.json(), scRes.json(), sRes.json()]);
+      if (signal?.aborted) return;
+      setApproved(Array.isArray(approvedRes) ? approvedRes : []);
+      setScheduled(Array.isArray(scheduledRes) ? scheduledRes : []);
+      setSent(Array.isArray(sentRes) ? sentRes : []);
+    } catch (err) {
+      if ((err as { name?: string })?.name !== 'AbortError') {
+        console.error('[publish] failed to load queue:', err);
+      }
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
   }, [selectedProject]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
+  }, [loadData]);
 
   // Get unique projects from all data
   const allProjects = [...approved, ...scheduled, ...sent]

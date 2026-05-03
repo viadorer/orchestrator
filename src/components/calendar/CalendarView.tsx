@@ -46,21 +46,44 @@ export function CalendarView() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/queue?status=scheduled').then(r => r.json()),
-      fetch('/api/queue?status=sent').then(r => r.json()),
-      fetch('/api/queue?status=review').then(r => r.json()),
-      fetch('/api/queue?status=approved').then(r => r.json()),
-    ]).then(([scheduled, sent, review, approved]) => {
-      const all = [
-        ...(Array.isArray(scheduled) ? scheduled : []),
-        ...(Array.isArray(sent) ? sent : []),
-        ...(Array.isArray(review) ? review : []),
-        ...(Array.isArray(approved) ? approved : []),
-      ];
-      setPosts(all);
-      setLoading(false);
-    });
+    // AbortController so navigation/unmount cancels pending fetches cleanly.
+    // Without this Safari raised `TypeError: Load failed` and the AbortError
+    // from one fetch propagated through Promise.all as an unhandled rejection.
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const responses = await Promise.all([
+          fetch('/api/queue?status=scheduled', { signal: controller.signal }),
+          fetch('/api/queue?status=sent', { signal: controller.signal }),
+          fetch('/api/queue?status=review', { signal: controller.signal }),
+          fetch('/api/queue?status=approved', { signal: controller.signal }),
+        ]);
+        const [scheduled, sent, review, approved] = await Promise.all(responses.map(r => r.json()));
+        if (cancelled) return;
+        const all = [
+          ...(Array.isArray(scheduled) ? scheduled : []),
+          ...(Array.isArray(sent) ? sent : []),
+          ...(Array.isArray(review) ? review : []),
+          ...(Array.isArray(approved) ? approved : []),
+        ];
+        setPosts(all);
+      } catch (err) {
+        // AbortError on unmount is expected — swallow it. Log everything else.
+        if ((err as { name?: string })?.name !== 'AbortError') {
+          console.error('[calendar] failed to load queue:', err);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   const year = currentMonth.getFullYear();

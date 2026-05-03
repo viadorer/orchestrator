@@ -38,18 +38,32 @@ export function NewsPanel({ projectId, projectName }: NewsPanelProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [newSource, setNewSource] = useState({ name: '', url: '', category: 'general' });
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
-    const [srcRes, newsRes] = await Promise.all([
-      fetch(`/api/rss?project_id=${projectId}`).then(r => r.json()),
-      fetch(`/api/news?project_id=${projectId}&limit=30`).then(r => r.json()).catch(() => ({ news: [] })),
-    ]);
-    setSources(srcRes.sources || []);
-    setNews(newsRes.news || []);
-    setLoading(false);
+    try {
+      const [srcResp, newsResp] = await Promise.all([
+        fetch(`/api/rss?project_id=${projectId}`, { signal }),
+        fetch(`/api/news?project_id=${projectId}&limit=30`, { signal }),
+      ]);
+      const srcRes = await srcResp.json();
+      const newsRes = await newsResp.json().catch(() => ({ news: [] }));
+      if (signal?.aborted) return;
+      setSources(srcRes.sources || []);
+      setNews(newsRes.news || []);
+    } catch (err) {
+      if ((err as { name?: string })?.name !== 'AbortError') {
+        console.error('[news-panel] failed to load:', err);
+      }
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
   }, [projectId]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadData(controller.signal);
+    return () => controller.abort();
+  }, [loadData]);
 
   const addSource = async () => {
     if (!newSource.name || !newSource.url) return;

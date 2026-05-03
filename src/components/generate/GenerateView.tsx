@@ -49,13 +49,28 @@ export function GenerateView() {
   const [forcePhoto, setForcePhoto] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/projects').then(r => r.json()),
-      fetch('/api/patterns').then(r => r.json()),
-    ]).then(([p, pat]) => {
-      setProjects(Array.isArray(p) ? p : []);
-      setPatterns(Array.isArray(pat) ? pat : []);
-    });
+    const controller = new AbortController();
+    let cancelled = false;
+    (async () => {
+      try {
+        const [pRes, patRes] = await Promise.all([
+          fetch('/api/projects', { signal: controller.signal }),
+          fetch('/api/patterns', { signal: controller.signal }),
+        ]);
+        const [p, pat] = await Promise.all([pRes.json(), patRes.json()]);
+        if (cancelled) return;
+        setProjects(Array.isArray(p) ? p : []);
+        setPatterns(Array.isArray(pat) ? pat : []);
+      } catch (err) {
+        if ((err as { name?: string })?.name !== 'AbortError') {
+          console.error('[generate] failed to load projects/patterns:', err);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   const currentProject = projects.find(p => p.id === selectedProject);

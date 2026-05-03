@@ -151,14 +151,17 @@ export function DashboardView() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
     async function loadDashboard() {
       try {
         const [dashRes, cronRes, templRes] = await Promise.all([
-          fetch('/api/dashboard'),
-          fetch('/api/cron/status'),
-          fetch('/api/analytics/templates'),
+          fetch('/api/dashboard', { signal: controller.signal }),
+          fetch('/api/cron/status', { signal: controller.signal }),
+          fetch('/api/analytics/templates', { signal: controller.signal }),
         ]);
         const data = await dashRes.json();
+        if (cancelled) return;
         if (data.stats) setStats(data.stats);
         if (data.projectStats) setProjectStats(data.projectStats);
         if (data.mediaStats) setMediaStats(data.mediaStats);
@@ -166,21 +169,29 @@ export function DashboardView() {
         if (data.agentTasks) setAgentTasks(data.agentTasks);
         try {
           const cronData = await cronRes.json();
-          setCronStatus(cronData);
+          if (!cancelled) setCronStatus(cronData);
         } catch { /* cron status optional */ }
         try {
           const templData = await templRes.json();
-          if (templData.templates) setTemplatePerf(templData.templates);
+          if (!cancelled && templData.templates) setTemplatePerf(templData.templates);
         } catch { /* template analytics optional */ }
-      } catch {
-        setStats({
-          totalProjects: 0, reviewCount: 0, approvedCount: 0,
-          sentCount: 0, scheduledCount: 0, rejectedCount: 0, lowScorePosts: 0,
-        });
+      } catch (err) {
+        if ((err as { name?: string })?.name === 'AbortError') return;
+        if (!cancelled) {
+          setStats({
+            totalProjects: 0, reviewCount: 0, approvedCount: 0,
+            sentCount: 0, scheduledCount: 0, rejectedCount: 0, lowScorePosts: 0,
+          });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     }
     loadDashboard();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   if (loading) {

@@ -49,7 +49,7 @@ export default function Home() {
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950">
       <Sidebar currentView={view} onNavigate={setView} />
-      <main className="flex-1 h-full overflow-y-auto flex flex-col">
+      <main className="flex-1 h-full overflow-y-auto flex flex-col pt-14 md:pt-0">
         {view === 'dashboard' && <DashboardView />}
         {view === 'projects' && <ProjectsView />}
         {view === 'agent' && <AgentView />}

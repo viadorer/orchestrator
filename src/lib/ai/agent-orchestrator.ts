@@ -1730,6 +1730,7 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
           logoUrl: (visualIdentity as Record<string, string>).logo_url || null,
           photographyPreset: (visualIdentity.photography_preset as Record<string, unknown>) || null,
           mediaMatchThreshold: (agentOrchConfig.media_match_threshold as number) || undefined,
+          mediaStrategy,
         });
       } catch {
         // Visual generation failed, continue without

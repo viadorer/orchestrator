@@ -47,6 +47,13 @@ interface VisualContext {
   forcePhoto?: boolean;
   photographyPreset?: Partial<PhotographyPreset> | null;
   mediaMatchThreshold?: number;
+  /**
+   * Project-level media strategy. Recognised values:
+   * - 'auto'           — current default (project library → shared → Imagen)
+   * - 'prefer_library' — exhaust library tiers before considering Imagen
+   * - 'none'           — caller short-circuits, generatePhotoVisual not called
+   */
+  mediaStrategy?: string;
 }
 
 /**
@@ -698,9 +705,15 @@ async function matchMediaFromLibrary(
 
 /**
  * Generate photo visual:
- * 1. Try matching from Media Library (pgvector)
- * 2. If no match → generate with Imagen 4
- * 3. Fallback → return image_prompt text only
+ * 1. Try matching from Media Library (pgvector) — project first, then shared
+ * 2. If `prefer_library` strategy: progressive threshold relaxation against
+ *    the shared library before considering Imagen.
+ * 3. If no match → generate with Imagen 4
+ * 4. Fallback → return image_prompt text only
+ *
+ * `prefer_library` strategy: real photos are always preferred over AI-generated.
+ * The matcher walks down the threshold ladder (1.0×, 0.7×, 0.5×, 0.35×) on the
+ * shared library and only falls back to Imagen if the lowest tier yields nothing.
  */
 async function generatePhotoVisual(
   decision: { image_prompt?: string; template_key?: string; aspect_ratio?: string; card_hook?: string; card_body?: string; card_subtitle?: string },
@@ -736,46 +749,53 @@ async function generatePhotoVisual(
   const bodyText = decision.card_body || undefined;
   const subtitleText = decision.card_subtitle || undefined;
 
-  // Step 1: Try Media Library match (pgvector)
-  const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, ctx.mediaMatchThreshold);
-  if (match) {
-    const sourceEmoji = match.source_label === 'shared' ? '🌐 shared' : '📁 project';
-    console.log(`[visual-agent] Using library photo [${sourceEmoji}] (similarity: ${match.similarity.toFixed(3)})`);
-    const templateUrl = buildPhotoTemplateUrl(match.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
+  const baseThreshold = ctx.mediaMatchThreshold ?? DEFAULT_MATCH_THRESHOLD;
+  const preferLibrary = ctx.mediaStrategy === 'prefer_library';
+
+  const buildMatchedReturn = (
+    m: { public_url: string; asset_id: string; similarity: number; is_shared: boolean; source_label: string },
+  ): VisualAssets => {
+    const templateUrl = buildPhotoTemplateUrl(m.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
     return {
       visual_type: 'matched_photo',
       chart_url: null,
       card_url: null,
       image_prompt: cleanPrompt,
-      generated_image_url: match.public_url,
-      media_asset_id: match.asset_id,
-      match_similarity: match.similarity,
+      generated_image_url: m.public_url,
+      media_asset_id: m.asset_id,
+      match_similarity: m.similarity,
       template_url: templateUrl,
-      media_is_shared: match.is_shared,
-      media_source_label: match.source_label,
+      media_is_shared: m.is_shared,
+      media_source_label: m.source_label,
     };
+  };
+
+  // Step 1: Try Media Library match (pgvector) — project first
+  const match = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, baseThreshold);
+  if (match) {
+    const sourceEmoji = match.source_label === 'shared' ? '🌐 shared' : '📁 project';
+    console.log(`[visual-agent] Using library photo [${sourceEmoji}] (similarity: ${match.similarity.toFixed(3)})`);
+    return buildMatchedReturn(match);
   }
 
-  // Step 2: Try shared library with lower threshold (broader search across all projects)
-  if (!match) {
-    const sharedMatch = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, (ctx.mediaMatchThreshold ?? DEFAULT_MATCH_THRESHOLD) * 0.8);
-    if (sharedMatch && sharedMatch.is_shared) {
-      const sourceEmoji = '🌐 shared (step 2)';
-      console.log(`[visual-agent] Using shared library photo [${sourceEmoji}] (similarity: ${sharedMatch.similarity.toFixed(3)})`);
-      const templateUrl = buildPhotoTemplateUrl(sharedMatch.public_url, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
-      return {
-        visual_type: 'matched_photo',
-        chart_url: null,
-        card_url: null,
-        image_prompt: cleanPrompt,
-        generated_image_url: sharedMatch.public_url,
-        media_asset_id: sharedMatch.asset_id,
-        match_similarity: sharedMatch.similarity,
-        template_url: templateUrl,
-        media_is_shared: true,
-        media_source_label: 'shared',
-      };
+  // Step 2: Shared library at lowered threshold
+  const sharedMatch = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, baseThreshold * 0.8);
+  if (sharedMatch && sharedMatch.is_shared) {
+    console.log(`[visual-agent] Using shared library photo [🌐 shared step 2] (similarity: ${sharedMatch.similarity.toFixed(3)})`);
+    return buildMatchedReturn(sharedMatch);
+  }
+
+  // Step 2b: prefer_library — walk further down the threshold ladder before
+  // generating an AI photo. Real photos are preferred even at lower confidence.
+  if (preferLibrary) {
+    for (const factor of [0.6, 0.45, 0.3]) {
+      const lowerMatch = await matchMediaFromLibrary(ctx.projectId, ctx.text, rawPrompt, ctx.platform, baseThreshold * factor);
+      if (lowerMatch) {
+        console.log(`[visual-agent] prefer_library: matched at ${(baseThreshold * factor).toFixed(3)} (similarity: ${lowerMatch.similarity.toFixed(3)})`);
+        return buildMatchedReturn(lowerMatch);
+      }
     }
+    console.log('[visual-agent] prefer_library: exhausted library tiers, falling through to Imagen');
   }
 
   // Step 3: Generate with Imagen 4 (last resort — AI photos are less authentic)

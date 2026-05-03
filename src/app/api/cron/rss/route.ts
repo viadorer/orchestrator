@@ -9,6 +9,9 @@ import { NextResponse } from 'next/server';
  * Runs every 6 hours via Vercel Cron
  * Fetches all active RSS sources, scrapes articles, AI summarizes, stores with embeddings
  */
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   if (!verifyCronSecret(request.headers.get('authorization'))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

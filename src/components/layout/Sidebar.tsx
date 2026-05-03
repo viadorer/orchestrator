@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/lib/auth/auth-context';
+import { SafeImage } from '@/components/ui/SafeImage';
 import {
   LayoutDashboard,
   FolderKanban,
@@ -53,7 +54,7 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 h-14 border-b border-slate-800">
         <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center">
-          <img src="/logo-orchestrator.png" alt="Orchestrator" className="w-8 h-8 object-contain" />
+          <SafeImage src="/logo-orchestrator.png" alt="Orchestrator" width={32} height={32} className="w-8 h-8 object-contain" priority />
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold text-white truncate">Orchestrator</span>

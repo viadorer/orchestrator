@@ -537,6 +537,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         forcePhoto: req.forcePhoto,
         photographyPreset: (visualIdentity.photography_preset as Record<string, unknown>) || null,
         mediaMatchThreshold: (mediaOrchConfig.media_match_threshold as number) || undefined,
+        mediaStrategy,
       });
       content.visual = visual;
       reasoning.visual_decision = {

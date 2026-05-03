@@ -101,7 +101,7 @@ export async function GET(request: Request) {
   }
 
   // 11. AIO Visibility Audit: Sunday morning – test brand visibility in AI search
-  let aioAuditResult = { tested: 0, succeeded: 0 };
+  const aioAuditResult = { tested: 0, succeeded: 0 };
   if (pragueDay === 'Sun' && pragueHour >= 8 && pragueHour <= 10) {
     try {
       const { runVisibilityAudit } = await import('@/lib/aio/visibility-auditor');

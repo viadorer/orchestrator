@@ -15,6 +15,7 @@ import { generateText } from 'ai';
 import { generateChartUrl, CHART_TEMPLATES, type ChartData, type VisualIdentity, type PhotographyPreset, DEFAULT_PHOTOGRAPHY_PRESET } from './quickchart';
 import { generateAndStoreImage, buildCleanImagePrompt } from './imagen';
 import { generateMediaEmbedding } from '@/lib/ai/vision-engine';
+import { trackUsage } from '@/lib/ai/cost-tracker';
 import { supabase } from '@/lib/supabase/client';
 import { getDefaultImageSpec, PLATFORM_LIMITS } from '@/lib/platforms';
 
@@ -268,10 +269,19 @@ DŮLEŽITÉ pro carousel:
 - První slide MUSÍ být type "cover", poslední "cta"
 - Prostřední slidy jsou "content" s číslem`;
 
-  const { text: rawResponse } = await generateText({
+  const { text: rawResponse, usage } = await generateText({
     model: google('gemini-2.0-flash'),
     prompt,
     temperature: 0.2,
+  });
+
+  await trackUsage({
+    source: 'visual-agent:decide-type',
+    model: 'gemini-2.0-flash',
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    projectId: ctx.projectId ?? null,
+    meta: { platform: ctx.platform },
   });
 
   try {
@@ -924,7 +934,7 @@ async function autoGeneratePhotographyPreset(
   console.log(`[visual-agent] Auto-generating photography preset for project "${ctx.projectName}"...`);
 
   try {
-    const { text } = await generateText({
+    const { text, usage: presetUsage } = await generateText({
       model: google('gemini-2.0-flash'),
       prompt: `Jsi expert na vizuální identitu značek. Na základě informací o projektu vytvoř photography preset pro AI generování fotek na sociální sítě.
 
@@ -949,6 +959,15 @@ Vrať POUZE validní JSON (žádný markdown, žádné komentáře):
   "camera_style": "technický styl fotoaparátu"
 }`,
       temperature: 0.3,
+    });
+
+    await trackUsage({
+      source: 'visual-agent:auto-preset',
+      model: 'gemini-2.0-flash',
+      inputTokens: presetUsage?.inputTokens ?? 0,
+      outputTokens: presetUsage?.outputTokens ?? 0,
+      projectId: ctx.projectId ?? null,
+      meta: { project_name: ctx.projectName },
     });
 
     const match = text.match(/\{[\s\S]*\}/);

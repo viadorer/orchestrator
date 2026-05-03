@@ -8,6 +8,7 @@
 import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
+import { trackUsage } from '@/lib/ai/cost-tracker';
 import {
   BLOG_SYSTEM_PROMPT,
   BLOG_HTML_FORMAT_PROMPT,
@@ -226,6 +227,15 @@ export async function generateBlogPost(
     model: google('gemini-2.0-flash'),
     prompt,
     temperature: 0.7,
+  });
+
+  await trackUsage({
+    source: 'blog-generator',
+    model: 'gemini-2.0-flash',
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    projectId: request.projectId,
+    meta: { post_format: postFormat, category: request.category },
   });
 
   const { meta, body } = parseAiResponse(rawResponse);

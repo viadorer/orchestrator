@@ -24,6 +24,7 @@ import { generateVisualAssets } from '@/lib/visual/visual-agent';
 import { getRelevantNews } from '@/lib/rss/fetcher';
 import { getNextPlatformContentType, buildMixStatusBlock } from './content-engine';
 import { hugoEditorReview } from './hugo-editor';
+import { trackUsage } from './cost-tracker';
 import { getDefaultImageSpec, buildPlatformPromptBlock, PLATFORM_LIMITS, type ContentType } from '@/lib/platforms';
 
 // ============================================
@@ -1652,6 +1653,15 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
       });
 
       totalTokens = usage?.totalTokens || 0;
+      await trackUsage({
+        source: 'agent-orchestrator',
+        model: 'gemini-2.0-flash',
+        inputTokens: usage?.inputTokens ?? 0,
+        outputTokens: usage?.outputTokens ?? 0,
+        projectId: task.project_id,
+        taskId: task.id,
+        meta: { task_type: task.task_type },
+      });
       result = parseAIResponse(rawResponse);
     }
 
@@ -1673,10 +1683,19 @@ export async function executeTask(taskId: string): Promise<{ success: boolean; r
             platform,
             post_text: (result.text as string)?.substring(0, 300),
           });
-          const { text: reviewRaw } = await generateText({
+          const { text: reviewRaw, usage: reviewUsage } = await generateText({
             model: google('gemini-2.0-flash'),
             prompt: reviewPrompt,
             temperature: 0.3,
+          });
+          await trackUsage({
+            source: 'agent-orchestrator:image-prompt-review',
+            model: 'gemini-2.0-flash',
+            inputTokens: reviewUsage?.inputTokens ?? 0,
+            outputTokens: reviewUsage?.outputTokens ?? 0,
+            projectId: task.project_id,
+            taskId: task.id,
+            meta: { platform },
           });
           const reviewResult = parseAIResponse(reviewRaw);
           if (reviewResult.improved_prompt && typeof reviewResult.improved_prompt === 'string') {
@@ -1988,6 +2007,15 @@ async function generateContentWithRetry(
     });
 
     totalTokens += usage?.totalTokens || 0;
+    await trackUsage({
+      source: 'agent-orchestrator:generate-content',
+      model: 'gemini-2.0-flash',
+      inputTokens: usage?.inputTokens ?? 0,
+      outputTokens: usage?.outputTokens ?? 0,
+      projectId: task.project_id as string,
+      taskId: task.id as string,
+      meta: { platform, attempt, content_type: resolvedContentType },
+    });
     const result = parseAIResponse(rawResponse);
     const scores = result.scores as Record<string, number> | undefined;
     const overall = scores?.overall || 0;

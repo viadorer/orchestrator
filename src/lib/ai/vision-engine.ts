@@ -16,6 +16,7 @@
 import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
 import { supabase } from '@/lib/supabase/client';
+import { trackUsage } from './cost-tracker';
 
 // ============================================
 // Types
@@ -71,7 +72,7 @@ Vrať POUZE JSON (žádný markdown, žádný text okolo):
   "people": ["person1", "person2", ...]  // Jména nebo popis osob na fotce (pokud jsou identifikovatelné). Pokud neznáš jména, použij popis: "muž v obleku", "žena s brýlemi". Pokud nejsou žádné osoby, vrať prázdné pole.
 }`;
 
-  const { text: rawResponse } = await generateText({
+  const { text: rawResponse, usage } = await generateText({
     model: google('gemini-2.0-flash'),
     messages: [
       {
@@ -83,6 +84,14 @@ Vrať POUZE JSON (žádný markdown, žádný text okolo):
       },
     ],
     temperature: 0.2,
+  });
+
+  await trackUsage({
+    source: 'vision-engine:analyze-image',
+    model: 'gemini-2.0-flash',
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    meta: { kind: 'image-analysis' },
   });
 
   try {

@@ -4,6 +4,7 @@ import { validatePostMultiPlatform } from '@/lib/platforms';
 import { ensureImageAspectRatio } from '@/lib/visual/image-resize';
 import { resolveTemplateToStaticUrl } from '@/lib/visual/resolve-template';
 import { validateImageUrl } from '@/lib/utils/validate-image-url';
+import { logError } from '@/lib/api/error-log';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api/require-auth';
 import { safeParseJson, validateBody, publishSchema } from '@/lib/api/validate';
@@ -322,18 +323,22 @@ export async function POST(request: Request) {
       results.push({ id: post.id, status: publishResult.data.status, late_post_id: publishResult.data.externalId });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`[publish] FAILED post ${post.id}:`, message);
       await supabase
         .from('content_queue')
         .update({ status: 'failed' })
         .eq('id', post.id);
-      try {
-        await supabase.from('agent_log').insert({
-          project_id: post.project_id,
-          action: 'publish_failed',
-          details: { post_id: post.id, error: message, platforms: targetPlatforms, template_url: post.template_url || null },
-        });
-      } catch { /* logging should not fail main flow */ }
+      // Persistent error log for admin visibility
+      await logError(err, {
+        source: 'publish',
+        projectId: post.project_id,
+        entityId: post.id,
+        meta: {
+          platforms: targetPlatforms,
+          template_url: post.template_url || null,
+          has_static_image: !!post.static_image_url,
+          has_image_url: !!post.image_url,
+        },
+      });
       results.push({ id: post.id, status: 'failed', error: message });
     }
   }

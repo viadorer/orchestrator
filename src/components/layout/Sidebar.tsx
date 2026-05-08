@@ -20,11 +20,12 @@ import {
   Menu,
   X,
   Camera,
+  Sunrise,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-export type AdminView = 'dashboard' | 'projects' | 'agent' | 'generate' | 'manual-post' | 'review' | 'publish' | 'calendar' | 'chat' | 'blog' | 'settings';
+export type AdminView = 'daily-brief' | 'dashboard' | 'projects' | 'agent' | 'generate' | 'manual-post' | 'review' | 'publish' | 'calendar' | 'chat' | 'blog' | 'settings';
 
 interface SidebarProps {
   currentView: AdminView;
@@ -32,6 +33,7 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS: Array<{ view: AdminView; label: string; icon: React.ElementType }> = [
+  { view: 'daily-brief', label: 'Daily brief', icon: Sunrise },
   { view: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { view: 'projects', label: 'Projekty', icon: FolderKanban },
   { view: 'agent', label: 'Agent Hugo', icon: Bot },

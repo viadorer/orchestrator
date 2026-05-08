@@ -3,6 +3,7 @@ import { fetchAllRssFeeds } from '@/lib/rss/fetcher';
 import { supabase } from '@/lib/supabase/client';
 import { acquireCronLock } from '@/lib/api/cron-lock';
 import { verifyCronSecret } from '@/lib/api/verify-cron';
+import { logError } from '@/lib/api/error-log';
 import { NextResponse } from 'next/server';
 
 /**
@@ -51,8 +52,8 @@ export async function GET(request: Request) {
     let rssResult = { sources_checked: 0, total_added: 0, total_errors: 0 };
     try {
       rssResult = await fetchAllRssFeeds();
-    } catch {
-      // RSS fetch failed, continue
+    } catch (err) {
+      await logError(err, { source: 'cron-agent.rss_fetch' });
     }
 
     // 5. Friday topic suggestions (Fri 8-10 CET)
@@ -69,8 +70,8 @@ export async function GET(request: Request) {
     let engagementResult = { posts_checked: 0, metrics_updated: 0 };
     try {
       engagementResult = await fetchEngagementMetrics();
-    } catch {
-      // Engagement fetch failed, continue
+    } catch (err) {
+      await logError(err, { source: 'cron-agent.engagement' });
     }
 
     const duration = Date.now() - startTime;

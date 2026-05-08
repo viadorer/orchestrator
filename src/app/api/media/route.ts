@@ -22,16 +22,22 @@ export async function GET(request: Request) {
   const processed = searchParams.get('processed');
   const shared = searchParams.get('shared');
   const includeShared = searchParams.get('include_shared');
-  const limit = parseInt(searchParams.get('limit') || '50', 10);
+  const source = searchParams.get('source'); // 'upload' | 'imagen_generated'
+  const all = searchParams.get('all');       // 'true' → library-wide (no project filter)
+  const limit = Math.min(500, parseInt(searchParams.get('limit') || '50', 10));
 
   let query = supabase
     .from('media_assets')
-    .select('*')
+    // Skip embedding (vector(768) — large per-row payload that callers never use here).
+    .select('id, project_id, storage_path, public_url, file_name, file_type, mime_type, file_size, width, height, ai_description, ai_tags, ai_mood, ai_scene, ai_quality_score, manual_tags, is_shared, is_processed, source, times_used, last_used_at, created_at, projects(name, slug)')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  if (shared === 'true') {
+  if (all === 'true') {
+    // Library-wide listing — used by the "Fotky" sidebar tab to browse every
+    // photo across projects. We still apply file_type / source filters below.
+  } else if (shared === 'true') {
     // Only shared library
     query = query.eq('is_shared', true);
   } else if (projectId && includeShared === 'true') {
@@ -43,6 +49,7 @@ export async function GET(request: Request) {
   }
 
   if (fileType) query = query.eq('file_type', fileType);
+  if (source) query = query.eq('source', source);
   if (processed === 'true') query = query.eq('is_processed', true);
   if (processed === 'false') query = query.eq('is_processed', false);
 

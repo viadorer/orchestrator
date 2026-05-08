@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Sidebar, type AdminView } from '@/components/layout/Sidebar';
 import { DailyBriefView } from '@/components/daily-brief/DailyBriefView';
 import { DashboardView } from '@/components/dashboard/DashboardView';
+import { PhotosGalleryView } from '@/components/photos/PhotosGalleryView';
 import { ProjectsView } from '@/components/projects/ProjectsView';
 import { GenerateView } from '@/components/generate/GenerateView';
 import { ReviewView } from '@/components/review/ReviewView';
@@ -60,6 +61,7 @@ export default function Home() {
         {view === 'review' && <ReviewView />}
         {view === 'publish' && <PublishView />}
         {view === 'calendar' && <CalendarView />}
+        {view === 'photos' && <PhotosGalleryView />}
         {view === 'chat' && <ChatView />}
         {view === 'blog' && <BlogView />}
         {view === 'settings' && <SettingsView />}

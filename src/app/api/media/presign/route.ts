@@ -3,7 +3,7 @@ import { getR2PresignedUploadUrl, getR2PublicUrl, isR2Configured } from '@/lib/s
 import { processMediaAsset } from '@/lib/ai/vision-engine';
 import { requireAuth } from '@/lib/api/require-auth';
 import { checkRateLimit } from '@/lib/api/rate-limit';
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -182,14 +182,27 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: `Max ${MAX_FILES_PER_REQUEST} asset_ids per request` }, { status: 400 });
   }
 
-  // Trigger AI analysis for each confirmed asset (fire-and-forget)
-  let queued = 0;
-  for (const id of asset_ids) {
-    processMediaAsset(id).catch(err =>
-      console.error(`[presign] AI analysis failed for ${id}:`, err)
-    );
-    queued++;
-  }
+  // Schedule AI analysis to run AFTER the response is sent.
+  // next/server `after()` keeps the function alive until the work finishes —
+  // plain fire-and-forget gets cancelled in Vercel serverless.
+  // Cap concurrency at 3 so we don't blast the Gemini Vision quota.
+  const ids = [...asset_ids];
+  after(async () => {
+    const CONCURRENCY = 3;
+    const queue = [...ids];
+    const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const id = queue.shift();
+        if (!id) break;
+        try {
+          await processMediaAsset(id);
+        } catch (err) {
+          console.error(`[presign] AI analysis failed for ${id}:`, err instanceof Error ? err.message : err);
+        }
+      }
+    });
+    await Promise.all(workers);
+  });
 
-  return NextResponse.json({ confirmed: asset_ids.length, analysis_queued: queued });
+  return NextResponse.json({ confirmed: asset_ids.length, analysis_queued: ids.length });
 }

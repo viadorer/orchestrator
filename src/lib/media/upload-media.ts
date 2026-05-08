@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase/client';
 import { storage } from '@/lib/storage';
 import { processMediaAsset } from '@/lib/ai/vision-engine';
 import { normalizeImage } from '@/lib/media/normalize-image';
+import { after } from 'next/server';
 
 export interface UploadOptions {
   projectId: string;
@@ -88,11 +89,18 @@ export async function uploadMediaFile(file: File, options: UploadOptions): Promi
       return { file_name: file.name, success: false, error: dbError.message };
     }
 
-    // Fire-and-forget AI analysis
+    // Schedule AI analysis to run AFTER the response is sent.
+    // next/server `after()` survives the function exit in Vercel serverless;
+    // plain fire-and-forget gets cancelled.
     if (options.autoAnalyze !== false && asset.id) {
-      processMediaAsset(asset.id).catch(err =>
-        console.error(`[upload-media] Async analysis failed for ${asset.id}:`, err)
-      );
+      const analysisAssetId = asset.id as string;
+      after(async () => {
+        try {
+          await processMediaAsset(analysisAssetId);
+        } catch (err) {
+          console.error(`[upload-media] AI analysis failed for ${analysisAssetId}:`, err instanceof Error ? err.message : err);
+        }
+      });
     }
 
     return { file_name: file.name, success: true, asset_id: asset.id, public_url: publicUrl };

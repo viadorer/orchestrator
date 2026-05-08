@@ -64,8 +64,9 @@ interface UploadEntry {
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 /** Threshold above which we use direct R2 presigned upload (bypass server body limit). */
 const DIRECT_UPLOAD_THRESHOLD = 8 * 1024 * 1024; // 8 MB
-const POLL_INTERVAL_MS = 4000;
-const POLL_TIMEOUT_MS = 120_000; // longer for videos — vision analysis takes longer
+/** Polling cadence + budget for AI tagging completion. */
+const POLL_INTERVAL_MS = 1500;          // tighter than 4s — Gemini Vision typically ~3-5s
+const POLL_TIMEOUT_MS = 180_000;        // 3 min — covers Gemini retries + cron pickup window
 
 /** Soft warning thresholds for videos (we still allow them — just inform the user). */
 const VIDEO_RECOMMENDED_MAX_BYTES = 100 * 1024 * 1024; // 100 MB

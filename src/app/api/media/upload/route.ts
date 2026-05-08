@@ -3,6 +3,7 @@ import { storage } from '@/lib/storage';
 import { processMediaAsset } from '@/lib/ai/vision-engine';
 import { normalizeImage } from '@/lib/media/normalize-image';
 import { NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { requireAuth } from '@/lib/api/require-auth';
 import { checkRateLimit } from '@/lib/api/rate-limit';
 
@@ -170,11 +171,19 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Fire-and-forget AI analysis (Gemini Vision + embedding generation)
+      // Schedule AI analysis to run AFTER the response is sent to the client.
+      // next/server `after()` guarantees the work completes even though the
+      // response is already streamed — fire-and-forget would be cancelled when
+      // the function exits in Vercel serverless.
       if (autoAnalyze && asset.id) {
-        processMediaAsset(asset.id).catch(err =>
-          console.error(`[upload] Async analysis failed for ${asset.id}:`, err)
-        );
+        const analysisAssetId = asset.id as string;
+        after(async () => {
+          try {
+            await processMediaAsset(analysisAssetId);
+          } catch (err) {
+            console.error(`[upload] AI analysis failed for ${analysisAssetId}:`, err instanceof Error ? err.message : err);
+          }
+        });
       }
 
       results.push({ file_name: file.name, success: true, asset_id: asset.id, public_url: publicUrl });

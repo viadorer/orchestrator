@@ -241,7 +241,14 @@ export async function processMediaAsset(assetId: string): Promise<boolean> {
 // Batch process unprocessed assets
 // ============================================
 
-export async function processUntaggedMedia(limit = 20): Promise<{ processed: number; failed: number }> {
+/**
+ * Batch process unprocessed assets with bounded concurrency.
+ *
+ * Concurrency is capped so we don't burst-blast the Gemini Vision quota
+ * (free tier: 15 RPM, paid tier: ~1000 RPM). 5 concurrent calls × ~4s
+ * average = ~75 RPM headroom, safe for either tier.
+ */
+export async function processUntaggedMedia(limit = 20, concurrency = 5): Promise<{ processed: number; failed: number }> {
   if (!supabase) return { processed: 0, failed: 0 };
 
   const { data: assets } = await supabase
@@ -254,15 +261,23 @@ export async function processUntaggedMedia(limit = 20): Promise<{ processed: num
 
   if (!assets || assets.length === 0) return { processed: 0, failed: 0 };
 
+  const queue: string[] = assets.map(a => a.id as string);
   let processed = 0;
   let failed = 0;
 
-  for (const asset of assets) {
-    const success = await processMediaAsset(asset.id);
-    if (success) processed++;
-    else failed++;
-  }
+  // Worker pool — each worker pulls from the shared queue until empty.
+  const workerCount = Math.min(concurrency, queue.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (queue.length > 0) {
+      const id = queue.shift();
+      if (!id) break;
+      const success = await processMediaAsset(id);
+      if (success) processed++;
+      else failed++;
+    }
+  });
 
+  await Promise.all(workers);
   return { processed, failed };
 }
 

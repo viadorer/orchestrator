@@ -29,6 +29,7 @@ import {
   ArrowLeft,
   Film,
 } from 'lucide-react';
+import { resizeImageForUpload, isClientResizable } from '@/lib/media/client-resize';
 
 type UploadStatus = 'queued' | 'uploading' | 'tagging' | 'tagged' | 'failed';
 
@@ -47,6 +48,8 @@ interface UploadEntry {
   /** 0–100 upload progress for direct R2 uploads (presigned flow) */
   progress?: number;
   errorMessage?: string;
+  /** Soft warning shown alongside other states (oversize video, long duration, etc.) */
+  warningMessage?: string;
   /** Asset row id once uploaded */
   assetId?: string;
   /** Public R2 / Supabase URL */
@@ -61,8 +64,32 @@ interface UploadEntry {
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 /** Threshold above which we use direct R2 presigned upload (bypass server body limit). */
 const DIRECT_UPLOAD_THRESHOLD = 8 * 1024 * 1024; // 8 MB
-const POLL_INTERVAL_MS = 4000;
-const POLL_TIMEOUT_MS = 120_000; // longer for videos — vision analysis takes longer
+/** Polling cadence + budget for AI tagging completion. */
+const POLL_INTERVAL_MS = 1500;          // tighter than 4s — Gemini Vision typically ~3-5s
+const POLL_TIMEOUT_MS = 180_000;        // 3 min — covers Gemini retries + cron pickup window
+
+/** Soft warning thresholds for videos (we still allow them — just inform the user). */
+const VIDEO_RECOMMENDED_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+const VIDEO_RECOMMENDED_MAX_SECONDS = 180; // 3 minutes — covers IG Reels (90s) + TikTok (10m) safely
+
+/** Probe a video file for duration (returns NaN if unreadable). */
+async function probeVideoDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => {
+      const d = v.duration;
+      URL.revokeObjectURL(url);
+      resolve(Number.isFinite(d) ? d : NaN);
+    };
+    v.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(NaN);
+    };
+    v.src = url;
+  });
+}
 
 function detectKind(file: File): 'image' | 'video' {
   if (file.type.startsWith('video/')) return 'video';
@@ -96,7 +123,7 @@ export default function MobileUploadPage() {
     if (!fileList || fileList.length === 0) return;
     const files = Array.from(fileList);
 
-    // Reject oversized up-front so the user gets immediate feedback.
+    // Render placeholder cards immediately so the user sees feedback.
     const newEntries: UploadEntry[] = files.map((file) => ({
       key: crypto.randomUUID(),
       name: file.name,
@@ -113,15 +140,53 @@ export default function MobileUploadPage() {
 
     // Upload sequentially so a 4G connection doesn't choke; preserves order.
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+      const original = files[i];
       const entry = newEntries[i];
       if (entry.status === 'failed') continue;
 
-      // Big files (videos) bypass the Vercel function body limit via direct R2 PUT.
-      if (file.size > DIRECT_UPLOAD_THRESHOLD) {
-        await uploadDirectToR2(entry.key, file);
+      // Step 1 — preprocess on the client when possible (cheap, fast, saves bandwidth).
+      let prepared = original;
+
+      if (entry.kind === 'image' && isClientResizable(original)) {
+        // Resize to ≤ 2160 px and re-encode as JPEG q=85.
+        // HEIC + GIF + SVG fall through to server-side normalization.
+        try {
+          prepared = await resizeImageForUpload(original);
+          if (prepared !== original) {
+            // Update card with new size + preview.
+            updateEntry(entry.key, {
+              name: prepared.name,
+              size: prepared.size,
+              previewUrl: URL.createObjectURL(prepared),
+            });
+          }
+        } catch {
+          // If anything goes wrong, fall back to the original — never block the upload.
+          prepared = original;
+        }
+      } else if (entry.kind === 'video') {
+        // Soft validation: warn the user about size + duration but still upload.
+        const duration = await probeVideoDuration(original);
+        const warnings: string[] = [];
+        if (original.size > VIDEO_RECOMMENDED_MAX_BYTES) {
+          warnings.push(`${(original.size / 1024 / 1024).toFixed(0)} MB (doporučeno ≤ ${VIDEO_RECOMMENDED_MAX_BYTES / 1024 / 1024} MB)`);
+        }
+        if (Number.isFinite(duration) && duration > VIDEO_RECOMMENDED_MAX_SECONDS) {
+          warnings.push(`${Math.round(duration)} s (doporučeno ≤ ${VIDEO_RECOMMENDED_MAX_SECONDS} s)`);
+        }
+        if (warnings.length > 0) {
+          updateEntry(entry.key, {
+            warningMessage: `Velké video — ${warnings.join(', ')}. Nahraje se, ale nemusí projít na všechny sítě.`,
+          });
+        }
+      }
+
+      // Step 2 — route based on the prepared file size:
+      // ≤ 8 MB → server (single round-trip); > 8 MB → direct R2 PUT (bypasses Vercel limit).
+      if (prepared.size > DIRECT_UPLOAD_THRESHOLD) {
+        await uploadDirectToR2(entry.key, prepared);
       } else {
-        await uploadViaServer(entry.key, file);
+        await uploadViaServer(entry.key, prepared);
       }
     }
   };
@@ -360,7 +425,8 @@ export default function MobileUploadPage() {
               otaguje a budou dostupné všem projektům.
             </p>
             <p className="text-[11px] text-slate-500 mt-3">
-              Fotky &lt; 8 MB jdou přes server. Videa a velké soubory přímo do R2.
+              Fotky se před uploadem zmenší na 2160 px (JPEG q85), HEIC převede
+              server. Velká videa jdou přímo do R2.
             </p>
           </div>
         ) : (
@@ -436,6 +502,13 @@ function UploadCard({ entry }: { entry: UploadEntry }) {
             <div className="mt-2 flex items-start gap-1.5 text-xs text-rose-400">
               <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
               <span>{entry.errorMessage}</span>
+            </div>
+          )}
+
+          {entry.status !== 'failed' && entry.warningMessage && (
+            <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-400">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+              <span>{entry.warningMessage}</span>
             </div>
           )}
 

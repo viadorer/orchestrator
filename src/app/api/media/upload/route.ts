@@ -1,7 +1,9 @@
 import { supabase } from '@/lib/supabase/client';
 import { storage } from '@/lib/storage';
 import { processMediaAsset } from '@/lib/ai/vision-engine';
+import { normalizeImage } from '@/lib/media/normalize-image';
 import { NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { requireAuth } from '@/lib/api/require-auth';
 import { checkRateLimit } from '@/lib/api/rate-limit';
 
@@ -108,10 +110,10 @@ export async function POST(request: Request) {
     try {
       // Read file as buffer
       const arrayBuf = await file.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuf);
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const originalBuffer = Buffer.from(arrayBuf);
+      const originalSafeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
 
-      // Determine file type
+      // Determine file type from original MIME (pre-normalization)
       let fileType = 'image';
       if (file.type.startsWith('video/')) fileType = 'video';
       else if (file.type === 'application/pdf') fileType = 'document';
@@ -120,11 +122,18 @@ export async function POST(request: Request) {
       // Determine folder based on file type
       const folder = fileType === 'video' ? 'videos' : fileType === 'document' ? 'documents' : 'photos';
 
+      // Normalize images for social-network delivery:
+      // HEIC→JPEG, EXIF auto-rotate, resize to ≤2160px long side, JPEG q=85, strip metadata.
+      // Videos and documents pass through unchanged.
+      const normalized = (fileType === 'image' || fileType === 'graphic')
+        ? await normalizeImage(originalBuffer, originalSafeName, file.type)
+        : { buffer: originalBuffer, contentType: file.type, fileName: originalSafeName, width: 0, height: 0, modified: false };
+
       // Upload to storage (Cloudflare R2 or Supabase fallback)
-      const uploadResult = await storage.upload(Buffer.from(buffer), safeName, {
+      const uploadResult = await storage.upload(normalized.buffer, normalized.fileName, {
         projectId: effectiveProjectId,
         folder,
-        contentType: file.type,
+        contentType: normalized.contentType,
       });
 
       if (!uploadResult.success) {
@@ -135,16 +144,18 @@ export async function POST(request: Request) {
       const storagePath = uploadResult.key;
       const publicUrl = uploadResult.public_url || '';
 
-      // Insert into media_assets
+      // Insert into media_assets — record normalized dimensions/size for the library matcher.
       const insertData: Record<string, unknown> = {
         project_id: projectId,
         storage_path: storagePath,
         public_url: publicUrl,
-        file_name: file.name,
+        file_name: file.name, // original name preserved for display
         file_type: fileType,
-        mime_type: file.type,
-        file_size: file.size,
+        mime_type: normalized.contentType,
+        file_size: normalized.buffer.length,
       };
+      if (normalized.width) insertData.width = normalized.width;
+      if (normalized.height) insertData.height = normalized.height;
       if (manualTags.length > 0) insertData.manual_tags = manualTags;
       if (description) insertData.ai_description = description;
       if (isShared) insertData.is_shared = true;
@@ -160,11 +171,19 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Fire-and-forget AI analysis (Gemini Vision + embedding generation)
+      // Schedule AI analysis to run AFTER the response is sent to the client.
+      // next/server `after()` guarantees the work completes even though the
+      // response is already streamed — fire-and-forget would be cancelled when
+      // the function exits in Vercel serverless.
       if (autoAnalyze && asset.id) {
-        processMediaAsset(asset.id).catch(err =>
-          console.error(`[upload] Async analysis failed for ${asset.id}:`, err)
-        );
+        const analysisAssetId = asset.id as string;
+        after(async () => {
+          try {
+            await processMediaAsset(analysisAssetId);
+          } catch (err) {
+            console.error(`[upload] AI analysis failed for ${analysisAssetId}:`, err instanceof Error ? err.message : err);
+          }
+        });
       }
 
       results.push({ file_name: file.name, success: true, asset_id: asset.id, public_url: publicUrl });

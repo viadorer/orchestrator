@@ -5,17 +5,21 @@
  * device. Saves bandwidth and Vercel function memory, gets uploads under the
  * 8 MB threshold so the simple server route can handle them.
  *
+ * Two-track decoding strategy (iOS Safari needs both):
+ *   1. Try `createImageBitmap` with EXIF auto-rotation. Fastest path; works
+ *      on Chrome, Firefox, Safari ≥ 14.5 for plain JPEG/PNG.
+ *   2. If that throws (Safari sometimes refuses iPhone JPEGs that have a
+ *      HEIF container disguised as .jpeg, or when memory is tight), fall back
+ *      to HTMLImageElement → drawImage. Slightly slower but works everywhere
+ *      and never throws on a valid image.
+ *
+ * Encoding is forced through HTMLCanvasElement on Safari because OffscreenCanvas
+ * `.convertToBlob()` is flaky in some iOS versions.
+ *
  * Limitations:
- *   - HEIC: browsers cannot decode HEIC. We pass HEIC through unchanged and
- *     let server normalize it via Sharp/libheif.
+ *   - HEIC: even the fallback can't decode HEIC. Falls through to server.
  *   - GIF / SVG: passed through (would lose animation / become raster).
  *   - Videos: never touched here.
- *
- * Algorithm:
- *   1. Decode the file via createImageBitmap (handles EXIF auto-rotate in Safari/Chrome).
- *   2. Compute a target size such that max(width, height) ≤ MAX_LONG_SIDE.
- *   3. Draw onto an OffscreenCanvas (or HTMLCanvasElement fallback).
- *   4. Encode as JPEG quality 0.85.
  */
 
 const MAX_LONG_SIDE = 2160;
@@ -45,70 +49,99 @@ export async function resizeImageForUpload(file: File): Promise<File> {
   if (!isClientResizable(file)) return file;
   if (file.size <= RESIZE_THRESHOLD_BYTES) return file;
 
+  // Strategy 1: createImageBitmap (fast, native)
   try {
-    // imageOrientation: 'from-image' makes Safari + Chrome respect EXIF rotation.
     const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-
-    const longSide = Math.max(bitmap.width, bitmap.height);
-    if (longSide <= MAX_LONG_SIDE) {
-      // Already small enough — but re-encode anyway to drop EXIF + standardise to JPEG.
-      // (Keeps the upload pipeline predictable.)
-    }
-
-    const scale = Math.min(1, MAX_LONG_SIDE / longSide);
-    const targetW = Math.round(bitmap.width * scale);
-    const targetH = Math.round(bitmap.height * scale);
-
-    const canvas = createCanvas(targetW, targetH);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      bitmap.close?.();
-      return file;
-    }
-
-    // Better quality downscale than Canvas's default linear filter.
-    if ('imageSmoothingQuality' in ctx) {
-      (ctx as CanvasRenderingContext2D).imageSmoothingQuality = 'high';
-    }
-    ctx.drawImage(bitmap, 0, 0, targetW, targetH);
+    const result = await encodeFromSource(bitmap, file.name, bitmap.width, bitmap.height);
     bitmap.close?.();
-
-    const blob = await canvasToBlob(canvas, 'image/jpeg', JPEG_QUALITY);
-    if (!blob || blob.size >= file.size) {
-      // Resize made it bigger (rare — small input, large alpha PNG, etc.) — keep original.
-      return file;
-    }
-
-    const baseName = stripExtension(file.name);
-    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+    if (result && result.size < file.size) return result;
   } catch (err) {
-    console.warn('[client-resize] Failed to resize, uploading original:', err instanceof Error ? err.message : err);
-    return file;
+    console.warn('[client-resize] createImageBitmap failed, falling back to <img>:', err instanceof Error ? err.message : err);
+  }
+
+  // Strategy 2: HTMLImageElement fallback (works on Safari for HEIF-container JPEGs
+  // and any case where createImageBitmap chokes on memory or codec).
+  try {
+    const result = await decodeViaImageElement(file);
+    if (result && result.size < file.size) return result;
+  } catch (err) {
+    console.warn('[client-resize] <img> fallback failed, uploading original:', err instanceof Error ? err.message : err);
+  }
+
+  // Both strategies failed or made the file bigger — return original.
+  return file;
+}
+
+// ─── Encoding pipeline ─────────────────────────────────────
+
+type DecodedSource = ImageBitmap | HTMLImageElement;
+
+async function encodeFromSource(
+  source: DecodedSource,
+  originalName: string,
+  width: number,
+  height: number,
+): Promise<File | null> {
+  const longSide = Math.max(width, height);
+  const scale = Math.min(1, MAX_LONG_SIDE / longSide);
+  const targetW = Math.round(width * scale);
+  const targetH = Math.round(height * scale);
+
+  // Always use HTMLCanvasElement — OffscreenCanvas.convertToBlob is unreliable
+  // on iOS Safari, especially with large images. Slight perf hit, big stability gain.
+  const canvas = document.createElement('canvas');
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, targetW, targetH);
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((b) => resolve(b), 'image/jpeg', JPEG_QUALITY);
+  });
+  if (!blob) return null;
+
+  const baseName = stripExtension(originalName);
+  return new File([blob], `${baseName}.jpg`, {
+    type: 'image/jpeg',
+    lastModified: Date.now(),
+  });
+}
+
+/**
+ * Decode an image File via HTMLImageElement. This path handles Safari quirks
+ * (HEIF-in-JPEG containers, missing OrientationParser, OOM in createImageBitmap).
+ *
+ * Note: HTMLImageElement applies EXIF auto-rotation natively in Safari ≥ 14
+ * and Chrome ≥ 81, so the resulting canvas is upright without extra work.
+ */
+async function decodeViaImageElement(file: File): Promise<File | null> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImageElement(url);
+    return await encodeFromSource(img, file.name, img.naturalWidth || img.width, img.naturalHeight || img.height);
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }
 
-// ─── Canvas helpers ─────────────────────────────────────────
-
-type AnyCanvas = HTMLCanvasElement | OffscreenCanvas;
-
-function createCanvas(w: number, h: number): AnyCanvas {
-  if (typeof OffscreenCanvas !== 'undefined') {
-    return new OffscreenCanvas(w, h);
-  }
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  return c;
-}
-
-async function canvasToBlob(canvas: AnyCanvas, type: string, quality: number): Promise<Blob | null> {
-  if ('convertToBlob' in canvas) {
-    // OffscreenCanvas
-    return canvas.convertToBlob({ type, quality });
-  }
-  // HTMLCanvasElement
-  return new Promise((resolve) => {
-    (canvas as HTMLCanvasElement).toBlob((b) => resolve(b), type, quality);
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => {
+      // decode() returns a promise that resolves once the bitmap is fully ready,
+      // avoiding race conditions when drawn to canvas immediately.
+      if (typeof img.decode === 'function') {
+        img.decode().then(() => resolve(img)).catch(() => resolve(img));
+      } else {
+        resolve(img);
+      }
+    };
+    img.onerror = (e) => reject(e instanceof Error ? e : new Error('Image load failed'));
+    img.src = src;
   });
 }
 

@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import { getR2PresignedUploadUrl, getR2PublicUrl, isR2Configured } from '@/lib/storage/cloudflare-r2';
 import { processMediaAsset } from '@/lib/ai/vision-engine';
+import { normalizeAssetIfNeeded } from '@/lib/media/post-upload-normalize';
 import { requireAuth } from '@/lib/api/require-auth';
 import { checkRateLimit } from '@/lib/api/rate-limit';
 import { NextResponse, after } from 'next/server';
@@ -182,10 +183,19 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: `Max ${MAX_FILES_PER_REQUEST} asset_ids per request` }, { status: 400 });
   }
 
-  // Schedule AI analysis to run AFTER the response is sent.
-  // next/server `after()` keeps the function alive until the work finishes —
+  // Schedule background work to run AFTER the response is sent.
+  // next/server `after()` keeps the function alive until completion —
   // plain fire-and-forget gets cancelled in Vercel serverless.
-  // Cap concurrency at 3 so we don't blast the Gemini Vision quota.
+  //
+  // For each confirmed asset we run two stages, in this order:
+  //   1. Normalize: download from R2, run Sharp resize/HEIC→JPEG/EXIF strip,
+  //      re-upload the smaller version, update file_size + dimensions.
+  //      This catches the gap where direct-to-R2 uploads bypass the server
+  //      route's normalize step (large iPhone HEICs especially).
+  //   2. AI analysis: Gemini Vision tags + embedding. Runs against the
+  //      already-normalized URL so vision sees the smaller image.
+  //
+  // Concurrency capped at 3 so we don't burst the Gemini quota.
   const ids = [...asset_ids];
   after(async () => {
     const CONCURRENCY = 3;
@@ -194,6 +204,13 @@ export async function PATCH(request: Request) {
       while (queue.length > 0) {
         const id = queue.shift();
         if (!id) break;
+        // Normalize first — best-effort, never blocks AI tagging on failure.
+        try {
+          await normalizeAssetIfNeeded(id);
+        } catch (err) {
+          console.error(`[presign] Normalize failed for ${id}:`, err instanceof Error ? err.message : err);
+        }
+        // Then AI analysis on the (possibly smaller) asset.
         try {
           await processMediaAsset(id);
         } catch (err) {
@@ -204,5 +221,9 @@ export async function PATCH(request: Request) {
     await Promise.all(workers);
   });
 
-  return NextResponse.json({ confirmed: asset_ids.length, analysis_queued: ids.length });
+  return NextResponse.json({
+    confirmed: asset_ids.length,
+    normalize_queued: ids.length,
+    analysis_queued: ids.length,
+  });
 }

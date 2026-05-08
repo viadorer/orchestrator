@@ -30,10 +30,12 @@ interface BriefData {
     scheduled_today: number;
     failed_24h: number;
     errors_24h: number;
+    orphans: number;
   };
   review_queue: QueueItem[];
   scheduled_today: QueueItem[];
   failed_recent: QueueItem[];
+  orphans: Array<QueueItem & { sent_at: string; late_post_id: string }>;
   errors_by_source: Record<string, number>;
   errors_recent: ErrorItem[];
   cron: {
@@ -80,7 +82,11 @@ export function DailyBriefView() {
   }
 
   const greeting = getGreeting();
-  const hasIssues = data.counts.failed_24h > 0 || data.counts.errors_24h > 0 || !data.cron.healthy;
+  const hasIssues =
+    data.counts.failed_24h > 0 ||
+    data.counts.errors_24h > 0 ||
+    data.counts.orphans > 0 ||
+    !data.cron.healthy;
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -114,6 +120,9 @@ export function DailyBriefView() {
               )}
               {data.counts.errors_24h > 0 && (
                 <li>• {data.counts.errors_24h} chyb v systému (zdroje: {Object.keys(data.errors_by_source).join(', ')})</li>
+              )}
+              {data.counts.orphans > 0 && (
+                <li>• {data.counts.orphans}× post v limbu — odeslán do getLate, ale potvrzení nedorazilo (ověř ručně v dashboardu)</li>
               )}
               {!data.cron.healthy && (
                 <li>• Cron Hugo neproběhl v posledních 90 minutách (poslední: {data.cron.last_run ? formatRelative(new Date(data.cron.last_run)) : 'nikdy'})</li>

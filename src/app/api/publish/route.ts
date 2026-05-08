@@ -5,6 +5,7 @@ import { ensureImageAspectRatio } from '@/lib/visual/image-resize';
 import { resolveTemplateToStaticUrl } from '@/lib/visual/resolve-template';
 import { validateImageUrl } from '@/lib/utils/validate-image-url';
 import { logError } from '@/lib/api/error-log';
+import { withRetry, classifyRetryable } from '@/lib/api/retry';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api/require-auth';
 import { safeParseJson, validateBody, publishSchema } from '@/lib/api/validate';
@@ -277,18 +278,44 @@ export async function POST(request: Request) {
       });
 
       const publisher = getPublisher();
-      const publishResult = await publisher.publish({
-        content: post.text_content,
-        platforms: platformsWithFirstComment,
-        mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
-        scheduledFor: scheduledFor || post.scheduled_for || undefined,
-        timezone: 'Europe/Prague',
-      });
-
-      if (!publishResult.ok) {
-        console.error(`[publish] getLate error for post ${post.id}:`, publishResult.error);
-        throw new Error(publishResult.error);
+      // Skip if a previous attempt already succeeded — webhook may have been delayed.
+      // Avoids re-publishing the same content after a transient error.
+      if (post.late_post_id) {
+        console.log(`[publish] Post ${post.id} already has late_post_id=${post.late_post_id}, skipping re-send`);
+        results.push({ id: post.id, status: 'sent', late_post_id: post.late_post_id });
+        continue;
       }
+
+      // Retry with exponential backoff (5s, 10s, 20s) for transient failures.
+      // Permanent errors (4xx) bail immediately. getLate's idempotency-by-content
+      // means accidental double-sends are safe but still wasteful — skip + retry helps.
+      const publishResult = await withRetry(
+        async () => {
+          const result = await publisher.publish({
+            content: post.text_content,
+            platforms: platformsWithFirstComment,
+            mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
+            scheduledFor: scheduledFor || post.scheduled_for || undefined,
+            timezone: 'Europe/Prague',
+          });
+          if (!result.ok) {
+            // Throw so withRetry can classify the error message.
+            throw new Error(result.error);
+          }
+          return result;
+        },
+        {
+          maxAttempts: 3,
+          baseDelayMs: 5_000,
+          onAttemptFailed: (attempt, err, retryable) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(
+              `[publish] Attempt ${attempt}/3 for post ${post.id} failed (retryable=${retryable}): ${msg.substring(0, 200)}`,
+            );
+          },
+        },
+      );
+
       console.log(`[publish] Post ${post.id} published OK: status=${publishResult.data.status}, externalId=${publishResult.data.externalId}`);
 
       await supabase
@@ -298,6 +325,9 @@ export async function POST(request: Request) {
           sent_at: publishResult.data.status === 'sent' ? new Date().toISOString() : null,
           scheduled_for: scheduledFor || null,
           late_post_id: publishResult.data.externalId,
+          publish_attempts: 0,
+          last_publish_error: null,
+          last_publish_attempt_at: new Date().toISOString(),
         })
         .eq('id', post.id);
 
@@ -323,10 +353,29 @@ export async function POST(request: Request) {
       results.push({ id: post.id, status: publishResult.data.status, late_post_id: publishResult.data.externalId });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
+
+      // Decide whether to give up (permanent) or hold the post in 'approved'
+      // for the next cron retry pass (transient).
+      // Transient errors after 3 retries usually mean getLate is having a
+      // longer outage — better to retry on next cron run than mark failed.
+      const retryable = classifyRetryable(err);
+      const newAttempts = (post.publish_attempts ?? 0) + 1;
+      const MAX_TOTAL_ATTEMPTS = 5; // retries across cron runs
+
+      // Permanent OR exceeded total attempts → failed.
+      const giveUp = !retryable || newAttempts >= MAX_TOTAL_ATTEMPTS;
+      const newStatus = giveUp ? 'failed' : 'approved';
+
       await supabase
         .from('content_queue')
-        .update({ status: 'failed' })
+        .update({
+          status: newStatus,
+          publish_attempts: newAttempts,
+          last_publish_error: message.substring(0, 500),
+          last_publish_attempt_at: new Date().toISOString(),
+        })
         .eq('id', post.id);
+
       // Persistent error log for admin visibility
       await logError(err, {
         source: 'publish',
@@ -337,9 +386,19 @@ export async function POST(request: Request) {
           template_url: post.template_url || null,
           has_static_image: !!post.static_image_url,
           has_image_url: !!post.image_url,
+          attempt: newAttempts,
+          retryable,
+          gave_up: giveUp,
         },
       });
-      results.push({ id: post.id, status: 'failed', error: message });
+
+      results.push({
+        id: post.id,
+        status: newStatus,
+        error: giveUp
+          ? message
+          : `${message} (attempt ${newAttempts}/${MAX_TOTAL_ATTEMPTS}, will retry)`,
+      });
     }
   }
 

@@ -1,5 +1,6 @@
 import { embedPostsForDedup } from '@/lib/ai/agent-orchestrator';
 import { processUntaggedMedia } from '@/lib/ai/vision-engine';
+import { detectOrphanedPosts } from '@/lib/api/orphan-detector';
 import { supabase } from '@/lib/supabase/client';
 import { acquireCronLock } from '@/lib/api/cron-lock';
 import { verifyCronSecret } from '@/lib/api/verify-cron';
@@ -13,6 +14,7 @@ import { NextResponse } from 'next/server';
  *
  * 1. AI-tag untagged media (Gemini Vision) — caps at 10 / cycle.
  * 2. Generate embeddings for cross-project dedup (pgvector) — caps at 30.
+ * 3. Detect "orphaned" posts: status='sent' but no webhook arrived in 2h.
  */
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -46,15 +48,21 @@ export async function GET(request: Request) {
       // Embedding failed, continue
     }
 
+    // 3. Detect orphaned posts (status='sent' for >2h with no webhook).
+    // Cheap query — just two indexed lookups + bulk update.
+    const orphanResult = await detectOrphanedPosts();
+
     const duration = Date.now() - startTime;
     const result = {
       media_processed: mediaResult.processed,
       media_failed: mediaResult.failed,
       posts_embedded: embedResult.embedded,
       embed_failed: embedResult.failed,
+      orphans_flagged: orphanResult.flagged,
+      orphans_scanned: orphanResult.scanned,
       duration_ms: duration,
       timestamp: new Date().toISOString(),
-      message: `Maintenance: ${mediaResult.processed} media tagged, ${embedResult.embedded} posts embedded.`,
+      message: `Maintenance: ${mediaResult.processed} media tagged, ${embedResult.embedded} embedded, ${orphanResult.flagged} orphans flagged.`,
     };
 
     if (supabase) {

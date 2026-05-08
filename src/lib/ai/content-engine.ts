@@ -521,6 +521,9 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
   // Read media_strategy from project's orchestrator_config
   const mediaOrchConfig = (project.orchestrator_config as Record<string, unknown>) || {};
   const mediaStrategy = (mediaOrchConfig.media_strategy as string) || 'auto';
+  // Per-project switch to suppress AI photo generation entirely (real-photo-only mode).
+  // Library matching still runs; if nothing matches, a placeholder is used instead of Imagen.
+  const disableImagen = mediaOrchConfig.disable_imagen === true;
 
   // Generate visual assets (chart/card/photo)
   if (mediaStrategy !== 'none' || req.forcePhoto) {
@@ -538,6 +541,7 @@ export async function generateContent(req: GenerateRequest): Promise<GeneratedCo
         photographyPreset: (visualIdentity.photography_preset as Record<string, unknown>) || null,
         mediaMatchThreshold: (mediaOrchConfig.media_match_threshold as number) || undefined,
         mediaStrategy,
+        disableImagen,
       });
       content.visual = visual;
       reasoning.visual_decision = {

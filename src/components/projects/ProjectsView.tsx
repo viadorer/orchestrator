@@ -253,6 +253,14 @@ export function ProjectsView() {
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
                     media: {(oc.media_strategy as string) || 'auto'}
                   </span>
+                  {oc.disable_imagen === true && (
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400"
+                      title="Pouze reálné fotky — AI generování je vypnuté"
+                    >
+                      jen reálné fotky
+                    </span>
+                  )}
                 </div>
               );
             })()}
@@ -509,7 +517,7 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
     enabled: true, posting_frequency: 'daily', posting_times: ['09:00', '15:00'],
     max_posts_per_day: 2, content_strategy: '4-1-1', auto_publish: false,
     auto_publish_threshold: 8.5, timezone: 'Europe/Prague', media_strategy: 'auto',
-    media_match_threshold: 0.30,
+    media_match_threshold: 0.30, disable_imagen: false,
     platforms_priority: [] as string[], pause_weekends: false,
   };
   const cfg = { ...defaults, ...(project.orchestrator_config || {}) } as typeof defaults;
@@ -523,6 +531,7 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
   const [timezone, setTimezone] = useState(cfg.timezone);
   const [mediaStrategy, setMediaStrategy] = useState(cfg.media_strategy);
   const [mediaMatchThreshold, setMediaMatchThreshold] = useState(cfg.media_match_threshold);
+  const [disableImagen, setDisableImagen] = useState(cfg.disable_imagen);
   const [pauseWeekends, setPauseWeekends] = useState(cfg.pause_weekends);
 
   const buildConfig = () => ({
@@ -533,6 +542,7 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
       max_posts_per_day: maxPerDay, content_strategy: cfg.content_strategy,
       auto_publish: autoPublish, auto_publish_threshold: threshold,
       timezone, media_strategy: mediaStrategy, media_match_threshold: mediaMatchThreshold,
+      disable_imagen: disableImagen,
       platforms_priority: cfg.platforms_priority, pause_weekends: pauseWeekends,
     },
   });
@@ -644,6 +654,36 @@ function TabOrchestrator({ project, onSave }: { project: Project; onSave: (f: Pa
                   <span>0.10 — volnější (více reálných)</span>
                   <span>0.60 — přísnější (více AI)</span>
                 </div>
+              </div>
+            )}
+
+            {/* AI photo generation kill-switch */}
+            {mediaStrategy !== 'none' && (
+              <div className="mt-3 p-3 rounded-lg bg-slate-800 border border-slate-700">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-white">Žádné AI fotky</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      Hugo použije jen reálné fotky z knihovny. Pokud nic neodpovídá,
+                      použije placeholder místo Imagen.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDisableImagen(!disableImagen)}
+                    className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${disableImagen ? 'bg-emerald-500' : 'bg-slate-600'}`}
+                    aria-pressed={disableImagen}
+                    aria-label={disableImagen ? 'Vypnout — povolit AI fotky' : 'Zapnout — zakázat AI fotky'}
+                  >
+                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${disableImagen ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+                {disableImagen && (
+                  <div className="mt-2 text-[11px] text-emerald-300/80 flex items-start gap-1">
+                    <span>•</span>
+                    <span>Doporučeno když máš 100+ reálných fotek v knihovně, jinak budou posty s placeholdery.</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

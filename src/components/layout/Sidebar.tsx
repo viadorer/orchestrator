@@ -19,8 +19,10 @@ import {
   FileText,
   Menu,
   X,
+  Camera,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 export type AdminView = 'dashboard' | 'projects' | 'agent' | 'generate' | 'manual-post' | 'review' | 'publish' | 'calendar' | 'chat' | 'blog' | 'settings';
 
@@ -164,6 +166,18 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
               </button>
             );
           })}
+
+          {/* Standalone routes — links into separate page shells (e.g. mobile
+              upload page that doesn't render the admin shell). */}
+          <Link
+            href="/upload"
+            onClick={() => setMobileOpen(false)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+            title={collapsed ? 'Nahrát fotku' : undefined}
+          >
+            <Camera className="w-5 h-5 flex-shrink-0" />
+            <span className={collapsed ? 'md:hidden' : ''}>Nahrát fotku</span>
+          </Link>
         </nav>
 
         {/* User */}

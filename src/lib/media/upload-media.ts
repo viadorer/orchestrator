@@ -6,6 +6,7 @@
 import { supabase } from '@/lib/supabase/client';
 import { storage } from '@/lib/storage';
 import { processMediaAsset } from '@/lib/ai/vision-engine';
+import { normalizeImage } from '@/lib/media/normalize-image';
 
 export interface UploadOptions {
   projectId: string;
@@ -30,10 +31,10 @@ export async function uploadMediaFile(file: File, options: UploadOptions): Promi
 
   try {
     const arrayBuf = await file.arrayBuffer();
-    const buffer = new Uint8Array(arrayBuf);
+    const originalBuffer = Buffer.from(arrayBuf);
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
 
-    // Determine file type
+    // Determine file type from original MIME (pre-normalization)
     let fileType = 'image';
     if (file.type.startsWith('video/')) fileType = 'video';
     else if (file.type === 'application/pdf') fileType = 'document';
@@ -41,11 +42,17 @@ export async function uploadMediaFile(file: File, options: UploadOptions): Promi
 
     const folder = fileType === 'video' ? 'videos' : fileType === 'document' ? 'documents' : 'photos';
 
+    // Normalize images for social-network delivery (HEIC→JPEG, resize, strip EXIF, q=85).
+    // Videos and documents pass through.
+    const normalized = (fileType === 'image' || fileType === 'graphic')
+      ? await normalizeImage(originalBuffer, safeName, file.type)
+      : { buffer: originalBuffer, contentType: file.type, fileName: safeName, width: 0, height: 0, modified: false };
+
     // Upload to storage (Cloudflare R2 or Supabase fallback)
-    const uploadResult = await storage.upload(Buffer.from(buffer), safeName, {
+    const uploadResult = await storage.upload(normalized.buffer, normalized.fileName, {
       projectId: options.projectId,
       folder,
-      contentType: file.type,
+      contentType: normalized.contentType,
     });
 
     if (!uploadResult.success) {
@@ -55,16 +62,18 @@ export async function uploadMediaFile(file: File, options: UploadOptions): Promi
     const storagePath = uploadResult.key;
     const publicUrl = uploadResult.public_url || '';
 
-    // Insert into media_assets
+    // Insert into media_assets — record normalized dimensions/size.
     const insertData: Record<string, unknown> = {
       project_id: options.projectId,
       storage_path: storagePath,
       public_url: publicUrl,
-      file_name: file.name,
+      file_name: file.name, // original display name
       file_type: fileType,
-      mime_type: file.type,
-      file_size: file.size,
+      mime_type: normalized.contentType,
+      file_size: normalized.buffer.length,
     };
+    if (normalized.width) insertData.width = normalized.width;
+    if (normalized.height) insertData.height = normalized.height;
     if (options.manualTags && options.manualTags.length > 0) insertData.manual_tags = options.manualTags;
     if (options.description) insertData.ai_description = options.description;
     if (options.isShared) insertData.is_shared = true;

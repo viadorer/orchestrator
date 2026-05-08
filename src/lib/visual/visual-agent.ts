@@ -54,6 +54,13 @@ interface VisualContext {
    * - 'none'           — caller short-circuits, generatePhotoVisual not called
    */
   mediaStrategy?: string;
+  /**
+   * When true, the AI generation step is skipped entirely. Real photos from the
+   * library are still preferred; if none match, a placeholder is returned.
+   * Use this for projects that must never publish AI-generated imagery
+   * (regulatory, brand-authenticity, or quality reasons).
+   */
+  disableImagen?: boolean;
 }
 
 /**
@@ -796,6 +803,22 @@ async function generatePhotoVisual(
       }
     }
     console.log('[visual-agent] prefer_library: exhausted library tiers, falling through to Imagen');
+  }
+
+  // Project opted out of AI photo generation — skip Imagen, fall through to placeholder.
+  // We still attempted both project + shared library tiers above; this just removes
+  // the Imagen step that would otherwise come next.
+  if (ctx.disableImagen) {
+    console.log('[visual-agent] disable_imagen=true — skipping Imagen, using placeholder');
+    const placeholderUrl = pickPlaceholderPhoto(ctx.text);
+    const templateUrl = buildPhotoTemplateUrl(placeholderUrl, ctx, { hookText, bodyText, subtitleText, templateKey: decision.template_key, aspectRatio: decision.aspect_ratio });
+    return {
+      visual_type: 'photo',
+      chart_url: null,
+      card_url: null,
+      image_prompt: cleanPrompt,
+      template_url: templateUrl,
+    };
   }
 
   // Step 3: Generate with Imagen 4 (last resort — AI photos are less authentic)

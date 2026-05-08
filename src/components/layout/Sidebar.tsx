@@ -21,11 +21,12 @@ import {
   X,
   Camera,
   Sunrise,
+  Images,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-export type AdminView = 'daily-brief' | 'dashboard' | 'projects' | 'agent' | 'generate' | 'manual-post' | 'review' | 'publish' | 'calendar' | 'chat' | 'blog' | 'settings';
+export type AdminView = 'daily-brief' | 'dashboard' | 'projects' | 'agent' | 'generate' | 'manual-post' | 'review' | 'publish' | 'calendar' | 'photos' | 'chat' | 'blog' | 'settings';
 
 interface SidebarProps {
   currentView: AdminView;
@@ -42,6 +43,7 @@ const NAV_ITEMS: Array<{ view: AdminView; label: string; icon: React.ElementType
   { view: 'review', label: 'Review', icon: ClipboardCheck },
   { view: 'publish', label: 'Publikovat', icon: Send },
   { view: 'calendar', label: 'Kalendář', icon: Calendar },
+  { view: 'photos', label: 'Fotky', icon: Images },
   { view: 'chat', label: 'Chat', icon: MessageCircle },
   { view: 'blog', label: 'Blog', icon: FileText },
   { view: 'settings', label: 'Nastavení', icon: Settings },

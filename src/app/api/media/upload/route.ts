@@ -14,15 +14,22 @@ export const dynamic = 'force-dynamic';
 
 /** Allowed MIME types */
 const ALLOWED_MIME_TYPES = new Set([
+  // Images (incl. iPhone native HEIC/HEIF)
   'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+  'image/heic', 'image/heif',
+  // Videos (iPhone records as MOV/quicktime)
   'video/mp4', 'video/quicktime', 'video/webm', 'video/avi', 'video/x-msvideo', 'video/x-matroska',
+  // Documents
   'application/pdf',
 ]);
 
-/** Allowed file extensions when MIME is generic (application/octet-stream from some browsers for videos) */
+/** Allowed file extensions when MIME is generic (application/octet-stream from iOS/some browsers) */
 const ALLOWED_FALLBACK_EXTENSIONS = new Set([
+  // Images
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'heic', 'heif',
+  // Videos
   'mp4', 'mov', 'webm', 'avi', 'mkv', 'm4v',
-  'jpg', 'jpeg', 'png', 'webp', 'gif', 'svg',
+  // Documents
   'pdf',
 ]);
 

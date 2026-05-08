@@ -1,15 +1,19 @@
 'use client';
 
 /**
- * Mobile photo upload — single-page app for iPhone home-screen use.
+ * Mobile photo + video upload — single-page app for iPhone home-screen use.
  *
  * Flow:
- *   1. User taps "Vyfotit" → iOS opens camera. Or "Z galerie" → photo library.
- *   2. Selected file(s) are uploaded to /api/media/upload with is_shared=true,
- *      so they land in the cross-project shared library on R2.
- *   3. Backend kicks off Gemini Vision tagging async (processMediaAsset).
- *   4. Page polls /api/media/[id] every 4s until is_processed=true,
- *      then renders the auto-detected description + tags.
+ *   1. User taps "Vyfotit", "Natočit video", or "Z galerie".
+ *   2a. Files ≤ 8 MB → /api/media/upload (server upload — fast, simple)
+ *   2b. Files > 8 MB → /api/media/presign + direct PUT to R2 (bypasses server)
+ *      → POST /api/media/presign with metadata
+ *      → PUT file directly to R2 using returned presigned URL
+ *      → PATCH /api/media/presign to confirm + trigger AI analysis
+ *   3. Backend kicks off Gemini Vision tagging async.
+ *   4. Page polls /api/media/[id] every 4s until is_processed=true.
+ *
+ * Supports iPhone formats: HEIC/HEIF photos, MOV videos.
  */
 
 import { useAuth } from '@/lib/auth/auth-context';
@@ -17,11 +21,13 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   Camera,
+  Video,
   Image as ImageIcon,
   Loader2,
   AlertCircle,
   Sparkles,
   ArrowLeft,
+  Film,
 } from 'lucide-react';
 
 type UploadStatus = 'queued' | 'uploading' | 'tagging' | 'tagged' | 'failed';
@@ -31,11 +37,15 @@ interface UploadEntry {
   key: string;
   /** Original file name */
   name: string;
+  /** image | video — drives preview rendering */
+  kind: 'image' | 'video';
   /** Local objectURL preview rendered immediately */
   previewUrl: string;
   /** Bytes */
   size: number;
   status: UploadStatus;
+  /** 0–100 upload progress for direct R2 uploads (presigned flow) */
+  progress?: number;
   errorMessage?: string;
   /** Asset row id once uploaded */
   assetId?: string;
@@ -47,15 +57,34 @@ interface UploadEntry {
   aiTags?: string[];
 }
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB — matches /api/media/upload
+/** Max single file size — matches /api/media/presign (500 MB for videos). */
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
+/** Threshold above which we use direct R2 presigned upload (bypass server body limit). */
+const DIRECT_UPLOAD_THRESHOLD = 8 * 1024 * 1024; // 8 MB
 const POLL_INTERVAL_MS = 4000;
-const POLL_TIMEOUT_MS = 60_000;
+const POLL_TIMEOUT_MS = 120_000; // longer for videos — vision analysis takes longer
+
+function detectKind(file: File): 'image' | 'video' {
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type.startsWith('image/')) return 'image';
+  // Fallback for iOS browsers that send application/octet-stream for HEIC/MOV
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (['mov', 'mp4', 'webm', 'avi', 'mkv', 'm4v'].includes(ext)) return 'video';
+  return 'image';
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
 
 export default function MobileUploadPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
   // Auth guard — bounce to /login if not authenticated.
@@ -71,24 +100,34 @@ export default function MobileUploadPage() {
     const newEntries: UploadEntry[] = files.map((file) => ({
       key: crypto.randomUUID(),
       name: file.name,
+      kind: detectKind(file),
       size: file.size,
       previewUrl: URL.createObjectURL(file),
       status: file.size > MAX_FILE_SIZE ? 'failed' : 'uploading',
-      errorMessage: file.size > MAX_FILE_SIZE ? `Soubor je větší než ${MAX_FILE_SIZE / 1024 / 1024} MB.` : undefined,
+      errorMessage: file.size > MAX_FILE_SIZE
+        ? `Soubor je větší než ${MAX_FILE_SIZE / 1024 / 1024} MB.`
+        : undefined,
     }));
 
     setEntries((prev) => [...newEntries, ...prev]);
 
-    // Upload one-by-one so a 4G connection doesn't choke; preserves order.
+    // Upload sequentially so a 4G connection doesn't choke; preserves order.
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const entry = newEntries[i];
       if (entry.status === 'failed') continue;
-      await uploadOne(entry.key, file);
+
+      // Big files (videos) bypass the Vercel function body limit via direct R2 PUT.
+      if (file.size > DIRECT_UPLOAD_THRESHOLD) {
+        await uploadDirectToR2(entry.key, file);
+      } else {
+        await uploadViaServer(entry.key, file);
+      }
     }
   };
 
-  const uploadOne = async (key: string, file: File) => {
+  /** Server-mediated upload — small files (≤ 8 MB). Triggers AI analysis automatically. */
+  const uploadViaServer = async (key: string, file: File) => {
     const formData = new FormData();
     formData.append('files', file);
     formData.append('is_shared', 'true');
@@ -114,6 +153,7 @@ export default function MobileUploadPage() {
       }
       updateEntry(key, {
         status: 'tagging',
+        progress: 100,
         assetId: result.asset_id,
         publicUrl: result.public_url,
       });
@@ -122,6 +162,73 @@ export default function MobileUploadPage() {
       updateEntry(key, {
         status: 'failed',
         errorMessage: err instanceof Error ? err.message : 'Síťová chyba.',
+      });
+    }
+  };
+
+  /** Direct-to-R2 upload — large files (videos). Uses presigned PUT URLs. */
+  const uploadDirectToR2 = async (key: string, file: File) => {
+    try {
+      // Step 1 — request a presigned URL + create the media_assets row.
+      const presignRes = await fetch('/api/media/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shared: true,
+          files: [{ name: file.name, type: file.type || 'application/octet-stream', size: file.size }],
+        }),
+      });
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({ error: `HTTP ${presignRes.status}` }));
+        updateEntry(key, { status: 'failed', errorMessage: err?.error || `Presign HTTP ${presignRes.status}` });
+        return;
+      }
+      const presignData = await presignRes.json() as {
+        files: Array<{ asset_id: string; upload_url: string; public_url: string }>;
+      };
+      const target = presignData.files?.[0];
+      if (!target?.upload_url || !target.asset_id) {
+        updateEntry(key, { status: 'failed', errorMessage: 'Presign nevrátil upload URL.' });
+        return;
+      }
+
+      // Step 2 — PUT directly to R2 with progress tracking via XHR (fetch lacks upload progress).
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', target.upload_url);
+        if (file.type) xhr.setRequestHeader('Content-Type', file.type);
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            updateEntry(key, { progress: pct });
+          }
+        });
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`R2 PUT failed: HTTP ${xhr.status}`));
+        };
+        xhr.onerror = () => reject(new Error('R2 PUT network error'));
+        xhr.send(file);
+      });
+
+      // Step 3 — confirm upload, trigger Gemini Vision analysis.
+      updateEntry(key, {
+        status: 'tagging',
+        progress: 100,
+        assetId: target.asset_id,
+        publicUrl: target.public_url,
+      });
+      await fetch('/api/media/presign', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset_ids: [target.asset_id] }),
+      }).catch(() => { /* not fatal — cron picks up unprocessed assets */ });
+
+      pollForTags(key, target.asset_id);
+    } catch (err) {
+      updateEntry(key, {
+        status: 'failed',
+        errorMessage: err instanceof Error ? err.message : 'Chyba při přímém uploadu.',
       });
     }
   };
@@ -182,33 +289,42 @@ export default function MobileUploadPage() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-semibold truncate">Nahrát fotku</h1>
-            <p className="text-xs text-slate-500 truncate">Sdílená knihovna · automatické otagování</p>
+            <h1 className="text-base font-semibold truncate">Nahrát do knihovny</h1>
+            <p className="text-xs text-slate-500 truncate">Fotky i videa · sdílená knihovna · AI tagování</p>
           </div>
         </div>
       </header>
 
       <main className="flex-1 px-4 py-5 space-y-5 max-w-md w-full mx-auto">
         {/* Primary action buttons */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => cameraInputRef.current?.click()}
-            className="flex flex-col items-center justify-center gap-2 py-6 rounded-2xl bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white font-medium shadow-lg shadow-violet-600/20 transition-colors"
+            className="flex flex-col items-center justify-center gap-1.5 py-5 rounded-2xl bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white font-medium shadow-lg shadow-violet-600/20 transition-colors"
           >
-            <Camera className="w-7 h-7" />
-            <span className="text-sm">Vyfotit</span>
+            <Camera className="w-6 h-6" />
+            <span className="text-xs">Vyfotit</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => videoInputRef.current?.click()}
+            className="flex flex-col items-center justify-center gap-1.5 py-5 rounded-2xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-medium shadow-lg shadow-rose-600/20 transition-colors"
+          >
+            <Video className="w-6 h-6" />
+            <span className="text-xs">Natočit</span>
           </button>
           <button
             type="button"
             onClick={() => galleryInputRef.current?.click()}
-            className="flex flex-col items-center justify-center gap-2 py-6 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white font-medium border border-slate-700 transition-colors"
+            className="flex flex-col items-center justify-center gap-1.5 py-5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white font-medium border border-slate-700 transition-colors"
           >
-            <ImageIcon className="w-7 h-7" />
-            <span className="text-sm">Z galerie</span>
+            <ImageIcon className="w-6 h-6" />
+            <span className="text-xs">Galerie</span>
           </button>
         </div>
 
+        {/* iOS recognises capture="environment" → opens rear camera in photo mode. */}
         <input
           ref={cameraInputRef}
           type="file"
@@ -217,10 +333,20 @@ export default function MobileUploadPage() {
           onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
           className="hidden"
         />
+        {/* iOS opens the camcorder when accept includes only video and capture is set. */}
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept="video/*"
+          capture="environment"
+          onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+          className="hidden"
+        />
+        {/* Photo + video pickers from the iOS Photos app — multi-select OK. */}
         <input
           ref={galleryInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
           className="hidden"
@@ -230,8 +356,11 @@ export default function MobileUploadPage() {
           <div className="rounded-2xl border border-dashed border-slate-800 p-6 text-center">
             <Sparkles className="w-6 h-6 mx-auto text-violet-400 mb-2" />
             <p className="text-sm text-slate-400">
-              Po nahrání fotky proběhne automatické otagování přes AI vision.
-              Fotka bude dostupná všem projektům.
+              Fotky a videa jdou rovnou do sdílené knihovny. AI je automaticky
+              otaguje a budou dostupné všem projektům.
+            </p>
+            <p className="text-[11px] text-slate-500 mt-3">
+              Fotky &lt; 8 MB jdou přes server. Videa a velké soubory přímo do R2.
             </p>
           </div>
         ) : (
@@ -248,16 +377,30 @@ export default function MobileUploadPage() {
 
 function UploadCard({ entry }: { entry: UploadEntry }) {
   const statusBadge = STATUS_BADGE[entry.status];
+  const progressPct = entry.progress ?? 0;
+  const isVideo = entry.kind === 'video';
 
   return (
     <li className="rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden">
       <div className="flex">
         <div className="w-24 h-24 flex-shrink-0 bg-slate-950 relative">
-          {/* Local preview is fine even if upload still in flight. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={entry.previewUrl} alt="" className="w-full h-full object-cover" />
+          {isVideo ? (
+            <div className="w-full h-full flex items-center justify-center bg-slate-800">
+              <Film className="w-7 h-7 text-slate-500" />
+            </div>
+          ) : (
+            // Local preview is fine even if upload still in flight.
+            // HEIC won't render natively in some browsers; fall back to icon.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={entry.previewUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+            />
+          )}
           {(entry.status === 'uploading' || entry.status === 'tagging') && (
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
               <Loader2 className="w-5 h-5 text-white animate-spin" />
             </div>
           )}
@@ -272,6 +415,22 @@ function UploadCard({ entry }: { entry: UploadEntry }) {
               {statusBadge.label}
             </span>
           </div>
+
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            {isVideo ? 'Video' : 'Fotka'} · {formatSize(entry.size)}
+          </p>
+
+          {entry.status === 'uploading' && (
+            <div className="mt-2 space-y-1">
+              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-violet-500 transition-all"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-slate-500">{progressPct}% nahráno</p>
+            </div>
+          )}
 
           {entry.status === 'failed' && entry.errorMessage && (
             <div className="mt-2 flex items-start gap-1.5 text-xs text-rose-400">
@@ -303,7 +462,9 @@ function UploadCard({ entry }: { entry: UploadEntry }) {
           )}
 
           {entry.status === 'tagging' && (
-            <p className="mt-2 text-xs text-slate-500">AI právě analyzuje fotku…</p>
+            <p className="mt-2 text-xs text-slate-500">
+              {isVideo ? 'AI extrahuje metadata z videa…' : 'AI právě analyzuje fotku…'}
+            </p>
           )}
         </div>
       </div>

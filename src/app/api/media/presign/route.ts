@@ -1,23 +1,56 @@
 import { supabase } from '@/lib/supabase/client';
 import { getR2PresignedUploadUrl, getR2PublicUrl, isR2Configured } from '@/lib/storage/cloudflare-r2';
 import { processMediaAsset } from '@/lib/ai/vision-engine';
+import { requireAuth } from '@/lib/api/require-auth';
+import { checkRateLimit } from '@/lib/api/rate-limit';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
+/** Max single file size for direct R2 upload — 500 MB (videos) */
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
+
+/** Max files per presign request to prevent abuse */
+const MAX_FILES_PER_REQUEST = 50;
+
+/** Allowed MIME types — same superset as /api/media/upload (incl. iPhone HEIC + video formats) */
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+  'image/heic', 'image/heif',
+  'video/mp4', 'video/quicktime', 'video/webm',
+  'video/avi', 'video/x-msvideo', 'video/x-matroska',
+  'application/pdf',
+]);
+
+const ALLOWED_FALLBACK_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'heic', 'heif',
+  'mp4', 'mov', 'webm', 'avi', 'mkv', 'm4v',
+  'pdf',
+]);
+
+function isAllowedMime(name: string, type: string): boolean {
+  if (ALLOWED_MIME_TYPES.has(type)) return true;
+  if (type === 'application/octet-stream' || type === '') {
+    const ext = name.split('.').pop()?.toLowerCase() ?? '';
+    return ALLOWED_FALLBACK_EXTENSIONS.has(ext);
+  }
+  return false;
+}
+
 /**
- * Presigned Upload API — direct client→R2 (bypasses server)
+ * Presigned Upload API — direct client→R2 (bypasses server body limit)
+ * Used for large files like iPhone videos (often 50–300 MB).
  *
- * POST /api/media/presign
- * Body: { files: [{ name, type, size }], project_id?, tags?, shared?, description? }
- *
- * Returns presigned PUT URLs. Client uploads directly to R2.
- * After upload, client calls POST /api/media/presign/confirm with asset IDs.
- *
- * Flow:
- * 1. Server generates presigned URLs + creates media_assets records (is_processed=false)
- * 2. Client uploads files directly to R2 using PUT <presigned_url>
- * 3. Client calls /api/media/presign/confirm to trigger AI analysis
+ * POST /api/media/presign — create upload URLs + DB records
+ * PATCH /api/media/presign — confirm uploads, trigger AI analysis
  */
 export async function POST(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
+  const rl = checkRateLimit(auth.userId, 'upload');
+  if (!rl.ok) return rl.response;
+
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   if (!isR2Configured()) return NextResponse.json({ error: 'R2 not configured' }, { status: 500 });
 
@@ -34,8 +67,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'files array is required' }, { status: 400 });
   }
 
+  if (files.length > MAX_FILES_PER_REQUEST) {
+    return NextResponse.json({ error: `Max ${MAX_FILES_PER_REQUEST} files per request` }, { status: 400 });
+  }
+
   if (!project_id && !shared) {
     return NextResponse.json({ error: 'project_id or shared=true required' }, { status: 400 });
+  }
+
+  // Validate each file's name + type + size before generating any presigned URLs.
+  for (const f of files) {
+    if (!f?.name || typeof f.size !== 'number') {
+      return NextResponse.json({ error: 'Each file requires { name, type, size }' }, { status: 400 });
+    }
+    if (f.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `File "${f.name}" exceeds ${MAX_FILE_SIZE / 1024 / 1024} MB` },
+        { status: 400 },
+      );
+    }
+    if (!isAllowedMime(f.name, f.type || '')) {
+      return NextResponse.json(
+        { error: `File "${f.name}" has unsupported type: ${f.type}` },
+        { status: 400 },
+      );
+    }
   }
 
   const manualTags = (tags || '').split(',').map(t => t.trim()).filter(Boolean);
@@ -111,12 +167,19 @@ export async function POST(request: Request) {
  * Body: { asset_ids: string[] }
  */
 export async function PATCH(request: Request) {
+  const auth = await requireAuth();
+  if (!auth.ok) return auth.response;
+
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const { asset_ids } = await request.json() as { asset_ids: string[] };
 
   if (!asset_ids || !Array.isArray(asset_ids) || asset_ids.length === 0) {
     return NextResponse.json({ error: 'asset_ids array required' }, { status: 400 });
+  }
+
+  if (asset_ids.length > MAX_FILES_PER_REQUEST) {
+    return NextResponse.json({ error: `Max ${MAX_FILES_PER_REQUEST} asset_ids per request` }, { status: 400 });
   }
 
   // Trigger AI analysis for each confirmed asset (fire-and-forget)

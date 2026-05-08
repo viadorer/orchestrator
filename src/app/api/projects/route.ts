@@ -44,31 +44,82 @@ export async function POST(request: Request) {
 
   const body = v.data;
 
+  // ---- Optional: load source project for cloning ----
+  // We clone visual identity, prompts, mood, and orchestrator config — but NOT
+  // KB content (project-specific) or platform credentials (security boundary).
+  let cloneSource: Record<string, unknown> | null = null;
+  if (body.clone_from_project_id) {
+    const { data: src } = await supabase
+      .from('projects')
+      .select('mood_settings, content_mix, constraints, style_rules, orchestrator_config, visual_identity, semantic_anchors')
+      .eq('id', body.clone_from_project_id)
+      .single();
+    if (src) cloneSource = src as Record<string, unknown>;
+  }
+
+  // Default orchestrator config — Hugo OFF until user explicitly enables it.
+  const defaultOrchestrator = {
+    enabled: false,
+    posting_frequency: 'daily',
+    posting_times: ['09:00', '15:00'],
+    max_posts_per_day: 2,
+    content_strategy: '4-1-1',
+    auto_publish: false,
+    auto_publish_threshold: 8.5,
+    timezone: 'Europe/Prague',
+    media_strategy: 'auto',
+    platforms_priority: [],
+    pause_weekends: false,
+  };
+
+  // Merge precedence (lowest → highest): hard defaults → cloned source → request body.
+  // The request body wins so explicit user picks during the wizard always stick.
+  const finalConstraints = {
+    forbidden_topics: body.onboarding?.forbidden_topics ?? [],
+    mandatory_terms: body.onboarding?.mandatory_terms ?? [],
+    max_hashtags: 5,
+    ...((cloneSource?.constraints as Record<string, unknown>) || {}),
+    ...(body.constraints || {}),
+    // Re-apply onboarding values last so the wizard's lists are not lost when cloning.
+    ...(body.onboarding?.forbidden_topics ? { forbidden_topics: body.onboarding.forbidden_topics } : {}),
+    ...(body.onboarding?.mandatory_terms ? { mandatory_terms: body.onboarding.mandatory_terms } : {}),
+  };
+
   const { data, error } = await supabase
     .from('projects')
     .insert({
       name: body.name,
       slug: body.slug,
-      description: body.description || null,
+      description: body.description || body.onboarding?.about || null,
       late_social_set_id: body.late_social_set_id || null,
       platforms: body.platforms || ['linkedin'],
-      mood_settings: body.mood_settings || { tone: 'professional', energy: 'medium', style: 'informative' },
-      content_mix: body.content_mix || { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 },
-      constraints: body.constraints || { forbidden_topics: [], mandatory_terms: [], max_hashtags: 5 },
-      semantic_anchors: body.semantic_anchors || [],
-      style_rules: body.style_rules || { start_with_question: false, max_bullets: 3, no_hashtags_in_text: true, max_length: 2200 },
+      mood_settings:
+        body.mood_settings ||
+        (cloneSource?.mood_settings as Record<string, unknown>) ||
+        { tone: 'professional', energy: 'medium', style: 'informative' },
+      content_mix:
+        body.content_mix ||
+        (cloneSource?.content_mix as Record<string, unknown>) ||
+        { educational: 0.66, soft_sell: 0.17, hard_sell: 0.17 },
+      constraints: finalConstraints,
+      semantic_anchors:
+        body.semantic_anchors ||
+        (cloneSource?.semantic_anchors as string[]) ||
+        [],
+      style_rules:
+        body.style_rules ||
+        (cloneSource?.style_rules as Record<string, unknown>) ||
+        { start_with_question: false, max_bullets: 3, no_hashtags_in_text: true, max_length: 2200 },
+      visual_identity:
+        body.visual_identity ||
+        (cloneSource?.visual_identity as Record<string, unknown>) ||
+        null,
       orchestrator_config: {
+        ...defaultOrchestrator,
+        ...((cloneSource?.orchestrator_config as Record<string, unknown>) || {}),
+        // Always start a freshly-created project paused so the user can review settings.
         enabled: false,
-        posting_frequency: 'daily',
-        posting_times: ['09:00', '15:00'],
-        max_posts_per_day: 2,
-        content_strategy: '4-1-1',
         auto_publish: false,
-        auto_publish_threshold: 8.5,
-        timezone: 'Europe/Prague',
-        media_strategy: 'auto',
-        platforms_priority: [],
-        pause_weekends: false,
       },
     })
     .select()
@@ -78,22 +129,53 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // ---- Starter Kit: Create default prompt templates ----
+  // ---- Starter Kit: prompts + KB ----
   if (data?.id) {
     const projectId = data.id;
     const projectName = body.name || 'Projekt';
 
     try {
-      await supabase.from('project_prompt_templates').insert(
-        getStarterPrompts(projectId, projectName)
-      );
+      // If cloning, copy prompt templates from the source project (and rewrite
+      // the slugs so they're unique per project). Otherwise seed with the
+      // generic starter pack.
+      if (body.clone_from_project_id) {
+        const { data: srcPrompts } = await supabase
+          .from('project_prompt_templates')
+          .select('category, content, description, sort_order')
+          .eq('project_id', body.clone_from_project_id)
+          .eq('is_active', true);
+
+        if (srcPrompts && srcPrompts.length > 0) {
+          await supabase.from('project_prompt_templates').insert(
+            srcPrompts.map((p, i) => ({
+              project_id: projectId,
+              slug: `${p.category}_${projectId.slice(0, 8)}_${i}`,
+              category: p.category,
+              content: p.content,
+              description: p.description,
+              sort_order: p.sort_order,
+            })),
+          );
+        } else {
+          await supabase.from('project_prompt_templates').insert(
+            getStarterPrompts(projectId, projectName, body.onboarding),
+          );
+        }
+      } else {
+        await supabase.from('project_prompt_templates').insert(
+          getStarterPrompts(projectId, projectName, body.onboarding),
+        );
+      }
     } catch {
       // Starter kit failure should not block project creation
     }
 
     try {
+      // KB is always seeded fresh per project. If the wizard provided onboarding
+      // answers, those become real KB entries instead of "VYPLŇTE:" placeholders
+      // — saving the user 30+ minutes of manual editing later.
       await supabase.from('knowledge_base').insert(
-        getStarterKB(projectId, projectName)
+        getStarterKB(projectId, projectName, body.onboarding),
       );
     } catch {
       // KB starter failure should not block project creation
@@ -103,14 +185,31 @@ export async function POST(request: Request) {
   return NextResponse.json(data, { status: 201 });
 }
 
+// Type alias used by both starter generators below.
+type Onboarding = {
+  about?: string;
+  audience?: string;
+  usp?: string;
+  forbidden_topics?: string[];
+  mandatory_terms?: string[];
+};
+
 // ---- Starter Kit: Default prompt templates ----
-function getStarterPrompts(projectId: string, projectName: string) {
-  return [
-    {
-      project_id: projectId,
-      slug: `identity_${projectId.slice(0, 8)}`,
-      category: 'identity',
-      content: `KDO JSEM:
+function getStarterPrompts(projectId: string, projectName: string, onboarding?: Onboarding) {
+  // Personalised identity prompt when the wizard collected an "about" answer.
+  // Otherwise fall back to a generic UPRAVTE block the user can edit later.
+  const identityContent = onboarding?.about
+    ? `KDO JSEM:
+- Jsem Hugo – AI asistent projektu ${projectName}.
+- ${onboarding.about}
+- Komunikuji profesionálně, ale přátelsky.
+- Vždy mluvím česky s háčky a čárkami.
+
+OSOBNOST:
+- Profesionální, ale lidský.
+- Mluvím fakty a daty.
+- Jsem nápomocný a vstřícný.`
+    : `KDO JSEM:
 - Jsem Hugo – AI asistent projektu ${projectName}.
 - Komunikuji profesionálně, ale přátelsky.
 - Vždy mluvím česky s háčky a čárkami.
@@ -120,7 +219,14 @@ OSOBNOST:
 - Mluvím fakty a daty.
 - Jsem nápomocný a vstřícný.
 
-UPRAVTE TENTO PROMPT podle identity vašeho projektu.`,
+UPRAVTE TENTO PROMPT podle identity vašeho projektu.`;
+
+  return [
+    {
+      project_id: projectId,
+      slug: `identity_${projectId.slice(0, 8)}`,
+      category: 'identity',
+      content: identityContent,
       description: `Identita – kdo je Hugo pro ${projectName}`,
       sort_order: 10,
     },
@@ -248,13 +354,24 @@ UPRAVTE TENTO PROMPT podle právních omezení vašeho oboru.`,
 }
 
 // ---- Starter Kit: Default KB entries ----
-function getStarterKB(projectId: string, projectName: string) {
+//
+// When the wizard collected onboarding answers, we write them straight into the
+// KB instead of generic VYPLŇTE: placeholders. The user can still edit them
+// later, but Hugo can already generate sensible posts on day one.
+function getStarterKB(projectId: string, projectName: string, onboarding?: Onboarding) {
+  const aboutContent = onboarding?.about
+    || `VYPLŇTE: Stručný popis projektu ${projectName}. Co děláte, pro koho, jaký problém řešíte.`;
+  const audienceContent = onboarding?.audience
+    || 'VYPLŇTE: Kdo je váš ideální zákazník? Věk, zájmy, problémy, motivace.';
+  const uspContent = onboarding?.usp
+    || 'VYPLŇTE: Čím se lišíte od konkurence? Proč by si zákazník měl vybrat právě vás?';
+
   return [
     {
       project_id: projectId,
       category: 'product',
       title: `Co je ${projectName}`,
-      content: `VYPLŇTE: Stručný popis projektu ${projectName}. Co děláte, pro koho, jaký problém řešíte.`,
+      content: aboutContent,
       is_active: true,
     },
     {
@@ -268,7 +385,7 @@ function getStarterKB(projectId: string, projectName: string) {
       project_id: projectId,
       category: 'audience',
       title: 'Cílová skupina',
-      content: 'VYPLŇTE: Kdo je váš ideální zákazník? Věk, zájmy, problémy, motivace.',
+      content: audienceContent,
       is_active: true,
     },
     {
@@ -282,7 +399,7 @@ function getStarterKB(projectId: string, projectName: string) {
       project_id: projectId,
       category: 'usp',
       title: 'Hlavní konkurenční výhoda',
-      content: 'VYPLŇTE: Čím se lišíte od konkurence? Proč by si zákazník měl vybrat právě vás?',
+      content: uspContent,
       is_active: true,
     },
     {

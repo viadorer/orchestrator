@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useRouter } from 'next/navigation';
 import { Sidebar, type AdminView } from '@/components/layout/Sidebar';
+import { DailyBriefView } from '@/components/daily-brief/DailyBriefView';
 import { DashboardView } from '@/components/dashboard/DashboardView';
 import { ProjectsView } from '@/components/projects/ProjectsView';
 import { GenerateView } from '@/components/generate/GenerateView';
@@ -20,7 +21,7 @@ import { Loader2 } from 'lucide-react';
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [view, setView] = useState<AdminView>('dashboard');
+  const [view, setView] = useState<AdminView>('daily-brief');
 
   // Listen for navigation events from Dashboard quick actions
   const handleNavigate = useCallback((e: Event) => {
@@ -50,6 +51,7 @@ export default function Home() {
     <div className="flex h-screen overflow-hidden bg-slate-950">
       <Sidebar currentView={view} onNavigate={setView} />
       <main className="flex-1 h-full overflow-y-auto flex flex-col pt-14 md:pt-0">
+        {view === 'daily-brief' && <DailyBriefView />}
         {view === 'dashboard' && <DashboardView />}
         {view === 'projects' && <ProjectsView />}
         {view === 'agent' && <AgentView />}

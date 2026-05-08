@@ -264,6 +264,7 @@ export function ProjectsView() {
         <CreateProjectModal
           onClose={() => setShowCreate(false)}
           onCreated={(p) => { setShowCreate(false); loadProjects(); openDetail(p); }}
+          existingProjects={projects}
         />
       )}
     </div>
@@ -1281,11 +1282,24 @@ const WIZARD_STEPS = [
   { id: 1, label: 'Základní info', desc: 'Název, popis, platformy' },
   { id: 2, label: 'Tón & Styl', desc: 'Jak bude Hugo komunikovat' },
   { id: 3, label: 'Vizuální identita', desc: 'Barvy, logo, font' },
+  { id: 4, label: 'O projektu', desc: 'Co děláte, pro koho, čím se lišíte' },
 ] as const;
 
-function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Project) => void }) {
+function CreateProjectModal({
+  onClose,
+  onCreated,
+  existingProjects = [],
+}: {
+  onClose: () => void;
+  onCreated: (p: Project) => void;
+  existingProjects?: Project[];
+}) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+
+  // Optional: clone an existing project's settings (visual, prompts, mood, schedule).
+  // KB content is always seeded fresh — different projects need different facts.
+  const [cloneFromId, setCloneFromId] = useState<string>('');
 
   // Step 1: Basic
   const [name, setName] = useState('');
@@ -1303,8 +1317,18 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [accentColor, setAccentColor] = useState('#7c3aed');
   const [logoUrl, setLogoUrl] = useState('');
 
+  // Step 4: About — answers go straight into the Knowledge Base, no VYPLŇTE: stubs.
+  const [about, setAbout] = useState('');
+  const [audience, setAudience] = useState('');
+  const [usp, setUsp] = useState('');
+
   const handleCreate = async () => {
     setSaving(true);
+    const onboarding = {
+      ...(about.trim() ? { about: about.trim() } : {}),
+      ...(audience.trim() ? { audience: audience.trim() } : {}),
+      ...(usp.trim() ? { usp: usp.trim() } : {}),
+    };
     const res = await fetch('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1323,6 +1347,11 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
           logo_url: logoUrl || null,
           style: 'minimal',
         },
+        // Only include onboarding when the user actually filled something in
+        // — keeps the request small and lets the backend skip the personalised
+        // KB path when there's nothing to personalise.
+        ...(Object.keys(onboarding).length > 0 ? { onboarding } : {}),
+        ...(cloneFromId ? { clone_from_project_id: cloneFromId } : {}),
       }),
     });
     const data = await res.json();
@@ -1355,6 +1384,29 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
         <div className="p-5 space-y-4 min-h-[280px]">
           {step === 1 && (
             <>
+              {/* Clone-from picker — short-circuits half the wizard for follow-up projects.
+                  When set, the backend copies visual identity, prompts, mood and orchestrator
+                  config from the source. KB and platform credentials are never cloned. */}
+              {existingProjects.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                    Klonovat z existujícího projektu (volitelné)
+                  </label>
+                  <select
+                    value={cloneFromId}
+                    onChange={(e) => setCloneFromId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  >
+                    <option value="">— Začít od nuly —</option>
+                    {existingProjects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Zkopíruje barvy, prompty, tón a frekvenci. KB a platformy nikoli.
+                  </p>
+                </div>
+              )}
               <Field label="Název projektu" value={name} onChange={(v) => { setName(v); if (!slug) setSlug(v.toLowerCase().replace(/[^a-z0-9]+/g, '-')); }} placeholder="MůjProjekt.cz" />
               <Field label="Slug (URL-safe)" value={slug} onChange={(v) => setSlug(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))} placeholder="muj-projekt" />
               <Field label="Popis (volitelný)" value={description} onChange={setDescription} placeholder="Krátký popis projektu..." multiline />
@@ -1448,6 +1500,63 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
                   Po vytvoření se automaticky vygenerují výchozí prompty a KB záznamy. Upravíte je v detailu projektu.
                 </p>
               </div>
+            </>
+          )}
+
+          {/* Step 4 — about / audience / USP. Goes straight to KB so Hugo can
+              generate sensible posts on day one without VYPLŇTE: stubs. */}
+          {step === 4 && (
+            <>
+              <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20 mb-1">
+                <p className="text-xs text-violet-300">
+                  Tyhle 3 odpovědi jdou rovnou do Knowledge Base. Hugo je použije
+                  hned při prvním generování. Můžeš je nechat prázdné a doplnit později.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  O čem projekt je
+                </label>
+                <textarea
+                  value={about}
+                  onChange={(e) => setAbout(e.target.value)}
+                  rows={3}
+                  placeholder={`Stručně co ${name || 'projekt'} dělá. Např. "Pomáháme rodinám v Plzni najít nájemní bydlení do týdne."`}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  Pro koho
+                </label>
+                <textarea
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  rows={3}
+                  placeholder="Cílovka. Např. mladé páry 25–40 let, hledají první nájem, citlivé na cenu."
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  Hlavní výhoda — proč zrovna vy
+                </label>
+                <textarea
+                  value={usp}
+                  onChange={(e) => setUsp(e.target.value)}
+                  rows={2}
+                  placeholder="Čím se lišíte. Např. nájem do 5 dnů od první prohlídky, garance vrácení provize."
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                />
+              </div>
+              {cloneFromId && (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-xs text-amber-300">
+                    Klonujete z existujícího projektu. KB se vždy zakládá nově —
+                    odpovědi výše jsou klíčové, aby Hugo neopsal cizí kontext.
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>

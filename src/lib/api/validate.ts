@@ -21,6 +21,20 @@ export const projectCreateSchema = z.object({
   semantic_anchors: z.array(z.string()).max(50).optional(),
   style_rules: z.record(z.string(), z.unknown()).optional(),
   orchestrator_config: z.record(z.string(), z.unknown()).optional(),
+  visual_identity: z.record(z.string(), z.unknown()).optional(),
+  // Quick-start onboarding fields. When present, the starter KB is seeded
+  // with concrete content instead of generic "VYPLŇTE:" placeholders, and
+  // the customised prompts replace the generic fallbacks.
+  onboarding: z.object({
+    about: z.string().max(1500).optional(),         // What the project does
+    audience: z.string().max(1500).optional(),      // Who it serves
+    usp: z.string().max(1000).optional(),           // Main differentiator
+    forbidden_topics: z.array(z.string().max(100)).max(20).optional(),
+    mandatory_terms: z.array(z.string().max(100)).max(20).optional(),
+  }).optional(),
+  // Clone visual identity, prompts, mood and orchestrator config from another
+  // project. KB and platform credentials are NOT cloned (they're project-specific).
+  clone_from_project_id: uuidSchema.optional(),
 });
 
 export const projectUpdateSchema = z.object({

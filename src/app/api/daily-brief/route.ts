@@ -33,6 +33,7 @@ export async function GET() {
     errorsRes,
     lastCronRes,
     projectsRes,
+    orphansRes,
   ] = await Promise.all([
     supabase
       .from('content_queue')
@@ -73,6 +74,14 @@ export async function GET() {
       .select('id, name, slug, is_active, orchestrator_config')
       .eq('is_active', true)
       .order('name'),
+    // Orphans: status='sent' but webhook never arrived in time.
+    // Flagged by /api/cron/maintenance via detectOrphanedPosts().
+    supabase
+      .from('content_queue')
+      .select('id, project_id, target_platform, text_content, sent_at, late_post_id, projects(name, slug)')
+      .eq('webhook_orphaned', true)
+      .order('sent_at', { ascending: false })
+      .limit(20),
   ]);
 
   // Aggregate errors by source
@@ -96,7 +105,9 @@ export async function GET() {
       scheduled_today: (scheduledTodayRes.data || []).length,
       failed_24h: (failedRecentRes.data || []).length,
       errors_24h: (errorsRes.data || []).length,
+      orphans: (orphansRes.data || []).length,
     },
+    orphans: orphansRes.data || [],
     review_queue: reviewRes.data || [],
     scheduled_today: scheduledTodayRes.data || [],
     failed_recent: failedRecentRes.data || [],

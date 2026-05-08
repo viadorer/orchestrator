@@ -62,8 +62,15 @@ interface UploadEntry {
 
 /** Max single file size — matches /api/media/presign (500 MB for videos). */
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
-/** Threshold above which we use direct R2 presigned upload (bypass server body limit). */
-const DIRECT_UPLOAD_THRESHOLD = 8 * 1024 * 1024; // 8 MB
+/**
+ * Threshold above which we use direct R2 presigned upload (bypass server body limit).
+ *
+ * Vercel/Next limits multipart bodies to ~4 MB on most plan tiers. Setting this
+ * conservatively means a 5–8 MB JPEG that the client failed to resize never
+ * trips HTTP 413 — it goes straight to R2 via presigned URL instead, and
+ * post-upload server normalize catches up afterwards.
+ */
+const DIRECT_UPLOAD_THRESHOLD = 3.5 * 1024 * 1024; // 3.5 MB
 /** Polling cadence + budget for AI tagging completion. */
 const POLL_INTERVAL_MS = 1500;          // tighter than 4s — Gemini Vision typically ~3-5s
 const POLL_TIMEOUT_MS = 180_000;        // 3 min — covers Gemini retries + cron pickup window

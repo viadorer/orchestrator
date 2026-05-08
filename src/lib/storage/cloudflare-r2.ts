@@ -187,6 +187,34 @@ export async function getR2SignedUrl(key: string, expiresIn = 3600): Promise<str
   }
 }
 
+/**
+ * Download an object from R2 as a Buffer.
+ * Used by post-upload server-side normalization (e.g. resize a 12 MB iPhone
+ * photo that came in via the presigned URL flow).
+ * Returns null on any error so callers can skip silently.
+ */
+export async function downloadFromR2(key: string): Promise<Buffer | null> {
+  const client = getClient();
+  if (!client) return null;
+
+  try {
+    const response = await client.send(
+      new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }),
+    );
+    if (!response.Body) return null;
+    // Body is a streaming/Readable; collect into a Buffer.
+    const chunks: Uint8Array[] = [];
+    const stream = response.Body as AsyncIterable<Uint8Array>;
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  } catch (err) {
+    console.error(`[r2] Download failed for ${key}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 // ─── Presigned Upload URL ────────────────────────────────────
 
 /**
